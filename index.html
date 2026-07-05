@@ -2,7 +2,14 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0e14">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="WR픽">
+<link rel="apple-touch-icon" id="appIcon">
+<link rel="manifest" id="appManifest">
 <title>WR 챔 셀렉터</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -29,6 +36,37 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .top .sub{font-size:11px;color:var(--dimmer);letter-spacing:.06em;text-transform:uppercase}
 .gear{font-size:13px;color:var(--dim);border:1px solid var(--line);border-radius:7px;padding:6px 11px;font-family:'Rajdhani';font-weight:600}
 .gear:active{background:var(--panel)}
+.topbtns{display:flex;gap:7px;flex-shrink:0}
+.logbar{display:none;align-items:center;gap:8px;flex-wrap:wrap;margin:12px 2px 0;padding:10px 12px;
+  background:var(--panel2);border:1px solid var(--line);border-radius:11px}
+.logbar.on{display:flex}
+.logbar .lgl{font-family:'Rajdhani';font-weight:700;font-size:12.5px;letter-spacing:.03em;color:var(--dim);text-transform:uppercase}
+.lgsel{flex:1;min-width:120px;background:var(--bg);color:var(--ink);border:1px solid var(--line);
+  border-radius:8px;padding:8px 10px;font-size:14px;font-family:inherit}
+.lgw,.lgl-btn{font-family:'Rajdhani';font-weight:700;font-size:14px;letter-spacing:.03em;border-radius:8px;
+  padding:9px 16px;border:1px solid;white-space:nowrap}
+.lgw{color:#8be0c0;border-color:#1c4a3a;background:#0e2420}.lgw:active{background:#15362e}
+.lgl-btn{color:#e08b8b;border-color:#4a1c1c;background:#240e0e}.lgl-btn:active{background:#361515}
+.logbody{padding:14px 15px;overflow-y:auto;max-height:62vh}
+.statgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:16px}
+.statcard{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
+.statcard .k{font-size:11.5px;color:var(--dim);font-family:'Rajdhani';font-weight:600;letter-spacing:.03em;text-transform:uppercase}
+.statcard .v{font-size:23px;font-weight:800;font-family:'Rajdhani';margin-top:3px}
+.statcard .v small{font-size:13px;font-weight:600;color:var(--dim)}
+.win{color:#5fd0a0}.loss{color:var(--red)}
+.logsec{font-family:'Rajdhani';font-weight:700;font-size:12.5px;letter-spacing:.04em;text-transform:uppercase;
+  color:var(--cyan);margin:14px 0 8px;border-bottom:1px solid var(--line);padding-bottom:5px}
+.champrow{display:flex;justify-content:space-between;align-items:center;padding:6px 2px;font-size:13.5px}
+.champrow .nm{color:var(--ink)}.champrow .rec2{font-family:'Rajdhani';font-weight:700}
+.mrow{display:flex;align-items:center;gap:9px;padding:8px 2px;border-bottom:1px solid #131a24;font-size:13px}
+.mrow .res{font-family:'Rajdhani';font-weight:800;font-size:13px;width:20px;text-align:center;flex-shrink:0}
+.mrow .info{flex:1;min-width:0}
+.mrow .info .l1{color:var(--ink)}
+.mrow .info .l2{color:var(--dim);font-size:11.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mrow .del{color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:3px 9px;font-size:15px;flex-shrink:0}
+.logempty{color:var(--dim);text-align:center;padding:24px 10px;font-size:13.5px;line-height:1.6}
+.logclear{margin-top:14px;text-align:center}
+.logclear button{color:var(--red);border:1px solid #3a1c1c;border-radius:8px;padding:7px 16px;font-size:12.5px;font-family:'Rajdhani';font-weight:600}
 
 /* lane bar */
 .lanebar{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:13px}
@@ -205,7 +243,10 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
     <h1>WR <span>챔</span> 셀렉터</h1>
     <div class="sub">Hextech draft engine · 30s lock</div>
   </div>
-  <button class="gear" onclick="openCfg()">⚙ 챔폭/가중치</button>
+  <div class="topbtns">
+    <button class="gear" onclick="openLog()">📋 전적</button>
+    <button class="gear" onclick="openCfg()">⚙ 챔폭/가중치</button>
+  </div>
 </div>
 
 <div class="lanebar" id="lanebar"></div>
@@ -246,6 +287,22 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 </div>
 <div class="legend">점수 = <b>승</b> 승률(참조) + <b>팀</b> 팀 시너지 + <b>카</b> 상성/스킬 &nbsp;(합계가 총점)</div>
 <div id="results"></div>
+
+<div class="logbar" id="logbar">
+  <span class="lgl">이 판 결과 기록</span>
+  <select class="lgsel" id="myPickSel"></select>
+  <button class="lgw" onclick="logMatch(true)">✓ 이김</button>
+  <button class="lgl-btn" onclick="logMatch(false)">✗ 짐</button>
+</div>
+
+<!-- match record sheet -->
+<div class="scrim" id="logScrim">
+  <div class="sheet">
+    <div class="hd"><div class="tt">전적 · <b>기록 & 통계</b></div></div>
+    <div class="logbody" id="logBody"></div>
+    <div class="ft"><button onclick="closeLog()">닫기</button></div>
+  </div>
+</div>
 
 <!-- config sheet -->
 <div class="scrim" id="cfgScrim">
@@ -483,13 +540,27 @@ const LANES=[
  {k:'sup',ic:'🛡️',nm:'서포터'},
 ];
 const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사',marksman:'원딜',enchanter:'서폿'};
+const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
 let state={ lane:'mid', ally:[], enemy:[] };
 let pool={};   // id -> {comfort:0-100, owned:bool}  comfort 0 = not in pool
 let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:2};
+let matches=[];      // 전적 기록: {t,lane,ally[],enemy[],pick,top,won}
+let lastCands=[];    // 현재 추천 후보 (결과 기록용)
 
 /* ============ STORAGE ============ */
+/* window.storage 폴리필: 클로드 밖 일반 브라우저에선 localStorage로 영속화 */
+if(!window.storage){
+  let LS=null; try{ localStorage.setItem('__wrt','1'); localStorage.removeItem('__wrt'); LS=localStorage; }catch(e){}
+  const mem={};
+  window.storage={
+    async get(k){ const v=LS?LS.getItem('wrs_'+k):(k in mem?mem[k]:null); return v==null?null:{key:k,value:v}; },
+    async set(k,v){ if(LS)LS.setItem('wrs_'+k,v); else mem[k]=v; return {key:k,value:v}; },
+    async delete(k){ if(LS)LS.removeItem('wrs_'+k); else delete mem[k]; return {key:k,deleted:true}; },
+    async list(){ return {keys:[]}; }
+  };
+}
 async function loadStore(){
   try{
     const p=await window.storage.get('wr_pool'); if(p&&p.value) pool=JSON.parse(p.value);
@@ -504,6 +575,8 @@ async function saveStore(){
   try{ await window.storage.set('wr_pool',JSON.stringify(pool)); }catch(e){}
   try{ await window.storage.set('wr_weights',JSON.stringify(weights)); }catch(e){}
 }
+async function loadMatches(){ try{ const m=await window.storage.get('wr_matches'); if(m&&m.value) matches=JSON.parse(m.value); }catch(e){} }
+async function saveMatches(){ try{ await window.storage.set('wr_matches',JSON.stringify(matches)); }catch(e){} }
 
 /* ============ MATCHUP MATRIX (advantage of A over B, -2..2) ============ */
 const MX={
@@ -515,44 +588,53 @@ const MX={
  enchanter:{assassin:-1,marksman:0,mage:0,fighter:-1,tank:0,enchanter:0},
 };
 function mxAdv(a,b){ return (MX[a]&&MX[a][b]!=null)?MX[a][b]:0; }
+const PAIR={ // 유명 챔 단위 상성(보수적 선별). 후보→라이너 가점, 역방향 자동 감점
+ 'Teemo':{'Darius':8,'Garen':7,'Nasus':7,'Tryndamere':6},
+ 'Mordekaiser':{'Teemo':6},
+ 'Malphite':{'Yasuo':6}
+};
 
 /* ============ KIT ATTRIBUTES (스킬 특성 레이어) ============
  시너지/팀상성/스킬상성 계산용. 대부분 클래스·태그에서 기본값을 뽑고,
  기계적으로 중요한 챔만 KIT으로 보정한다. 키=영문명, 키 중복 금지. */
 const KIT={
+'Teemo':{curve:'mid'},'Caitlyn':{curve:'mid'},'Draven':{curve:'early'},'Miss Fortune':{curve:'mid'},
+'Syndra':{hardcc:1},'Aurora':{hardcc:1},'Ziggs':{hardcc:1},
  // 확정/점착 CC (고기동 위협 봉쇄에 강함)
  'Annie':{ptcc:1,aoecc:1,curve:'mid'},'Warwick':{ptcc:1,curve:'mid'},'Skarner':{ptcc:1,aoecc:1},
- 'Rammus':{ptcc:1},'Leona':{ptcc:1,aoecc:1},'Nautilus':{ptcc:1,aoecc:1},'Vi':{ptcc:1,mob:1,engage:1},
+ 'Rammus':{ptcc:1},'Leona':{ptcc:1,aoecc:1},'Nautilus':{knockup:1,ptcc:1,aoecc:1},'Vi':{knockup:1,ptcc:1,mob:1,engage:1},
  'Lissandra':{aoecc:1,ptcc:1,curve:'mid'},
+ // 단일 하드CC (스킬샷/점착 스턴 — 기존 미인식분)
+ 'Twisted Fate':{hardcc:1},'Ahri':{hardcc:1},'Bard':{hardcc:1},'Zoe':{hardcc:1},'Veigar':{hardcc:1},
  // 광역 하드CC (한타/웜바람보)
- 'Galio':{aoecc:1,engage:1},'Amumu':{aoecc:1,engage:1},'Kennen':{aoecc:1,engage:1},
+ 'Galio':{knockup:1,aoecc:1,engage:1},'Amumu':{aoecc:1,engage:1},'Kennen':{aoecc:1,engage:1},
  'Orianna':{aoecc:1},'Sett':{aoecc:1},'Rell':{aoecc:1,engage:1},'Sona':{aoecc:1},
  'Seraphine':{aoecc:1},'Ashe':{aoecc:1,curve:'late'},'Diana':{aoecc:1,knockup:1},
  'Veigar':{aoecc:1,curve:'late'},'Maokai':{aoecc:1,engage:1},
  // 넉업 제공 (야스오/요네 궁 시너지)
  'Malphite':{aoecc:1,engage:1,knockup:1},'Alistar':{knockup:1,engage:1},'Wukong':{knockup:1},
- 'Gnar':{knockup:1,aoecc:1},'Janna':{knockup:1,disengage:1},'Jarvan IV':{aoecc:1,engage:1,knockup:1},
- 'Gragas':{disengage:1,knockup:1},'Yasuo':{payoff:1,mob:2},'Yone':{payoff:1,mob:2},
+ 'Gnar':{knockup:1,aoecc:1},'Janna':{knockup:1,disengage:1,hardcc:1},'Jarvan IV':{aoecc:1,engage:1,knockup:1},
+ 'Gragas':{disengage:1,knockup:1,hardcc:1},'Senna':{hardcc:1},'Mel':{hardcc:1},'Yasuo':{payoff:1,mob:2},'Yone':{mob:2,aoecc:1,knockup:1},
  // 하이퍼캐리 (보호 시너지, 후반)
  'Jinx':{hypercarry:1,curve:'late'},'Kog\'Maw':{hypercarry:1,curve:'late',antitank:1},
  'Vayne':{hypercarry:1,curve:'late',antitank:1,mob:1},'Twitch':{hypercarry:1,curve:'late'},
  'Zeri':{hypercarry:1,curve:'late',mob:2},'Kai\'Sa':{hypercarry:1,mob:1},
  'Smolder':{hypercarry:1,curve:'late',antitank:1},
  // 보호/디스인게이지
- 'Lulu':{protect:1,disengage:1},'Milio':{protect:1,disengage:1},'Soraka':{protect:1},
- 'Nami':{protect:1},'Yuumi':{protect:1},'Poppy':{disengage:1},'Karma':{protect:1,disengage:1},
+ 'Lulu':{protect:1,disengage:1,hardcc:1},'Milio':{protect:1,disengage:1},'Soraka':{protect:1},
+ 'Nami':{protect:1,hardcc:1},'Yuumi':{protect:1},'Poppy':{knockup:1,disengage:1},'Karma':{protect:1,disengage:1,hardcc:1},
  // 고기동 (갱·스킬샷 회피, 잡기 어려움)
  'Akali':{mob:2},'Zed':{mob:2},'Fizz':{mob:2},'Ekko':{mob:2},'Katarina':{mob:2},'Irelia':{mob:2},
- 'Camille':{mob:2},'Kayn':{mob:2},'Talon':{mob:2},'Kassadin':{mob:2,curve:'late'},'Riven':{mob:2},
- 'Kha\'Zix':{mob:2},'Rengar':{mob:2},'Viego':{mob:2},'Lillia':{mob:2},'Lucian':{mob:1},'Nocturne':{mob:2},
+ 'Camille':{mob:2},'Kayn':{mob:2},'Talon':{mob:2},'Kassadin':{mob:2,curve:'late'},'Riven':{knockup:1,mob:2},
+ 'Kha\'Zix':{mob:2},'Rengar':{mob:2},'Viego':{mob:2},'Lillia':{mob:2},'Lucian':{mob:1,curve:'mid'},'Nocturne':{mob:2},
  // 안티탱 (%체력/고정/방깎)
- 'Fiora':{antitank:1},'Gwen':{antitank:1},'Vladimir':{antitank:1,curve:'late'},'Darius':{antitank:1},
- 'Olaf':{antitank:1},'Cho\'Gath':{antitank:1},
+ 'Fiora':{antitank:1},'Gwen':{antitank:1},'Vladimir':{antitank:1,curve:'late'},'Ambessa':{hardcc:1},
+ 'Olaf':{antitank:1},'Cho\'Gath':{knockup:1,antitank:1},
  // 후반 스케일러
- 'Nasus':{curve:'late'},'Aurelion Sol':{curve:'late'},'Ryze':{curve:'late'},'Kayle':{curve:'late'},
+ 'Nasus':{curve:'late'},'Aurelion Sol':{curve:'late',hardcc:1},'Ryze':{curve:'late',hardcc:1},'Kayle':{curve:'late'},
  // 단일 강이니시
- 'Pantheon':{engage:1},'Hecarim':{engage:1},
-};
+ 'Pantheon':{engage:1,hardcc:1},'Hecarim':{engage:1},
+ 'Lee Sin':{knockup:1}, 'Xin Zhao':{knockup:1}, 'Blitzcrank':{knockup:1}, 'Rakan':{knockup:1}, 'Aatrox':{knockup:1}, 'Sion':{knockup:1}, 'Ornn':{knockup:1}, 'Braum':{knockup:1}, 'Zac':{knockup:1}, 'Taliyah':{knockup:1},};
 function kitOf(c){
   const t=c.tags,cls=c.cls;
   const o={
@@ -562,7 +644,7 @@ function kitOf(c){
     engage: t.includes('engage')?1:0,
     disengage: (t.includes('peel')||cls==='enchanter')?1:0,
     curve: t.includes('scaling')?'late':(cls==='marksman'?'late':'mid'),
-    hypercarry:0, protect:(cls==='enchanter'||t.includes('peel'))?1:0,
+    hypercarry:0, protect:(cls==='enchanter'||(t.includes('peel')&&cls!=='marksman'))?1:0,
     knockup:0, payoff:0,
     antitank:0, poke:t.includes('poke')?1:0, split:t.includes('split')?1:0, burst:t.includes('burst')?1:0,
   };
@@ -570,32 +652,33 @@ function kitOf(c){
 }
 
 /* ============ SCORING ============ */
-/* ============ 실제 승률 데이터 (Patch 7.1h, 중국서버 / WildRiftFire) ============
- letter 티어 대신 실측 승률(%)을 그대로 점수화한다. 키=영문명, 챔당 대표 라인 승률. */
+/* ============ 실제 승률 데이터 (Patch 7.1h / wrmeta 공식 랭크, 2026-06-30 갱신) ============
+ letter 티어 대신 실측 승률(%)을 그대로 점수화한다. 키=영문명, 챔당 '주 라인' 승률.
+ Solo=탑 / Jungle=정글 / Mid=미드 / Duo=원딜 / Support=서폿. 부 라인은 오프롤 할인으로 처리. */
 const WINRATE={
- 'Amumu':56.26,'Nunu':55.26,'Rammus':54.64,'Lillia':54.59,'Fiddlesticks':53.20,'Taliyah':52.84,
- 'Brand':52.82,'Smolder':52.56,'Zilean':52.32,'Sion':52.18,'K\'Sante':52.11,'Leona':52.07,
- 'Teemo':52.05,'Warwick':52.04,'Miss Fortune':52.00,'Rell':51.91,'Maokai':51.87,'Vi':51.84,
- 'Viktor':51.81,'Jarvan IV':51.78,'Xayah':51.69,'Singed':51.69,'Shyvana':51.68,'Kayle':51.55,
- 'Garen':51.50,'Ambessa':51.49,'Shen':51.46,'Evelynn':51.45,'Jhin':51.41,'Zyra':51.37,
- 'Ryze':51.35,'Soraka':51.32,'Nami':51.31,'Kennen':51.31,'Diana':51.31,'Ahri':51.28,
- 'Veigar':51.27,'Braum':51.21,'Twisted Fate':51.19,'Kog\'Maw':51.13,'Kassadin':51.09,'Zeri':50.90,
- 'Nautilus':50.89,'Master Yi':50.86,'Dr. Mundo':50.85,'Nidalee':50.81,'Poppy':50.80,'Ashe':50.75,
- 'Galio':50.73,'Blitzcrank':50.66,'Karma':50.66,'Sett':50.64,'Aurelion Sol':50.57,'Morgana':50.54,
- 'Ezreal':50.52,'Pantheon':50.52,'Ornn':50.49,'Milio':50.43,'Hecarim':50.41,'Nocturne':50.41,
- 'Orianna':50.38,'Vayne':50.34,'Senna':50.30,'Aurora':50.29,'Janna':50.27,'Zed':50.27,
- 'Varus':50.25,'Norra':50.23,'Malphite':50.23,'Jayce':50.20,'Rumble':50.12,'Aatrox':50.10,
- 'Kalista':49.99,'Gnar':49.97,'Annie':49.97,'Volibear':49.94,'Lulu':49.93,'Olaf':49.93,
- 'Vex':49.91,'Corki':49.90,'Lissandra':49.90,'Fizz':49.84,'Sivir':49.83,'Nasus':49.78,
- 'Xin Zhao':49.72,'Vel\'Koz':49.71,'Lux':49.62,'Irelia':49.60,'Viego':49.55,'Sona':49.45,
- 'Ziggs':49.41,'Wukong':49.36,'Yone':49.36,'Mordekaiser':49.32,'Alistar':49.31,'Kayn':49.30,
- 'Kindred':49.29,'Tryndamere':49.27,'Pyke':49.24,'Heimerdinger':49.19,'Ekko':49.19,'Urgot':49.14,
- 'Graves':49.14,'Lucian':49.08,'Rengar':49.08,'Talon':49.03,'Rakan':49.01,'Syndra':48.98,
- 'Vladimir':48.96,'Caitlyn':48.93,'Swain':48.93,'Seraphine':48.92,'Renekton':48.86,'Jinx':48.80,
- 'Yasuo':48.62,'Samira':48.45,'Darius':48.35,'Gwen':48.25,'Mel':48.25,'Kai\'Sa':48.19,
- 'Camille':48.15,'Tristana':48.13,'Gragas':48.10,'Riven':48.09,'Kha\'Zix':48.07,'Twitch':48.05,
- 'Thresh':47.75,'Draven':47.54,'Jax':47.22,'Lee Sin':46.89,'Fiora':46.75,'Katarina':46.29,
- 'Yuumi':45.89,'Zoe':45.70,'Akali':45.31,'Skarner':42.63,
+ 'Amumu':56.93,'Nunu':55.00,'Rammus':54.66,'Lillia':54.90,'Fiddlesticks':53.03,'Taliyah':51.12,
+ 'Brand':52.58,'Smolder':52.14,'Zilean':51.92,'Sion':51.71,'K\'Sante':51.99,'Leona':51.59,
+ 'Teemo':52.92,'Warwick':52.43,'Miss Fortune':51.89,'Rell':51.13,'Maokai':51.76,'Vi':51.99,
+ 'Viktor':51.45,'Jarvan IV':51.92,'Xayah':51.01,'Singed':51.38,'Shyvana':52.16,'Kayle':51.59,
+ 'Garen':51.58,'Ambessa':52.01,'Shen':52.21,'Evelynn':52.42,'Jhin':51.63,'Zyra':51.11,
+ 'Ryze':51.31,'Soraka':50.66,'Nami':50.79,'Kennen':52.18,'Diana':51.60,'Ahri':51.65,
+ 'Veigar':51.18,'Braum':51.43,'Twisted Fate':51.68,'Kog\'Maw':51.34,'Kassadin':50.89,'Zeri':50.96,
+ 'Nautilus':48.03,'Master Yi':50.50,'Dr. Mundo':50.66,'Nidalee':50.22,'Poppy':50.74,'Ashe':50.61,
+ 'Galio':50.93,'Blitzcrank':50.59,'Karma':50.63,'Sett':50.82,'Aurelion Sol':50.97,'Morgana':50.24,
+ 'Ezreal':50.41,'Pantheon':50.64,'Ornn':50.89,'Milio':50.58,'Hecarim':49.40,'Nocturne':50.72,
+ 'Orianna':51.55,'Vayne':50.57,'Senna':49.82,'Aurora':49.88,'Janna':49.98,'Zed':50.52,
+ 'Varus':50.22,'Norra':49.91,'Malphite':50.59,'Jayce':49.19,'Rumble':50.52,'Aatrox':49.26,
+ 'Kalista':50.52,'Gnar':50.06,'Annie':48.15,'Volibear':49.94,'Lulu':49.81,'Olaf':50.36,
+ 'Vex':49.64,'Corki':48.41,'Lissandra':49.86,'Fizz':50.45,'Sivir':50.22,'Nasus':49.93,
+ 'Xin Zhao':50.33,'Vel\'Koz':49.02,'Lux':49.81,'Irelia':48.95,'Viego':49.05,'Sona':51.50,
+ 'Ziggs':48.85,'Wukong':49.07,'Yone':49.29,'Mordekaiser':49.56,'Alistar':49.45,'Kayn':49.61,
+ 'Kindred':50.26,'Tryndamere':49.53,'Pyke':49.05,'Heimerdinger':49.27,'Ekko':49.88,'Urgot':49.60,
+ 'Graves':49.33,'Lucian':49.11,'Rengar':48.14,'Talon':49.21,'Rakan':49.15,'Syndra':49.14,
+ 'Vladimir':49.52,'Caitlyn':48.90,'Swain':48.26,'Seraphine':50.43,'Renekton':49.31,'Jinx':48.55,
+ 'Yasuo':48.14,'Samira':48.25,'Darius':47.87,'Gwen':48.62,'Mel':48.76,'Kai\'Sa':48.39,
+ 'Camille':47.42,'Tristana':47.86,'Gragas':49.93,'Riven':47.98,'Kha\'Zix':47.78,'Twitch':48.54,
+ 'Thresh':52.36,'Draven':48.26,'Jax':47.85,'Lee Sin':46.98,'Fiora':47.41,'Katarina':46.79,
+ 'Yuumi':45.18,'Zoe':46.60,'Akali':45.18,'Skarner':45.02,
 };
 const DEFAULT_WR=49.5; // 데이터 없는 챔(아크샨/바드/닐라/유나라/초가스 등)
 // 주 라인 (승률 데이터의 역할 기준). 라이너 매치업 오인 방지용(예: 요네=탑).
@@ -622,7 +705,7 @@ function compProfile(ids){
     if(c.dmg==='AP')p.ap++; else if(c.dmg==='AD')p.ad++; else {p.ap+=.5;p.ad+=.5;}
     if(c.tags.includes('engage'))p.engage++;
     if(c.tags.includes('peel'))p.peel++;
-    if(c.cls==='tank'||c.tags.includes('frontline'))p.frontline++;
+    if(c.cls==='tank'||c.tags.includes('frontline')||(c.cls==='fighter'&&c.tags.includes('engage')))p.frontline++;
   });
   return p;
 }
@@ -650,20 +733,23 @@ function score(cand){
   if(state.ally.length){
     // 구조적 공백 (아군 적게 잠겼을 땐 약화 — 남은 슬롯이 메울 수 있음)
     const fill = Math.min(1, 0.55 + 0.12*state.ally.length); // 4명=1.0, 2명≈0.79
-    if(!allyP.tank && cand.cls==='tank'){team+=18*fill;teamNotes.push('탱 공백 메움');}
-    else if(allyP.frontline===0 && (cand.cls==='tank'||cand.cls==='fighter'||cand.tags.includes('frontline'))){team+=11*fill;teamNotes.push('프론트라인 보강');}
+    if(!allyP.tank && allyP.frontline===0 && cand.cls==='tank'){team+=18*fill;teamNotes.push('탱 공백 메움');}
+    else if(!allyP.tank && cand.cls==='tank'){team+=10*fill;teamNotes.push('전담 탱 보강');}
+    else if(allyP.frontline===0 && (cand.cls==='fighter'||cand.tags.includes('frontline'))){team+=11*fill;teamNotes.push('프론트라인 보강');}
     if(allyP.engage===0 && k.engage){team+=11*fill;teamNotes.push('이니시 보강');}
-    // 데미지 밸런스
-    const skewAD=allyP.ad-allyP.ap;
-    if(skewAD>=2 && cand.dmg==='AP'){team+=10;teamNotes.push('AP 데미지 분산');}
-    if(skewAD<=-2 && cand.dmg==='AD'){team+=10;teamNotes.push('AD 데미지 분산');}
+    // 데미지 밸런스 — 실제 딜러 기준(탱·서폿 제외), 후보도 딜러일 때만 (탱 서폿은 캐리 딜 못 채움)
+    const allyDealers=state.ally.map(id=>byId[id]).filter(c=>c.cls!=='tank'&&c.cls!=='enchanter');
+    let aAD=0,aAP=0; allyDealers.forEach(c=>{if(c.dmg==='AP')aAP++;else if(c.dmg==='AD')aAD++;else{aAP+=.5;aAD+=.5;}});
+    const skewAD=aAD-aAP, candDealer=cand.cls!=='tank'&&cand.cls!=='enchanter';
+    if(skewAD>=2 && candDealer){ if(cand.dmg==='AP'){team+=10;teamNotes.push('AP 데미지 분산');} else if(cand.dmg==='AD'&&cand.cls!=='marksman'){team-=7;teamNotes.push('AD 편중 심화(-)');} }
+    if(skewAD<=-2 && candDealer){ if(cand.dmg==='AD'){team+=10;teamNotes.push('AD 데미지 분산');} else if(cand.dmg==='AP'&&cand.cls!=='marksman'){team-=7;teamNotes.push('AP 편중 심화(-)');} }
     // 스킬 시너지(콤보)
-    if(allyK.some(a=>a.payoff) && k.knockup){team+=14;teamNotes.push('넉업→야스오/요네 궁 콤보');}
+    if(allyK.some(a=>a.payoff) && k.knockup){team+=14;teamNotes.push('넉업→야스오 궁 콤보');}
     if(k.payoff && allyK.some(a=>a.knockup)){team+=14;teamNotes.push('아군 넉업과 궁 콤보');}
     const allyAoeEngage=allyK.some(a=>a.aoecc&&a.engage);
-    const allyAoeDmg=state.ally.some((id,i)=>allyK[i].aoecc||(byId[id].cls==='mage'&&byId[id].tags.includes('burst')));
+    const allyAoeDmg=state.ally.some((id,i)=>byId[id].cls!=='tank'&&byId[id].cls!=='enchanter'&&(allyK[i].aoecc||(byId[id].cls==='mage'&&byId[id].tags.includes('burst'))));
     let wombo=0,wnote='';
-    if(allyAoeEngage && cand.cls==='mage' && cand.tags.includes('burst')){wombo=9;wnote='아군 광역 이니시와 한타 연계';}
+    if(allyAoeEngage && cand.cls==='mage' && (cand.tags.includes('burst')||k.aoecc)){wombo=9;wnote='아군 광역 이니시와 한타 연계';}
     if(k.aoecc&&k.engage && allyAoeDmg){if(wombo<9)wombo=9; if(!wnote)wnote='광역 이니시→아군 폭딜 연계';}
     if(wombo){team+=wombo;teamNotes.push(wnote);}
     // 캐리 보호
@@ -671,7 +757,10 @@ function score(cand){
     if(k.hypercarry && allyK.some(a=>a.protect) && state.lane==='adc'){team+=9;teamNotes.push('보호받는 캐리');}
     // 락다운 CC 부재 보강
     const allyHardCC=allyK.filter(a=>a.hardcc||a.aoecc||a.ptcc).length;
-    if(allyHardCC===0 && (k.hardcc||k.aoecc||k.ptcc)){team+=8*fill;teamNotes.push('팀 CC 보강');}
+    if(allyHardCC<=1 && (k.hardcc||k.aoecc||k.ptcc)){
+      if(allyHardCC===0){team+=8*fill;teamNotes.push('팀 CC 보강');}
+      else {team+=4*fill;teamNotes.push('CC 추가 확보');}
+    }
     // 역할 중복
     if(allyP[cand.cls]>=2 && (cand.cls==='tank'||cand.cls==='assassin')){team-=12;teamNotes.push('역할 중복(-)');}
   }
@@ -683,12 +772,17 @@ function score(cand){
     // (예: 요네가 탑인데 미드 상대로 오인 방지).
     const laner = state.enemy.map(id=>byId[id]).find(c=>c && primeLaneOf(c)===state.lane);
     if(laner){
-      let a=mxAdv(cand.cls,laner.cls)*7;
-      if(cand.rng==='r'&&laner.rng==='m')a+=5;       // 원거리 라인 우위
-      if(cand.rng==='m'&&laner.rng==='r')a-=4;
+      const laneK=kitOf(laner); let a=mxAdv(cand.cls,laner.cls)*7;
+      if(state.lane!=='jug'){                          // 정글은 지속 라인전이 없어 상성은 스킴/오브젝트 위주
+        if(cand.rng==='r'&&laner.rng==='m')a+=5;       // 원거리 라인 우위
+        if(cand.rng==='m'&&laner.rng==='r')a-=4;
+      } else a=Math.round(a*0.5);                       // 정글 매치업 프록시 절반
       counter+=a;
-      if(a>=6)cNotes.push('상대 '+laner.kr+'(추정) 상성 우위');
-      else if(a<=-6)cNotes.push('상대 '+laner.kr+'(추정)에 불리(-)');
+      const lPos=[], lNeg=[];
+      const pd=((PAIR[cand.en]||{})[laner.en]!=null)?PAIR[cand.en][laner.en]:-(((PAIR[laner.en]||{})[cand.en])||0);
+      if(pd){counter+=pd;(pd>0?lPos:lNeg).push('유명 상성 '+(pd>0?'우위':'열세'));}
+      if(a>=6)lPos.push('상성 우위');
+      else if(a<=-6)lNeg.push('상성 불리');
 
       // ── 특성 기반 라이너 매치업 (같은 클래스끼리도 갈리게) ──
       const lAllIn  = laner.tags.includes('dive')||laner.tags.includes('engage')||laner.tags.includes('burst');
@@ -697,22 +791,27 @@ function score(cand){
       let nz=0; const lnote=[];
       if(lAllIn){ // 상대가 올인/다이브형 → 버티거나 회피하는 픽이 유리
         if(cand.tags.includes('sustain')){nz+=6;lnote.push('지속력으로 버팀');}
-        if(cand.rng==='r'){nz+=6;lnote.push('원거리로 올인 회피');}
+        if(cand.rng==='r'&&laner.rng==='m'&&!laneK.aoecc&&!laneK.engage){nz+=6;lnote.push('원거리로 올인 회피');}
         if(cand.tags.includes('split')){nz+=4;lnote.push('사이드 분리');}
         if(cand.cls==='mage'&&cand.rng==='m'){nz-=5;lnote.push('근접 물몸 위험(-)');}
         if(cand.cls==='enchanter'){nz-=3;}
       }
       if(lPoke){ // 상대가 포킹/원거리형 → 파고드는 픽이 유리
+        if(cand.rng==='m'&&k.curve==='late'){counter-=5;lNeg.push('초반 포킹에 고통');} // 근접 후반형은 포킹 라인전이 지옥(카사딘 등)
         if(cand.tags.includes('dive')||cand.tags.includes('engage')){nz+=6;lnote.push('파고들어 응징');}
-        if(cand.tags.includes('sustain')){nz+=3;lnote.push('포킹 버팀');}
+        if(cand.tags.includes('sustain')&&!lAllIn){nz+=3;lnote.push('포킹 버팀');}
         if(cand.rng==='m'&&!cand.tags.includes('dive')&&cand.cls!=='tank'){nz-=4;lnote.push('포킹에 취약(-)');}
       }
       if(lScale){ // 상대가 후반/스플릿형 → 초반에 굴리는 픽이 유리
-        if(cand.tags.includes('dive')||cand.tags.includes('engage')){nz+=5;lnote.push('초반에 굴려 격차');}
+        if((cand.tags.includes('dive')||cand.tags.includes('engage'))&&k.curve!=='late'){nz+=5;lnote.push('초반에 굴려 격차');}
       }
       counter+=nz;
-      if(nz>=5 && lnote.length)cNotes.push('상대 '+laner.kr+'(추정): '+lnote.filter(x=>!x.includes('(-)'))[0]);
-      else if(nz<=-4 && lnote.length)cNotes.push('상대 '+laner.kr+'(추정): '+(lnote.find(x=>x.includes('(-)'))||'').replace('(-)',''));
+      const lpAll=lnote.filter(x=>!x.includes('(-)')), lnAll=lnote.filter(x=>x.includes('(-)')).map(x=>x.replace('(-)',''));
+      if(nz>=5 && lpAll.length)lPos.push(...lpAll);
+      else if(nz<=-4 && lnAll.length)lNeg.push(...lnAll);
+      const lpfx='상대 '+laner.kr+'(추정): ';
+      if(lPos.length)cNotes.push(lpfx+lPos.join(', '));
+      if(lNeg.length)cNotes.push(lpfx+lNeg.join(', ')+'(-)');
     }
     // ── 팀 단위 상성 (스킬 특성 기반) ──
     const eMobile=enemyK.filter(a=>a.mob>=2).length;                 // 고기동 위협(암살자/다이버)
@@ -721,34 +820,41 @@ function score(cand){
     const ePoke  =state.enemy.map(id=>byId[id]).filter(c=>c.tags.includes('poke')&&c.rng==='r').length;
     const eFront =state.enemy.map(id=>byId[id]).filter(c=>c.cls==='tank'||c.tags.includes('frontline')).length;
     const eBurst =state.enemy.map((id,i)=>byId[id]).filter(c=>c.cls==='assassin'||c.tags.includes('burst')).length;
-    const squishyCand=(cand.cls==='marksman'||cand.cls==='mage'||cand.cls==='enchanter')&&k.mob===0;
+    const squishyCand=(cand.cls==='marksman'||cand.cls==='mage'||cand.cls==='enchanter')&&k.mob<=1;
 
     if(eMobile>=2){ // 고기동 다수 → 확정/점착 CC가 잡는다
       if(k.ptcc){counter+=12;cNotes.push('점착 CC로 상대 기동성 봉쇄');}
       else if(k.hardcc||k.aoecc){counter+=6;cNotes.push('CC로 기동성 대응');}
-      if(squishyCand){counter-=6;cNotes.push('상대 암살에 물몸 노출(-)');}
+      if(squishyCand){counter-=(k.mob===0?6:3);cNotes.push('상대 암살에 물몸 노출(-)');}
     }
-    if(eScale>=2){ // 상대 후반캐리 → 초반에 굴려라 (실제 초반 압박/다이브형만)
-      if(k.curve==='early'||cand.cls==='assassin'||(cand.tags.includes('dive')&&k.curve!=='late')){counter+=8;cNotes.push('상대 후반캐리 → 초반에 굴리기');}
-      else if(k.curve==='late'&&!k.hypercarry){counter-=4;cNotes.push('같이 후반 도모(-)');}
-    }
+    // 공격적 다이브 보상 — 상대 후반형/포킹형 → 들어가서 끝내기 (같은 다이브 능력이라 합산 대신 캡)
+    let aggro=0; const aWhy=[];
+    const earlySnow=k.curve==='early'||(cand.cls==='assassin'&&k.curve!=='late'); // 후반형 암살자(카사딘 등)는 초반 스노볼러가 아님
+    const scaleDiver=earlySnow||(cand.tags.includes('dive')&&k.curve!=='late');
+    const scaleAggro=earlySnow?8:5; // 진짜 초반 스노볼(암살자)만 풀, 다이브 메이지는 소폭
+    const pokeDiver=cand.tags.includes('dive')||k.mob>=2;
+    if(eScale>=2 && scaleDiver){aggro=Math.max(aggro,scaleAggro); aWhy.push('후반캐리 → 초반에 굴리기');}
+    if(ePoke>=2 && pokeDiver){aggro=Math.max(aggro,6); aWhy.push('포킹 → 파고들기');}
+    if(aWhy.length>=2) aggro+=3; // 둘 다 해당 시 소폭만 가산(완전 중복 방지)
+    if(aggro){counter+=aggro; cNotes.push('상대 '+aWhy.join(' / '));}
+    if(eScale>=2 && k.curve==='late' && !k.hypercarry){counter-=4; cNotes.push('같이 후반 도모(-)');}
     if(eEngage>=2){ // 상대 강이니시 → 디스인게이지/피해
       if(k.disengage||k.protect){counter+=8;cNotes.push('상대 이니시 → 디스인게이지/보호');}
-      if(squishyCand&&!k.disengage){counter-=4;}
+      if(squishyCand&&!k.disengage){counter-=(k.mob===0?4:2);}
     }
-    // 상대 포킹 다수 → 파고드는 픽(다이브/고기동)만, 발 느린 마법사는 제외
-    if(ePoke>=2 && (cand.tags.includes('dive')||k.mob>=2)){counter+=6;cNotes.push('상대 포킹 다수 → 파고들기');}
     if(eFront>=2){ // 상대 탱 다수
       if(k.antitank){counter+=8;cNotes.push('상대 탱 다수 → 안티탱(%체력/고정딜)');}
       else if(cand.cls==='marksman'&&state.lane==='adc'){counter+=4;cNotes.push('상대 탱 다수 → 지속딜로 녹이기');}
     }
+    const eAT=enemyK.filter(a=>a.antitank).length; // 상대 안티탱(%체력/고정딜) → 순수 탱 효율 하락(베인 등)
+    if(eAT>=1 && cand.cls==='tank'){counter-=(eAT>=2?9:5);cNotes.push('상대 안티탱 → 탱 효율 감소(-)');}
     if(eBurst>=2 && (cand.cls==='tank'||k.protect)){counter+=5;cNotes.push('상대 폭딜 다수 → 보호/탱');}
     // 데미지 타입 압박(방어 아이템 관점)
     if(enemyP.ad-enemyP.ap>=2 && cand.cls==='tank'){counter+=3;}
   }
 
   const cw = (weights.recMode==='meta') ? 0 : W.comfort;   // 메타 최적 모드: 실력 무시
-  const draftPart = (cTier*(W.tier/100) + team*(W.team/100) + counter*(W.counter/100)) * (offRole?0.80:1);
+  const draftPart = (cTier*(W.tier/100) + team*(W.team/100) + counter*(W.counter/100)) * (offRole?0.76:1);
   const total = base*(cw/100) + draftPart;
   return {total, base, cTier, cWR, team, counter, teamNotes, cNotes, comfort, hasComfort, offPool:!hasComfort, cwUsed:cw, offRole};
 }
@@ -784,8 +890,10 @@ function compReadout(){
     let gaps=[];
     if(!a.tank && a.frontline===0)gaps.push('탱/프론트');
     if(a.engage===0)gaps.push('이니시');
-    if(a.ad-a.ap>=2)gaps.push('AP딜');
-    if(a.ap-a.ad>=2)gaps.push('AD딜');
+    const dlr=state.ally.map(id=>byId[id]).filter(c=>c.cls!=='tank'&&c.cls!=='enchanter');
+    let dAD=0,dAP=0; dlr.forEach(c=>{if(c.dmg==='AP')dAP++;else if(c.dmg==='AD')dAD++;else{dAP+=.5;dAD+=.5;}});
+    if(dAD-dAP>=2)gaps.push('AP딜');
+    if(dAP-dAD>=2)gaps.push('AD딜');
     parts.push(gaps.length?`우리팀 부족: <b>${gaps.join(', ')}</b>`:`우리팀 조합 균형 OK`);
   }
   if(state.enemy.length){
@@ -801,8 +909,13 @@ function compReadout(){
     if(scale>=2)s.push('후반 캐리(초반 압박)');
     if(poke>=2)s.push('포킹 위주(파고들기)');
     if(tank>=2)s.push('탱 다수(안티탱)');
-    if(e.ad-e.ap>=2)s.push('AD 위주(방어구↑)');
-    if(e.ap-e.ad>=2)s.push('AP 위주(마저↑)');
+    // 마저/방어구 조언은 실제 딜러 기준 (탱·엔첸터 제외 — 탱은 itemization 위협 아님)
+    const dealers=state.enemy.map(id=>byId[id]).filter(c=>c.cls!=='tank'&&c.cls!=='enchanter');
+    let dad=0,dap=0; dealers.forEach(c=>{if(c.dmg==='AP')dap++;else if(c.dmg==='AD')dad++;else{dap+=.5;dad+=.5;}});
+    if(dealers.length>=2){
+      if(dad-dap>=2)s.push('AD 위주(방어구↑)');
+      else if(dap-dad>=2)s.push('AP 위주(마저↑)');
+    }
     parts.push(s.length?`<span class="warn">상대: ${s.join(', ')}</span>`:`상대 조합 무난`);
   }
   el.innerHTML=parts.join(' &nbsp;·&nbsp; ');
@@ -822,6 +935,8 @@ function render(){
     .map(c=>({c,s:score(c)}))
     .sort((x,y)=>y.s.total-x.s.total)
     .slice(0,6);
+  lastCands=cands;
+  renderLogBar();
   const box=document.getElementById('results');
   if(!cands.length){box.innerHTML=`<div class="empty">'내 챔폭만' 모드인데 이 라인에 등록한 챔이 없다.<br>⚙ 에서 챔폭을 넣거나 모드를 <b>메타 최적</b>으로 바꿔라.</div>`;return;}
   box.innerHTML=cands.map((o,i)=>{
@@ -963,12 +1078,109 @@ async function saveCfg(){await saveStore();closeCfg();render();toast('저장 완
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1400);}
 
+/* ============ 전적 기록 ============ */
+const champName=id=>{const c=byId[id];return c?c.kr:'(삭제됨)';};
+function renderLogBar(){
+  const bar=document.getElementById('logbar'); if(!bar) return;
+  bar.classList.add('on');
+  const sel=document.getElementById('myPickSel');
+  const topId=lastCands.length?lastCands[0].c.id:null;
+  // 이 라인 챔 먼저, 그다음 전체
+  const laneIds=new Set(DB.filter(c=>c.lanes.includes(state.lane)).map(c=>c.id));
+  const laneC=DB.filter(c=>laneIds.has(c.id)).sort((a,b)=>a.kr.localeCompare(b.kr,'ko'));
+  const restC=DB.filter(c=>!laneIds.has(c.id)).sort((a,b)=>a.kr.localeCompare(b.kr,'ko'));
+  const opt=c=>`<option value="${c.id}" ${c.id===topId?'selected':''}>${c.kr}</option>`;
+  sel.innerHTML=`<optgroup label="이 라인 (${LANEKR[state.lane]})">${laneC.map(opt).join('')}</optgroup>`
+    +`<optgroup label="기타 챔">${restC.map(opt).join('')}</optgroup>`;
+}
+function logMatch(won){
+  const sel=document.getElementById('myPickSel');
+  const pickId=sel.value!==''?+sel.value:(lastCands.length?lastCands[0].c.id:null);
+  if(pickId===null){toast('픽을 먼저 골라줘');return;}
+  const topId=lastCands.length?lastCands[0].c.id:null;
+  matches.push({t:Date.now(),lane:state.lane,ally:state.ally.slice(),enemy:state.enemy.slice(),pick:pickId,top:topId,won:!!won});
+  saveMatches();
+  toast(won?`기록 완료: ${champName(pickId)} 승 ✓`:`기록 완료: ${champName(pickId)} 패 ✗`);
+}
+function openLog(){renderLog();document.getElementById('logScrim').classList.add('on');}
+function closeLog(){document.getElementById('logScrim').classList.remove('on');}
+function pct(w,n){return n?Math.round(w/n*100):0;}
+function renderLog(){
+  const body=document.getElementById('logBody');
+  if(!matches.length){
+    body.innerHTML=`<div class="logempty">아직 기록이 없다.<br>챔 선택 화면 아래 <b>"이 판 결과 기록"</b>에서<br>내 픽 고르고 ✓이김 / ✗짐 누르면 여기 쌓인다.</div><div class="logclear"><button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(가져오기)</button></div>`;
+    return;
+  }
+  const n=matches.length, w=matches.filter(m=>m.won).length;
+  // 추천 1위 따라간 판 (pick===top)
+  const foll=matches.filter(m=>m.top!=null&&m.pick===m.top), fw=foll.filter(m=>m.won).length;
+  const off=matches.filter(m=>!(m.top!=null&&m.pick===m.top)), ow=off.filter(m=>m.won).length;
+  // 챔별
+  const byCh={};
+  matches.forEach(m=>{const k=m.pick; if(!byCh[k])byCh[k]={w:0,n:0}; byCh[k].n++; if(m.won)byCh[k].w++;});
+  const champRows=Object.entries(byCh).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>
+    `<div class="champrow"><span class="nm">${champName(+id)} <span style="color:var(--dim)">${r.n}판</span></span>`
+    +`<span class="rec2 ${r.w/r.n>=0.5?'win':'loss'}">${r.w}승 ${r.n-r.w}패 · ${pct(r.w,r.n)}%</span></div>`).join('');
+  // 최근 기록
+  const recent=matches.slice().sort((a,b)=>b.t-a.t).slice(0,30).map(m=>{
+    const d=new Date(m.t), md=`${d.getMonth()+1}/${d.getDate()}`;
+    const followed=m.top!=null&&m.pick===m.top;
+    return `<div class="mrow"><span class="res ${m.won?'win':'loss'}">${m.won?'승':'패'}</span>`
+      +`<span class="info"><div class="l1">${LANEKR[m.lane]} · <b>${champName(m.pick)}</b>${followed?' <span style="color:var(--cyan);font-size:11px">★추천</span>':''}</div>`
+      +`<div class="l2">${md} · vs ${m.enemy.length?m.enemy.map(champName).join(', '):'(상대 미입력)'}</div></span>`
+      +`<button class="del" onclick="delMatch(${m.t})">✕</button></div>`;
+  }).join('');
+  body.innerHTML=
+    `<div class="statgrid">
+      <div class="statcard"><div class="k">전체 전적</div><div class="v">${w}<small>승</small> ${n-w}<small>패</small></div></div>
+      <div class="statcard"><div class="k">승률</div><div class="v ${pct(w,n)>=50?'win':'loss'}">${pct(w,n)}<small>%</small></div></div>
+      <div class="statcard"><div class="k">추천 1위 따라간 판</div><div class="v ${pct(fw,foll.length)>=50?'win':'loss'}">${pct(fw,foll.length)}<small>% (${foll.length}판)</small></div></div>
+      <div class="statcard"><div class="k">다른 픽 한 판</div><div class="v ${pct(ow,off.length)>=50?'win':'loss'}">${pct(ow,off.length)}<small>% (${off.length}판)</small></div></div>
+    </div>
+    <div class="logsec">챔별 승률</div>${champRows}
+    <div class="logsec">최근 기록</div>${recent}
+    <div class="logclear"><button onclick="exportData()" style="border-color:var(--cyan);color:var(--cyan)">백업(내보내기)</button> <button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(가져오기)</button> <button onclick="clearMatches()">전적 전체 삭제</button></div>`;
+}
+function exportData(){
+  const payload=JSON.stringify({v:1,matches,pool,weights});
+  try{ navigator.clipboard&&navigator.clipboard.writeText(payload); }catch(e){}
+  prompt('아래 전체를 길게 눌러 복사 → 메모장에 저장. 새 파일에서 [복원]에 붙여넣으면 전적이 살아난다.',payload);
+}
+function importData(){
+  const raw=prompt('백업 문자열을 붙여넣어라.');
+  if(!raw)return;
+  try{
+    const d=JSON.parse(raw);
+    if(!d||!Array.isArray(d.matches)) throw 0;
+    matches=d.matches; if(d.pool)pool=d.pool; if(d.weights)Object.assign(weights,d.weights);
+    saveMatches(); saveStore(); renderLog(); render(); toast('복원 완료: '+matches.length+'판');
+  }catch(e){ toast('복원 실패: 형식이 잘못됐다'); }
+}
+function delMatch(t){ matches=matches.filter(m=>m.t!==t); saveMatches(); renderLog(); }
+function clearMatches(){ if(!confirm('전적 기록을 전부 삭제할까? 되돌릴 수 없다.'))return; matches=[]; saveMatches(); renderLog(); }
+
+/* ============ PWA (홈 화면 추가 시 앱처럼) ============ */
+function setupPWA(){
+  try{
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="104" fill="#0a0e14"/><path d="M256 86 L426 256 L256 426 L86 256 Z" fill="none" stroke="#c8a04f" stroke-width="16"/><text x="256" y="298" font-family="Arial,sans-serif" font-weight="bold" font-size="142" fill="#3fd0c9" text-anchor="middle">WR</text></svg>`;
+    const iconURL=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
+    const ic=document.getElementById('appIcon'); if(ic) ic.href=iconURL;
+    const manifest={name:'WR 챔 셀렉터',short_name:'WR픽',start_url:'.',scope:'.',display:'standalone',orientation:'portrait',
+      background_color:'#0a0e14',theme_color:'#0a0e14',
+      icons:[{src:iconURL,sizes:'192x192',type:'image/svg+xml',purpose:'any'},{src:iconURL,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};
+    const mURL=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
+    const ml=document.getElementById('appManifest'); if(ml) ml.href=mURL;
+  }catch(e){}
+}
+
 /* close config sheet on scrim tap */
 document.getElementById('cfgScrim').addEventListener('click',e=>{if(e.target.id==='cfgScrim')closeCfg();});
 
 /* ============ INIT ============ */
 (async function(){
+  setupPWA();
   await loadStore();
+  await loadMatches();
   paintAddSide();
   laneBar();render();
 })();
