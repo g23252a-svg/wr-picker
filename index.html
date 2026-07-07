@@ -172,6 +172,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .bd-main{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:var(--cyan-soft);
   border:1px solid #1c4a47;background:#0e2422;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle}
 .rec.offpool .rname{color:var(--gold-soft)}
+.bd-fam{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:#f0b232;background:rgba(240,178,50,.12);border:1px solid rgba(240,178,50,.3);border-radius:4px;padding:1px 5px;margin-left:5px}
 .bd-role{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:var(--dim);
   border:1px solid var(--line);background:#141d2a;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle}
 .scopetog{display:flex;gap:7px}
@@ -241,7 +242,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 <div class="top">
   <div>
     <h1>WR <span>챔</span> 셀렉터</h1>
-    <div class="sub">Hextech draft engine · 30s lock</div>
+    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.1</b></div>
   </div>
   <div class="topbtns">
     <button class="gear" onclick="openLog()">📋 전적</button>
@@ -256,6 +257,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
     <div class="sidetog2">
       <button id="sbEnemy" onclick="setAddSide('enemy')">상대</button>
       <button id="sbAlly" onclick="setAddSide('ally')">우리</button>
+      <button id="sbBan" onclick="setAddSide('ban')">밴</button>
     </div>
     <input id="mainSrch" placeholder="챔 검색 → 바로 추가 (ㄴㅁ=나미, Enter=첫 결과)" autocomplete="off">
     <button class="sbclear" id="sbClear" onclick="clearSrch()">✕</button>
@@ -277,6 +279,11 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
     <div class="lbl"><span>상대팀</span></div>
     <div class="chips" id="enemyChips"></div>
   </div>
+</div>
+
+<div class="team" id="banBox" style="display:none;margin-top:8px">
+  <div class="lbl"><span>밴 (추천 제외)</span></div>
+  <div class="chips" id="banChips"></div>
 </div>
 
 <div class="compread" id="compread"></div>
@@ -543,11 +550,14 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-let state={ lane:'mid', ally:[], enemy:[] };
+let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let pool={};   // id -> {comfort:0-100, owned:bool}  comfort 0 = not in pool
 let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:2};
 let matches=[];      // 전적 기록: {t,lane,ally[],enemy[],pick,top,won}
 let lastCands=[];    // 현재 추천 후보 (결과 기록용)
+let famMap={};       // id -> {n,w}  매치 로그 기반 자동 숙련
+function computeFam(){ famMap={}; matches.forEach(m=>{ if(m.pick==null)return; const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0}); f.n++; if(m.won)f.w++; }); }
+function famComfort(id){ const f=famMap[id]; if(!f)return 0; return Math.max(45,Math.min(85, 50 + f.n*5 + (f.w-(f.n-f.w))*3)); }
 
 /* ============ STORAGE ============ */
 /* window.storage 폴리필: 클로드 밖 일반 브라우저에선 localStorage로 영속화 */
@@ -575,7 +585,7 @@ async function saveStore(){
   try{ await window.storage.set('wr_pool',JSON.stringify(pool)); }catch(e){}
   try{ await window.storage.set('wr_weights',JSON.stringify(weights)); }catch(e){}
 }
-async function loadMatches(){ try{ const m=await window.storage.get('wr_matches'); if(m&&m.value) matches=JSON.parse(m.value); }catch(e){} }
+async function loadMatches(){ try{ const m=await window.storage.get('wr_matches'); if(m&&m.value) matches=JSON.parse(m.value); }catch(e){} computeFam(); }
 async function saveMatches(){ try{ await window.storage.set('wr_matches',JSON.stringify(matches)); }catch(e){} }
 
 /* ============ MATCHUP MATRIX (advantage of A over B, -2..2) ============ */
@@ -634,7 +644,7 @@ const KIT={
  'Nasus':{curve:'late'},'Aurelion Sol':{curve:'late',hardcc:1},'Ryze':{curve:'late',hardcc:1},'Kayle':{curve:'late'},
  // 단일 강이니시
  'Pantheon':{engage:1,hardcc:1},'Hecarim':{engage:1},
- 'Lee Sin':{knockup:1}, 'Xin Zhao':{knockup:1}, 'Blitzcrank':{knockup:1}, 'Rakan':{knockup:1}, 'Aatrox':{knockup:1}, 'Sion':{knockup:1}, 'Ornn':{knockup:1}, 'Braum':{knockup:1}, 'Zac':{knockup:1}, 'Taliyah':{knockup:1},};
+ 'Lee Sin':{knockup:1}, 'Xin Zhao':{knockup:1}, 'Blitzcrank':{knockup:1,ptcc:1},'Thresh':{ptcc:1},'Pyke':{ptcc:1}, 'Rakan':{knockup:1}, 'Aatrox':{knockup:1}, 'Sion':{knockup:1}, 'Ornn':{knockup:1}, 'Braum':{knockup:1}, 'Zac':{knockup:1}, 'Taliyah':{knockup:1},};
 function kitOf(c){
   const t=c.tags,cls=c.cls;
   const o={
@@ -712,8 +722,11 @@ function compProfile(ids){
 
 function score(cand){
   const W=weights;
-  const comfort = (pool[cand.id]&&pool[cand.id].comfort)||0;
+  const manualC = (pool[cand.id]&&pool[cand.id].comfort)||0;
+  const autoC = (W.autoFam!==false && !manualC) ? famComfort(cand.id) : 0;
+  const comfort = manualC || autoC;
   const hasComfort = comfort>0;
+  const comfortAuto = !manualC && autoC>0;
   // comfort is a WEIGHTED axis, never a filter. Off-pool champs get a neutral
   // baseline (50) so a strong meta/counter pick can still rank — just without
   // the mastery bonus. Your mains (70~100) get a real edge, tunable by weight.
@@ -732,7 +745,7 @@ function score(cand){
   let team=0; const teamNotes=[];
   if(state.ally.length){
     // 구조적 공백 (아군 적게 잠겼을 땐 약화 — 남은 슬롯이 메울 수 있음)
-    const fill = Math.min(1, 0.55 + 0.12*state.ally.length); // 4명=1.0, 2명≈0.79
+    const fill = Math.min(1, 0.30 + 0.175*state.ally.length); // 4명=1.0, 2명=0.65 — 정보 적을수록 공백 보너스 축소
     if(!allyP.tank && allyP.frontline===0 && cand.cls==='tank'){team+=18*fill;teamNotes.push('탱 공백 메움');}
     else if(!allyP.tank && cand.cls==='tank'){team+=10*fill;teamNotes.push('전담 탱 보강');}
     else if(allyP.frontline===0 && (cand.cls==='fighter'||cand.tags.includes('frontline'))){team+=11*fill;teamNotes.push('프론트라인 보강');}
@@ -770,7 +783,9 @@ function score(cand){
   if(state.enemy.length){
     // 상대 라이너 = 이 라인을 '주 라인'으로 쓰는 적. 플렉스 가능만으론 안 잡음
     // (예: 요네가 탑인데 미드 상대로 오인 방지).
-    const laner = state.enemy.map(id=>byId[id]).find(c=>c && primeLaneOf(c)===state.lane);
+    const laner = (state.laneMark!=null && state.enemy.includes(state.laneMark) && byId[state.laneMark])
+               || state.enemy.map(id=>byId[id]).find(c=>c && primeLaneOf(c)===state.lane)
+               || state.enemy.map(id=>byId[id]).find(c=>c && c.lanes.includes(state.lane)); // 지정(🎯) > prime > 서브 포지션 폴백
     if(laner){
       const laneK=kitOf(laner); let a=mxAdv(cand.cls,laner.cls)*7;
       if(state.lane!=='jug'){                          // 정글은 지속 라인전이 없어 상성은 스킴/오브젝트 위주
@@ -809,7 +824,7 @@ function score(cand){
       const lpAll=lnote.filter(x=>!x.includes('(-)')), lnAll=lnote.filter(x=>x.includes('(-)')).map(x=>x.replace('(-)',''));
       if(nz>=5 && lpAll.length)lPos.push(...lpAll);
       else if(nz<=-4 && lnAll.length)lNeg.push(...lnAll);
-      const lpfx='상대 '+laner.kr+'(추정): ';
+      const lpfx='상대 '+laner.kr+(state.laneMark===laner.id?'(지정)':'(추정)')+': ';
       if(lPos.length)cNotes.push(lpfx+lPos.join(', '));
       if(lNeg.length)cNotes.push(lpfx+lNeg.join(', ')+'(-)');
     }
@@ -848,6 +863,8 @@ function score(cand){
     }
     const eAT=enemyK.filter(a=>a.antitank).length; // 상대 안티탱(%체력/고정딜) → 순수 탱 효율 하락(베인 등)
     if(eAT>=1 && cand.cls==='tank'){counter-=(eAT>=2?9:5);cNotes.push('상대 안티탱 → 탱 효율 감소(-)');}
+    const eLock=enemyK.filter(a=>a.ptcc).length; // 그랩/제압/점착 락다운(블리츠/스카너/쓰레쉬 등)
+    if(eLock>=2 && squishyCand){counter-=(k.mob===0?6:4);cNotes.push('상대 락다운 다수 → 물몸 주의(-)');}
     if(eBurst>=2 && (cand.cls==='tank'||k.protect)){counter+=5;cNotes.push('상대 폭딜 다수 → 보호/탱');}
     // 데미지 타입 압박(방어 아이템 관점)
     if(enemyP.ad-enemyP.ap>=2 && cand.cls==='tank'){counter+=3;}
@@ -856,7 +873,7 @@ function score(cand){
   const cw = (weights.recMode==='meta') ? 0 : W.comfort;   // 메타 최적 모드: 실력 무시
   const draftPart = (cTier*(W.tier/100) + team*(W.team/100) + counter*(W.counter/100)) * (offRole?0.76:1);
   const total = base*(cw/100) + draftPart;
-  return {total, base, cTier, cWR, team, counter, teamNotes, cNotes, comfort, hasComfort, offPool:!hasComfort, cwUsed:cw, offRole};
+  return {total, base, cTier, cWR, team, counter, teamNotes, cNotes, comfort, hasComfort, comfortAuto, offPool:!hasComfort, cwUsed:cw, offRole};
 }
 
 function anyOwned(){ return Object.values(pool).some(p=>p&&p.comfort>0); }
@@ -870,20 +887,26 @@ function laneBar(){
 function setLane(k){state.lane=k;laneBar();render();}
 
 function chips(){
-  const mk=(ids,side)=>ids.map(id=>{const c=byId[id];return c?
-    `<span class="chip">${c.kr}<span class="cls">${CLSKR[c.cls]}</span><span class="x" onclick="rmChamp('${side}',${id})">×</span></span>`:''}).join('')
+  const mk=(ids,side)=>ids.map(id=>{const c=byId[id];if(!c)return '';
+    const marked=(side==='enemy'&&state.laneMark===id);
+    const nm=side==='enemy'?`<span onclick="markLaner(${id})" style="cursor:pointer">${marked?'🎯 ':''}${c.kr}</span>`:c.kr;
+    const st=marked?' style="border-color:#f0b232"':(side==='bans'?' style="opacity:.55"':'');
+    return `<span class="chip"${st}>${nm}<span class="cls">${CLSKR[c.cls]}</span><span class="x" onclick="rmChamp('${side}',${id})">×</span></span>`;}).join('')
     || `<span style="font-size:11px;color:var(--dimmer)">픽 추가하면 정확도↑</span>`;
   document.getElementById('allyChips').innerHTML=mk(state.ally,'ally');
   document.getElementById('enemyChips').innerHTML=mk(state.enemy,'enemy');
-  const has=state.ally.length||state.enemy.length;
+  const bb=document.getElementById('banBox');
+  if(bb){bb.style.display=state.bans.length?'':'none';document.getElementById('banChips').innerHTML=mk(state.bans,'bans');}
+  const has=state.ally.length||state.enemy.length||state.bans.length;
   document.getElementById('clearAll').style.visibility=has?'visible':'hidden';
 }
-function rmChamp(side,id){state[side]=state[side].filter(x=>x!==id);chips();render();}
-function clearPicks(){state.ally=[];state.enemy=[];chips();render();}
+function markLaner(id){state.laneMark=(state.laneMark===id?null:id);chips();render();}
+function rmChamp(side,id){state[side]=state[side].filter(x=>x!==id);if(state.laneMark===id)state.laneMark=null;chips();render();}
+function clearPicks(){state.ally=[];state.enemy=[];state.bans=[];state.laneMark=null;chips();render();}
 
 function compReadout(){
   const el=document.getElementById('compread');
-  if(!state.ally.length && !state.enemy.length){el.innerHTML='라인만 골라도 추천 나온다. 보이는 픽을 넣으면 팀조합·카운터까지 반영해서 재정렬됨.';return;}
+  if(!state.ally.length && !state.enemy.length){el.innerHTML='라인만 골라도 추천 나온다. 보이는 픽을 넣으면 팀조합·카운터까지 반영해서 재정렬됨. 상대 칩 이름 탭 = 내 라인 상대 지정(🎯).';return;}
   const a=compProfile(state.ally), e=compProfile(state.enemy);
   let parts=[];
   if(state.ally.length){
@@ -895,6 +918,7 @@ function compReadout(){
     if(dAD-dAP>=2)gaps.push('AP딜');
     if(dAP-dAD>=2)gaps.push('AD딜');
     parts.push(gaps.length?`우리팀 부족: <b>${gaps.join(', ')}</b>`:`우리팀 조합 균형 OK`);
+    if(state.ally.length<=2) parts.push(`<b style="color:#f0b232">아군 ${state.ally.length}명만 입력 — 공백 판정 과대 가능</b>`);
   }
   if(state.enemy.length){
     const ek=state.enemy.map(id=>kitOf(byId[id]));
@@ -929,7 +953,7 @@ function render(){
     mode==='meta'     ? '기준: <b>메타 최적</b> · 실력 무시' :
     mode==='poolonly' ? '기준: <b>내 챔폭만</b>' :
                         '기준: <b>숙련 가중</b> · 내 주력 우대';
-  const picked=new Set([...state.ally,...state.enemy]);
+  const picked=new Set([...state.ally,...state.enemy,...state.bans]);
   const cands=DB.filter(c=>c.lanes.includes(state.lane)&&!picked.has(c.id))
     .filter(c=>mode!=='poolonly' || (pool[c.id]&&pool[c.id].comfort>0))
     .map(c=>({c,s:score(c)}))
@@ -949,9 +973,12 @@ function render(){
     // mastery badge only meaningful in weighted mode with a pool set
     let badge='';
     if(s.offRole) badge+=`<span class="bd-role">부라인</span>`;
-    if(mode==='weighted' && owned){
-      if(s.offPool) badge+=`<span class="bd-off">챔폭 외</span>`;
-      else if(s.comfort>=70) badge+=`<span class="bd-main">주력</span>`;
+    const fm=famMap[c.id];
+    if(fm) badge+=`<span class="bd-fam">★내챔 ${fm.n}판 ${fm.w}승</span>`;
+    if(mode==='weighted'){
+      if(pool[c.id]&&pool[c.id].comfort>0){ if(s.comfort>=70) badge+=`<span class="bd-main">주력</span>`; }
+      else if(s.comfortAuto) badge+=`<span class="bd-main">자동숙련</span>`;
+      else if(!fm) badge+=`<span class="bd-off">첫 챔</span>`;
     }
     const showSuk = s.cwUsed>0; // 메타 최적 모드에선 숙련 항목 숨김
     const bd = (showSuk?`숙${Math.round(s.base*s.cwUsed/100)} `:'')
@@ -979,10 +1006,11 @@ function setAddSide(s){addSide=s;paintAddSide();renderDD();document.getElementBy
 function paintAddSide(){
   document.getElementById('sbEnemy').className=addSide==='enemy'?'on enemy':'';
   document.getElementById('sbAlly').className=addSide==='ally'?'on ally':'';
+  document.getElementById('sbBan').className=addSide==='ban'?'on':'';
 }
 function searchList(raw){
   raw=raw.trim();const ql=raw.toLowerCase(),choMode=isChoQuery(raw),cq=raw.replace(/\s/g,'');
-  const picked=new Set([...state.ally,...state.enemy]);
+  const picked=new Set([...state.ally,...state.enemy,...state.bans]);
   const match=c=>{if(!raw)return false;
     if(choMode)return c.cho.includes(cq)||c.aliasCho.some(a=>a.includes(cq));
     return c.kr.includes(raw)||c.en.toLowerCase().includes(ql)||c.cho.includes(cq)
@@ -1011,8 +1039,8 @@ function renderDD(){
     </button>`).join('');
 }
 function quickAdd(id){
-  if(state.ally.includes(id)||state.enemy.includes(id))return;
-  state[addSide].push(id);
+  if(state.ally.includes(id)||state.enemy.includes(id)||state.bans.includes(id))return;
+  (addSide==='ban'?state.bans:state[addSide]).push(id);
   const s=document.getElementById('mainSrch');s.value='';renderDD();
   chips();render();s.focus();
 }
@@ -1056,6 +1084,10 @@ function renderCfg(){
     </div>
     <div class="grp"><div class="gl">내 챔폭 (라인별 숙련도)</div>
       <div class="poolnote"><b>메타 최적 모드에선 안 쓰인다.</b> '숙련 가중'/'내 챔폭만' 모드용. 손에 익은 챔만 올려둬라(50=평균, 70+=주력). 숙련도 = 손에 익은 정도(승률 아님).</div>
+      ${(()=>{const cnt={};matches.forEach(m=>{cnt[m.pick]=cnt[m.pick]||{n:0,w:0};cnt[m.pick].n++;if(m.won)cnt[m.pick].w++;});
+        const sg=Object.entries(cnt).filter(([id])=>byId[+id]&&!(pool[+id]&&pool[+id].comfort>0)).sort((a,b)=>b[1].n-a[1].n).slice(0,5)
+          .map(([id,r])=>`<button onclick="quickPool(${id})" style="margin:2px 4px 2px 0;padding:4px 9px;border:1px solid var(--cyan);border-radius:6px;background:none;color:var(--cyan);font-size:12px">+ ${byId[+id].kr} <span style="opacity:.6">${r.n}판 ${r.w}승</span></button>`).join('');
+        return sg?`<div class="poolnote" style="margin-top:6px">전적 기반 주챔 제안 <span style="opacity:.6">(탭 = 숙련 70 등록)</span><br>${sg}</div>`:'';})()}
       <div class="lanetabs">${laneTabs}</div>
       ${rows}
     </div>
@@ -1072,6 +1104,7 @@ function setComfort(id,v){
   const el=document.getElementById('pv'+id);
   if(el){el.textContent=v||'–';el.classList.toggle('zero',v===0);el.parentElement.classList.toggle('off',v===0);}
 }
+function quickPool(id){setComfort(id,70);renderCfg();toast(champName(id)+' 숙련 70 등록');}
 function clearPool(){if(confirm('등록한 챔폭 숙련도를 전부 0으로 초기화한다. 계속?')){pool={};renderCfg();render();}}
 function resetWeights(){const rm=weights.recMode;weights={comfort:80,tier:45,team:100,counter:100,recMode:rm,wv:2};renderCfg();render();}
 async function saveCfg(){await saveStore();closeCfg();render();toast('저장 완료');}
@@ -1098,8 +1131,13 @@ function logMatch(won){
   const pickId=sel.value!==''?+sel.value:(lastCands.length?lastCands[0].c.id:null);
   if(pickId===null){toast('픽을 먼저 골라줘');return;}
   const topId=lastCands.length?lastCands[0].c.id:null;
-  matches.push({t:Date.now(),lane:state.lane,ally:state.ally.slice(),enemy:state.enemy.slice(),pick:pickId,top:topId,won:!!won});
-  saveMatches();
+  const prev=matches[matches.length-1];
+  if(prev && Date.now()-prev.t<1800000 && prev.lane===state.lane && prev.pick===pickId
+     && JSON.stringify(prev.ally)===JSON.stringify(state.ally) && JSON.stringify(prev.enemy)===JSON.stringify(state.enemy)){
+    if(!confirm('직전 기록과 완전히 같은 판이다(30분 내). 중복이면 취소해라. 그래도 기록할까?'))return;
+  }
+  matches.push({t:Date.now(),lane:state.lane,ally:state.ally.slice(),enemy:state.enemy.slice(),pick:pickId,top:topId,top3:lastCands.slice(0,3).map(o=>o.c.id),won:!!won});
+  saveMatches(); computeFam(); render();
   toast(won?`기록 완료: ${champName(pickId)} 승 ✓`:`기록 완료: ${champName(pickId)} 패 ✗`);
 }
 function openLog(){renderLog();document.getElementById('logScrim').classList.add('on');}
@@ -1112,9 +1150,18 @@ function renderLog(){
     return;
   }
   const n=matches.length, w=matches.filter(m=>m.won).length;
-  // 추천 1위 따라간 판 (pick===top)
-  const foll=matches.filter(m=>m.top!=null&&m.pick===m.top), fw=foll.filter(m=>m.won).length;
-  const off=matches.filter(m=>!(m.top!=null&&m.pick===m.top)), ow=off.filter(m=>m.won).length;
+  // 픽 분류: 1위 추종 / 톱3 내 / 이탈 (구기록은 top3 없음 → 이탈 처리)
+  const clsOf=m=>(m.top!=null&&m.pick===m.top)?'f':((Array.isArray(m.top3)&&m.top3.includes(m.pick))?'t3':'off');
+  const foll=matches.filter(m=>clsOf(m)==='f'), fw=foll.filter(m=>m.won).length;
+  const t3m=matches.filter(m=>clsOf(m)==='t3'), tw=t3m.filter(m=>m.won).length;
+  const off=matches.filter(m=>clsOf(m)==='off'), ow=off.filter(m=>m.won).length;
+  const r10=matches.slice().sort((a,b)=>b.t-a.t).slice(0,10), r10w=r10.filter(m=>m.won).length;
+  // 라인별 (전체 W-L + 1위 추종 W-L)
+  const byLn={};
+  matches.forEach(m=>{const L=m.lane; if(!byLn[L])byLn[L]={w:0,n:0,fw:0,fn:0}; const r=byLn[L]; r.n++; if(m.won)r.w++; if(clsOf(m)==='f'){r.fn++; if(m.won)r.fw++;}});
+  const laneRows=Object.entries(byLn).sort((a,b)=>b[1].n-a[1].n).map(([L,r])=>
+    `<div class="champrow"><span class="nm">${LANEKR[L]} <span style="color:var(--dim)">${r.n}판</span></span>`
+    +`<span class="rec2 ${r.w/r.n>=0.5?'win':'loss'}">${r.w}승 ${r.n-r.w}패${r.fn?` · 추종 ${r.fw}-${r.fn-r.fw}`:''}</span></div>`).join('');
   // 챔별
   const byCh={};
   matches.forEach(m=>{const k=m.pick; if(!byCh[k])byCh[k]={w:0,n:0}; byCh[k].n++; if(m.won)byCh[k].w++;});
@@ -1124,9 +1171,9 @@ function renderLog(){
   // 최근 기록
   const recent=matches.slice().sort((a,b)=>b.t-a.t).slice(0,30).map(m=>{
     const d=new Date(m.t), md=`${d.getMonth()+1}/${d.getDate()}`;
-    const followed=m.top!=null&&m.pick===m.top;
+    const cl=clsOf(m);
     return `<div class="mrow"><span class="res ${m.won?'win':'loss'}">${m.won?'승':'패'}</span>`
-      +`<span class="info"><div class="l1">${LANEKR[m.lane]} · <b>${champName(m.pick)}</b>${followed?' <span style="color:var(--cyan);font-size:11px">★추천</span>':''}</div>`
+      +`<span class="info"><div class="l1">${LANEKR[m.lane]} · <b>${champName(m.pick)}</b>${cl==='f'?' <span style="color:var(--cyan);font-size:11px">★추천</span>':cl==='t3'?' <span style="color:var(--dim);font-size:11px">☆톱3</span>':''}</div>`
       +`<div class="l2">${md} · vs ${m.enemy.length?m.enemy.map(champName).join(', '):'(상대 미입력)'}</div></span>`
       +`<button class="del" onclick="delMatch(${m.t})">✕</button></div>`;
   }).join('');
@@ -1135,14 +1182,17 @@ function renderLog(){
       <div class="statcard"><div class="k">전체 전적</div><div class="v">${w}<small>승</small> ${n-w}<small>패</small></div></div>
       <div class="statcard"><div class="k">승률</div><div class="v ${pct(w,n)>=50?'win':'loss'}">${pct(w,n)}<small>%</small></div></div>
       <div class="statcard"><div class="k">추천 1위 따라간 판</div><div class="v ${pct(fw,foll.length)>=50?'win':'loss'}">${pct(fw,foll.length)}<small>% (${foll.length}판)</small></div></div>
-      <div class="statcard"><div class="k">다른 픽 한 판</div><div class="v ${pct(ow,off.length)>=50?'win':'loss'}">${pct(ow,off.length)}<small>% (${off.length}판)</small></div></div>
+      <div class="statcard"><div class="k">톱3 내 픽</div><div class="v ${pct(tw,t3m.length)>=50?'win':'loss'}">${pct(tw,t3m.length)}<small>% (${t3m.length}판)</small></div></div>
+      <div class="statcard"><div class="k">이탈 픽</div><div class="v ${pct(ow,off.length)>=50?'win':'loss'}">${pct(ow,off.length)}<small>% (${off.length}판)</small></div></div>
+      <div class="statcard"><div class="k">최근 10판</div><div class="v ${pct(r10w,r10.length)>=50?'win':'loss'}">${pct(r10w,r10.length)}<small>% (${r10.length}판)</small></div></div>
     </div>
+    <div class="logsec">라인별</div>${laneRows}
     <div class="logsec">챔별 승률</div>${champRows}
     <div class="logsec">최근 기록</div>${recent}
     <div class="logclear"><button onclick="exportData()" style="border-color:var(--cyan);color:var(--cyan)">백업(내보내기)</button> <button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(가져오기)</button> <button onclick="clearMatches()">전적 전체 삭제</button></div>`;
 }
 function exportData(){
-  const payload=JSON.stringify({v:1,matches,pool,weights});
+  const payload=JSON.stringify({v:2,matches,pool,weights});
   try{ navigator.clipboard&&navigator.clipboard.writeText(payload); }catch(e){}
   prompt('아래 전체를 길게 눌러 복사 → 메모장에 저장. 새 파일에서 [복원]에 붙여넣으면 전적이 살아난다.',payload);
 }
@@ -1152,7 +1202,7 @@ function importData(){
   try{
     const d=JSON.parse(raw);
     if(!d||!Array.isArray(d.matches)) throw 0;
-    matches=d.matches; if(d.pool)pool=d.pool; if(d.weights)Object.assign(weights,d.weights);
+    matches=d.matches; if(d.pool)pool=d.pool; if(d.weights)Object.assign(weights,d.weights); computeFam();
     saveMatches(); saveStore(); renderLog(); render(); toast('복원 완료: '+matches.length+'판');
   }catch(e){ toast('복원 실패: 형식이 잘못됐다'); }
 }
