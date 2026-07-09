@@ -242,7 +242,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 <div class="top">
   <div>
     <h1>WR <span>챔</span> 셀렉터</h1>
-    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.1</b></div>
+    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.2</b></div>
   </div>
   <div class="topbtns">
     <button class="gear" onclick="openLog()">📋 전적</button>
@@ -611,28 +611,28 @@ const KIT={
 'Teemo':{curve:'mid'},'Caitlyn':{curve:'mid'},'Draven':{curve:'early'},'Miss Fortune':{curve:'mid'},
 'Syndra':{hardcc:1},'Aurora':{hardcc:1},'Ziggs':{hardcc:1},
  // 확정/점착 CC (고기동 위협 봉쇄에 강함)
- 'Annie':{ptcc:1,aoecc:1,curve:'mid'},'Warwick':{ptcc:1,curve:'mid'},'Skarner':{ptcc:1,aoecc:1},
+ 'Annie':{ptcc:1,aoecc:1,curve:'mid'},'Warwick':{ptcc:1,curve:'mid',hardcc:1,knockdown:1},'Skarner':{ptcc:1,aoecc:1},
  'Rammus':{ptcc:1},'Leona':{ptcc:1,aoecc:1},'Nautilus':{knockup:1,ptcc:1,aoecc:1},'Vi':{knockup:1,ptcc:1,mob:1,engage:1},
- 'Lissandra':{aoecc:1,ptcc:1,curve:'mid'},
+ 'Lissandra':{aoecc:1,ptcc:1,curve:'mid',knockdown:1},
  // 단일 하드CC (스킬샷/점착 스턴 — 기존 미인식분)
- 'Twisted Fate':{hardcc:1},'Ahri':{hardcc:1},'Bard':{hardcc:1},'Zoe':{hardcc:1},'Veigar':{hardcc:1},
+ 'Twisted Fate':{hardcc:1},'Ahri':{hardcc:1,knockdown:1},'Bard':{hardcc:1},'Zoe':{hardcc:1},'Veigar':{hardcc:1,knockdown:1},
  // 광역 하드CC (한타/웜바람보)
- 'Galio':{knockup:1,aoecc:1,engage:1},'Amumu':{aoecc:1,engage:1},'Kennen':{aoecc:1,engage:1},
+ 'Galio':{knockup:1,aoecc:1,engage:1},'Amumu':{aoecc:1,engage:1,knockdown:1},'Kennen':{aoecc:1,engage:1},
  'Orianna':{aoecc:1},'Sett':{aoecc:1},'Rell':{aoecc:1,engage:1},'Sona':{aoecc:1},
  'Seraphine':{aoecc:1},'Ashe':{aoecc:1,curve:'late'},'Diana':{aoecc:1,knockup:1},
- 'Veigar':{aoecc:1,curve:'late'},'Maokai':{aoecc:1,engage:1},
+ 'Veigar':{aoecc:1,curve:'late',knockdown:1},'Maokai':{aoecc:1,engage:1},
  // 넉업 제공 (야스오/요네 궁 시너지)
  'Malphite':{aoecc:1,engage:1,knockup:1},'Alistar':{knockup:1,engage:1},'Wukong':{knockup:1},
  'Gnar':{knockup:1,aoecc:1},'Janna':{knockup:1,disengage:1,hardcc:1},'Jarvan IV':{aoecc:1,engage:1,knockup:1},
- 'Gragas':{disengage:1,knockup:1,hardcc:1},'Senna':{hardcc:1},'Mel':{hardcc:1},'Yasuo':{payoff:1,mob:2},'Yone':{mob:2,aoecc:1,knockup:1},
+ 'Gragas':{disengage:1,knockup:1,hardcc:1},'Senna':{hardcc:1},'Mel':{hardcc:1},'Yasuo':{payoff:1,mob:2},'Vex':{hardcc:1,knockdown:1},'Viktor':{hardcc:1,aoecc:1,knockdown:1},'Yone':{mob:2,aoecc:1,knockup:1,knockdown:1},
  // 하이퍼캐리 (보호 시너지, 후반)
- 'Jinx':{hypercarry:1,curve:'late'},'Kog\'Maw':{hypercarry:1,curve:'late',antitank:1},
+ 'Jinx':{hypercarry:1,curve:'late',hardcc:1,aoecc:1,knockdown:1},'Kog\'Maw':{hypercarry:1,curve:'late',antitank:1},
  'Vayne':{hypercarry:1,curve:'late',antitank:1,mob:1},'Twitch':{hypercarry:1,curve:'late'},
  'Zeri':{hypercarry:1,curve:'late',mob:2},'Kai\'Sa':{hypercarry:1,mob:1},
  'Smolder':{hypercarry:1,curve:'late',antitank:1},
  // 보호/디스인게이지
  'Lulu':{protect:1,disengage:1,hardcc:1},'Milio':{protect:1,disengage:1},'Soraka':{protect:1},
- 'Nami':{protect:1,hardcc:1},'Yuumi':{protect:1},'Poppy':{knockup:1,disengage:1},'Karma':{protect:1,disengage:1,hardcc:1},
+ 'Nami':{protect:1,hardcc:1},'Yuumi':{protect:1},'Poppy':{knockup:1,disengage:1,knockdown:1},'Karma':{protect:1,disengage:1,hardcc:1},
  // 고기동 (갱·스킬샷 회피, 잡기 어려움)
  'Akali':{mob:2},'Zed':{mob:2},'Fizz':{mob:2},'Ekko':{mob:2},'Katarina':{mob:2},'Irelia':{mob:2},
  'Camille':{mob:2},'Kayn':{mob:2},'Talon':{mob:2},'Kassadin':{mob:2,curve:'late'},'Riven':{knockup:1,mob:2},
@@ -655,7 +655,7 @@ function kitOf(c){
     disengage: (t.includes('peel')||cls==='enchanter')?1:0,
     curve: t.includes('scaling')?'late':(cls==='marksman'?'late':'mid'),
     hypercarry:0, protect:(cls==='enchanter'||(t.includes('peel')&&cls!=='marksman'))?1:0,
-    knockup:0, payoff:0,
+    knockup:0, payoff:0, knockdown:0,
     antitank:0, poke:t.includes('poke')?1:0, split:t.includes('split')?1:0, burst:t.includes('burst')?1:0,
   };
   return Object.assign(o, KIT[c.en]||{});
@@ -865,6 +865,8 @@ function score(cand){
     if(eAT>=1 && cand.cls==='tank'){counter-=(eAT>=2?9:5);cNotes.push('상대 안티탱 → 탱 효율 감소(-)');}
     const eLock=enemyK.filter(a=>a.ptcc).length; // 그랩/제압/점착 락다운(블리츠/스카너/쓰레쉬 등)
     if(eLock>=2 && squishyCand){counter-=(k.mob===0?6:4);cNotes.push('상대 락다운 다수 → 물몸 주의(-)');}
+    const eDash=enemyK.filter(a=>a.mob>=2).length; // 7.2 신규: 쓰러뜨리기 CC가 고기동 대시를 차단
+    if(k.knockdown && eDash>=2){counter+=Math.min(10,4+eDash*2);cNotes.push('고기동 대시 차단');}
     if(eBurst>=2 && (cand.cls==='tank'||k.protect)){counter+=5;cNotes.push('상대 폭딜 다수 → 보호/탱');}
     // 데미지 타입 압박(방어 아이템 관점)
     if(enemyP.ad-enemyP.ap>=2 && cand.cls==='tank'){counter+=3;}
