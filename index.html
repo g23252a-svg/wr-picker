@@ -242,7 +242,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 <div class="top">
   <div>
     <h1>WR <span>챔</span> 셀렉터</h1>
-    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.3</b></div>
+    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.4</b></div>
   </div>
   <div class="topbtns">
     <button class="gear" onclick="openLog()">📋 전적</button>
@@ -292,7 +292,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   <div class="t">추천 픽</div>
   <div class="mode" id="modeLbl"></div>
 </div>
-<div class="legend">점수 = <b>승</b> 승률(참조) + <b>팀</b> 팀 시너지 + <b>카</b> 상성/스킬 &nbsp;(합계가 총점)<br><span style="color:#f0b232;font-size:11px">⚠ 승률 데이터 기준: 패치 <b>7.1</b> (2026-06-30) · 7.2 밸런스 미반영</span></div>
+<div class="legend">점수 = <b>승</b> 승률(참조) + <b>팀</b> 팀 시너지 + <b>카</b> 상성/스킬 &nbsp;(합계가 총점)<br><span style="color:#7ee787;font-size:11px">✓ 승률 데이터: 패치 <b>7.2</b> 기준 (2026-07-09)</span></div>
 <div id="results"></div>
 
 <div class="logbar" id="logbar">
@@ -553,7 +553,7 @@ const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let pool={};   // id -> {comfort:0-100, owned:bool}  comfort 0 = not in pool
 let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:2};
-const WR_PATCH='7.1', WR_DATE='2026-06-30'; // 승률 데이터 수집 기준 — 갱신 시 여기만 수정
+const WR_PATCH='7.2', WR_DATE='2026-07-09'; // 승률 데이터 수집 기준 — 갱신 시 여기만 수정
 let matches=[];      // 전적 기록: {t,lane,ally[],enemy[],pick,top,won}
 let lastCands=[];    // 현재 추천 후보 (결과 기록용)
 let famMap={};       // id -> {n,w}  매치 로그 기반 자동 숙련
@@ -667,29 +667,29 @@ function kitOf(c){
  letter 티어 대신 실측 승률(%)을 그대로 점수화한다. 키=영문명, 챔당 '주 라인' 승률.
  Solo=탑 / Jungle=정글 / Mid=미드 / Duo=원딜 / Support=서폿. 부 라인은 오프롤 할인으로 처리. */
 const WINRATE={
- 'Amumu':56.93,'Nunu':55.00,'Rammus':54.66,'Lillia':54.90,'Fiddlesticks':53.03,'Taliyah':51.12,
- 'Brand':52.58,'Smolder':52.14,'Zilean':51.92,'Sion':51.71,'K\'Sante':51.99,'Leona':51.59,
- 'Teemo':52.92,'Warwick':52.43,'Miss Fortune':51.89,'Rell':51.13,'Maokai':51.76,'Vi':51.99,
- 'Viktor':51.45,'Jarvan IV':51.92,'Xayah':51.01,'Singed':51.38,'Shyvana':52.16,'Kayle':51.59,
- 'Garen':51.58,'Ambessa':52.01,'Shen':52.21,'Evelynn':52.42,'Jhin':51.63,'Zyra':51.11,
- 'Ryze':51.31,'Soraka':50.66,'Nami':50.79,'Kennen':52.18,'Diana':51.60,'Ahri':51.65,
- 'Veigar':51.18,'Braum':51.43,'Twisted Fate':51.68,'Kog\'Maw':51.34,'Kassadin':50.89,'Zeri':50.96,
- 'Nautilus':48.03,'Master Yi':50.50,'Dr. Mundo':50.66,'Nidalee':50.22,'Poppy':50.74,'Ashe':50.61,
- 'Galio':50.93,'Blitzcrank':50.59,'Karma':50.63,'Sett':50.82,'Aurelion Sol':50.97,'Morgana':50.24,
- 'Ezreal':50.41,'Pantheon':50.64,'Ornn':50.89,'Milio':50.58,'Hecarim':49.40,'Nocturne':50.72,
- 'Orianna':51.55,'Vayne':50.57,'Senna':49.82,'Aurora':49.88,'Janna':49.98,'Zed':50.52,
- 'Varus':50.22,'Norra':49.91,'Malphite':50.59,'Jayce':49.19,'Rumble':50.52,'Aatrox':49.26,
- 'Kalista':50.52,'Gnar':50.06,'Annie':48.15,'Volibear':49.94,'Lulu':49.81,'Olaf':50.36,
- 'Vex':49.64,'Corki':48.41,'Lissandra':49.86,'Fizz':50.45,'Sivir':50.22,'Nasus':49.93,
- 'Xin Zhao':50.33,'Vel\'Koz':49.02,'Lux':49.81,'Irelia':48.95,'Viego':49.05,'Sona':51.50,
- 'Ziggs':48.85,'Wukong':49.07,'Yone':49.29,'Mordekaiser':49.56,'Alistar':49.45,'Kayn':49.61,
- 'Kindred':50.26,'Tryndamere':49.53,'Pyke':49.05,'Heimerdinger':49.27,'Ekko':49.88,'Urgot':49.60,
- 'Graves':49.33,'Lucian':49.11,'Rengar':48.14,'Talon':49.21,'Rakan':49.15,'Syndra':49.14,
- 'Vladimir':49.52,'Caitlyn':48.90,'Swain':48.26,'Seraphine':50.43,'Renekton':49.31,'Jinx':48.55,
- 'Yasuo':48.14,'Samira':48.25,'Darius':47.87,'Gwen':48.62,'Mel':48.76,'Kai\'Sa':48.39,
- 'Camille':47.42,'Tristana':47.86,'Gragas':49.93,'Riven':47.98,'Kha\'Zix':47.78,'Twitch':48.54,
- 'Thresh':52.36,'Draven':48.26,'Jax':47.85,'Lee Sin':46.98,'Fiora':47.41,'Katarina':46.79,
- 'Yuumi':45.18,'Zoe':46.60,'Akali':45.18,'Skarner':45.02,
+ 'Amumu':57.08,'Nunu':54.85,'Rammus':55.3,'Lillia':54.14,'Fiddlesticks':53.06,'Taliyah':51.22,
+ 'Brand':52.22,'Smolder':52.11,'Zilean':52.01,'Sion':52.2,'K\'Sante':51.29,'Leona':51.49,
+ 'Teemo':52.77,'Warwick':52.17,'Miss Fortune':51.93,'Rell':51.88,'Maokai':51.77,'Vi':51.31,
+ 'Viktor':51.82,'Jarvan IV':51.48,'Xayah':50.97,'Singed':50.87,'Shyvana':52.66,'Kayle':51.16,
+ 'Garen':51.24,'Ambessa':51.8,'Shen':52.21,'Evelynn':51.14,'Jhin':51.36,'Zyra':50.86,
+ 'Ryze':51.94,'Soraka':51.33,'Nami':50.65,'Kennen':51.98,'Diana':51.63,'Ahri':51.53,
+ 'Veigar':50.98,'Braum':52.05,'Twisted Fate':52.59,'Kog\'Maw':51.61,'Kassadin':51.64,'Zeri':50.92,
+ 'Nautilus':48.56,'Master Yi':50.96,'Dr. Mundo':50.75,'Nidalee':51.48,'Poppy':51.28,'Ashe':50.51,
+ 'Galio':51.22,'Blitzcrank':49.95,'Karma':50.37,'Sett':51.0,'Aurelion Sol':50.94,'Morgana':49.86,
+ 'Ezreal':50.46,'Pantheon':50.38,'Ornn':50.05,'Milio':50.72,'Hecarim':50.87,'Nocturne':50.93,
+ 'Orianna':50.32,'Vayne':50.25,'Senna':50.22,'Aurora':49.93,'Janna':50.62,'Zed':50.12,
+ 'Varus':50.37,'Norra':50.09,'Malphite':51.23,'Jayce':50.03,'Rumble':50.94,'Aatrox':49.01,
+ 'Kalista':50.35,'Gnar':49.09,'Annie':48.51,'Volibear':50.3,'Lulu':50.08,'Olaf':50.2,
+ 'Vex':49.08,'Corki':49.86,'Lissandra':49.54,'Fizz':50.86,'Sivir':50.01,'Nasus':49.61,
+ 'Xin Zhao':50.12,'Vel\'Koz':48.62,'Lux':49.6,'Irelia':49.08,'Viego':48.72,'Sona':51.74,
+ 'Ziggs':49.38,'Wukong':49.92,'Yone':49.96,'Mordekaiser':49.5,'Alistar':48.91,'Kayn':49.57,
+ 'Kindred':48.5,'Tryndamere':49.14,'Pyke':47.3,'Heimerdinger':48.65,'Ekko':48.06,'Urgot':49.97,
+ 'Graves':49.36,'Lucian':49.0,'Rengar':48.87,'Talon':49.22,'Rakan':49.23,'Syndra':48.84,
+ 'Vladimir':49.57,'Caitlyn':49.02,'Swain':48.27,'Seraphine':50.64,'Renekton':49.2,'Jinx':48.45,
+ 'Yasuo':48.1,'Samira':48.81,'Darius':48.34,'Gwen':48.77,'Mel':48.74,'Kai\'Sa':48.59,
+ 'Camille':48.73,'Tristana':48.39,'Gragas':49.42,'Riven':47.24,'Kha\'Zix':47.51,'Twitch':47.9,
+ 'Thresh':52.04,'Draven':48.42,'Jax':47.42,'Lee Sin':47.01,'Fiora':46.74,'Katarina':46.69,
+ 'Yuumi':45.84,'Zoe':46.39,'Akali':45.49,'Skarner':46.89
 };
 const DEFAULT_WR=49.5; // 데이터 없는 챔(아크샨/바드/닐라/유나라/초가스 등)
 // 주 라인 (승률 데이터의 역할 기준). 라이너 매치업 오인 방지용(예: 요네=탑).
