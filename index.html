@@ -242,7 +242,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 <div class="top">
   <div>
     <h1>WR <span>챔</span> 셀렉터</h1>
-    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.2</b></div>
+    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.3</b></div>
   </div>
   <div class="topbtns">
     <button class="gear" onclick="openLog()">📋 전적</button>
@@ -292,7 +292,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   <div class="t">추천 픽</div>
   <div class="mode" id="modeLbl"></div>
 </div>
-<div class="legend">점수 = <b>승</b> 승률(참조) + <b>팀</b> 팀 시너지 + <b>카</b> 상성/스킬 &nbsp;(합계가 총점)</div>
+<div class="legend">점수 = <b>승</b> 승률(참조) + <b>팀</b> 팀 시너지 + <b>카</b> 상성/스킬 &nbsp;(합계가 총점)<br><span style="color:#f0b232;font-size:11px">⚠ 승률 데이터 기준: 패치 <b>7.1</b> (2026-06-30) · 7.2 밸런스 미반영</span></div>
 <div id="results"></div>
 
 <div class="logbar" id="logbar">
@@ -553,6 +553,7 @@ const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let pool={};   // id -> {comfort:0-100, owned:bool}  comfort 0 = not in pool
 let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:2};
+const WR_PATCH='7.1', WR_DATE='2026-06-30'; // 승률 데이터 수집 기준 — 갱신 시 여기만 수정
 let matches=[];      // 전적 기록: {t,lane,ally[],enemy[],pick,top,won}
 let lastCands=[];    // 현재 추천 후보 (결과 기록용)
 let famMap={};       // id -> {n,w}  매치 로그 기반 자동 숙련
