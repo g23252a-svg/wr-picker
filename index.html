@@ -2,6 +2,9 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a0e14">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -242,7 +245,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 <div class="top">
   <div>
     <h1>WR <span>챔</span> 셀렉터</h1>
-    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.4</b></div>
+    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.5</b></div>
   </div>
   <div class="topbtns">
     <button class="gear" onclick="openLog()">📋 전적</button>
@@ -292,7 +295,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   <div class="t">추천 픽</div>
   <div class="mode" id="modeLbl"></div>
 </div>
-<div class="legend">점수 = <b>승</b> 승률(참조) + <b>팀</b> 팀 시너지 + <b>카</b> 상성/스킬 &nbsp;(합계가 총점)<br><span style="color:#7ee787;font-size:11px">✓ 승률 데이터: 패치 <b>7.2</b> 기준 (2026-07-09)</span></div>
+<div class="legend">점수 = <b>승</b> 승률(참조) + <b>팀</b> 팀 시너지 + <b>카</b> 상성/스킬 &nbsp;(합계가 총점)<br><span style="color:#7ee787;font-size:11px">✓ 승률 데이터: 패치 <b>7.2</b> 기준 (2026-07-10)</span></div>
 <div id="results"></div>
 
 <div class="logbar" id="logbar">
@@ -553,7 +556,7 @@ const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let pool={};   // id -> {comfort:0-100, owned:bool}  comfort 0 = not in pool
 let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:2};
-const WR_PATCH='7.2', WR_DATE='2026-07-09'; // 승률 데이터 수집 기준 — 갱신 시 여기만 수정
+const WR_PATCH='7.2', WR_DATE='2026-07-10'; // 승률 데이터 수집 기준 — 갱신 시 여기만 수정
 let matches=[];      // 전적 기록: {t,lane,ally[],enemy[],pick,top,won}
 let lastCands=[];    // 현재 추천 후보 (결과 기록용)
 let famMap={};       // id -> {n,w}  매치 로그 기반 자동 숙련
@@ -667,29 +670,29 @@ function kitOf(c){
  letter 티어 대신 실측 승률(%)을 그대로 점수화한다. 키=영문명, 챔당 '주 라인' 승률.
  Solo=탑 / Jungle=정글 / Mid=미드 / Duo=원딜 / Support=서폿. 부 라인은 오프롤 할인으로 처리. */
 const WINRATE={
- 'Amumu':57.08,'Nunu':54.85,'Rammus':55.3,'Lillia':54.14,'Fiddlesticks':53.06,'Taliyah':51.22,
- 'Brand':52.22,'Smolder':52.11,'Zilean':52.01,'Sion':52.2,'K\'Sante':51.29,'Leona':51.49,
- 'Teemo':52.77,'Warwick':52.17,'Miss Fortune':51.93,'Rell':51.88,'Maokai':51.77,'Vi':51.31,
- 'Viktor':51.82,'Jarvan IV':51.48,'Xayah':50.97,'Singed':50.87,'Shyvana':52.66,'Kayle':51.16,
- 'Garen':51.24,'Ambessa':51.8,'Shen':52.21,'Evelynn':51.14,'Jhin':51.36,'Zyra':50.86,
- 'Ryze':51.94,'Soraka':51.33,'Nami':50.65,'Kennen':51.98,'Diana':51.63,'Ahri':51.53,
- 'Veigar':50.98,'Braum':52.05,'Twisted Fate':52.59,'Kog\'Maw':51.61,'Kassadin':51.64,'Zeri':50.92,
- 'Nautilus':48.56,'Master Yi':50.96,'Dr. Mundo':50.75,'Nidalee':51.48,'Poppy':51.28,'Ashe':50.51,
- 'Galio':51.22,'Blitzcrank':49.95,'Karma':50.37,'Sett':51.0,'Aurelion Sol':50.94,'Morgana':49.86,
- 'Ezreal':50.46,'Pantheon':50.38,'Ornn':50.05,'Milio':50.72,'Hecarim':50.87,'Nocturne':50.93,
- 'Orianna':50.32,'Vayne':50.25,'Senna':50.22,'Aurora':49.93,'Janna':50.62,'Zed':50.12,
- 'Varus':50.37,'Norra':50.09,'Malphite':51.23,'Jayce':50.03,'Rumble':50.94,'Aatrox':49.01,
- 'Kalista':50.35,'Gnar':49.09,'Annie':48.51,'Volibear':50.3,'Lulu':50.08,'Olaf':50.2,
- 'Vex':49.08,'Corki':49.86,'Lissandra':49.54,'Fizz':50.86,'Sivir':50.01,'Nasus':49.61,
- 'Xin Zhao':50.12,'Vel\'Koz':48.62,'Lux':49.6,'Irelia':49.08,'Viego':48.72,'Sona':51.74,
- 'Ziggs':49.38,'Wukong':49.92,'Yone':49.96,'Mordekaiser':49.5,'Alistar':48.91,'Kayn':49.57,
- 'Kindred':48.5,'Tryndamere':49.14,'Pyke':47.3,'Heimerdinger':48.65,'Ekko':48.06,'Urgot':49.97,
- 'Graves':49.36,'Lucian':49.0,'Rengar':48.87,'Talon':49.22,'Rakan':49.23,'Syndra':48.84,
- 'Vladimir':49.57,'Caitlyn':49.02,'Swain':48.27,'Seraphine':50.64,'Renekton':49.2,'Jinx':48.45,
- 'Yasuo':48.1,'Samira':48.81,'Darius':48.34,'Gwen':48.77,'Mel':48.74,'Kai\'Sa':48.59,
- 'Camille':48.73,'Tristana':48.39,'Gragas':49.42,'Riven':47.24,'Kha\'Zix':47.51,'Twitch':47.9,
- 'Thresh':52.04,'Draven':48.42,'Jax':47.42,'Lee Sin':47.01,'Fiora':46.74,'Katarina':46.69,
- 'Yuumi':45.84,'Zoe':46.39,'Akali':45.49,'Skarner':46.89
+ 'Amumu':56.97,'Nunu':54.27,'Rammus':55.48,'Lillia':54.78,'Fiddlesticks':53.54,'Taliyah':51.05,
+ 'Brand':52.09,'Smolder':51.89,'Zilean':52.56,'Sion':51.82,'K\'Sante':51.57,'Leona':51.76,
+ 'Teemo':53.31,'Warwick':52.72,'Miss Fortune':51.84,'Rell':51.2,'Maokai':52.18,'Vi':51.43,
+ 'Viktor':52.03,'Jarvan IV':51.65,'Xayah':51.1,'Singed':52.12,'Shyvana':52.09,'Kayle':51.2,
+ 'Garen':51.4,'Ambessa':51.74,'Shen':52.4,'Evelynn':51.57,'Jhin':51.49,'Zyra':50.95,
+ 'Ryze':51.7,'Soraka':51.12,'Nami':50.58,'Kennen':51.51,'Diana':51.49,'Ahri':51.19,
+ 'Veigar':51.41,'Braum':51.93,'Twisted Fate':52.25,'Kog\'Maw':52.38,'Kassadin':51.03,'Zeri':50.83,
+ 'Nautilus':48.52,'Master Yi':50.83,'Dr. Mundo':50.67,'Nidalee':51.71,'Poppy':50.77,'Ashe':50.78,
+ 'Galio':50.98,'Blitzcrank':49.48,'Karma':50.61,'Sett':51.28,'Aurelion Sol':50.8,'Morgana':49.88,
+ 'Ezreal':50.76,'Pantheon':50.71,'Ornn':49.95,'Milio':50.44,'Hecarim':51.14,'Nocturne':49.73,
+ 'Orianna':50.7,'Vayne':50.05,'Senna':49.65,'Aurora':49.68,'Janna':49.14,'Zed':50.64,
+ 'Varus':49.99,'Norra':49.36,'Malphite':50.82,'Jayce':49.41,'Rumble':50.81,'Aatrox':49.33,
+ 'Kalista':50.18,'Gnar':49.51,'Annie':48.39,'Volibear':49.3,'Lulu':50.11,'Olaf':50.36,
+ 'Vex':49.58,'Corki':47.81,'Lissandra':49.96,'Fizz':50.52,'Sivir':49.77,'Nasus':49.51,
+ 'Xin Zhao':50.09,'Vel\'Koz':49.31,'Lux':49.64,'Irelia':49.05,'Viego':48.98,'Sona':52.0,
+ 'Ziggs':49.16,'Wukong':50.33,'Yone':50.29,'Mordekaiser':49.54,'Alistar':49.21,'Kayn':49.65,
+ 'Kindred':48.48,'Tryndamere':49.31,'Pyke':48.01,'Heimerdinger':49.19,'Ekko':50.08,'Urgot':50.22,
+ 'Graves':49.35,'Lucian':49.15,'Rengar':48.16,'Talon':49.04,'Rakan':49.53,'Syndra':49.31,
+ 'Vladimir':49.58,'Caitlyn':48.95,'Swain':48.55,'Seraphine':50.32,'Renekton':49.15,'Jinx':48.79,
+ 'Yasuo':48.33,'Samira':48.71,'Darius':48.35,'Gwen':49.02,'Mel':48.84,'Kai\'Sa':48.92,
+ 'Camille':48.36,'Tristana':47.91,'Gragas':49.27,'Riven':48.91,'Kha\'Zix':47.4,'Twitch':48.46,
+ 'Thresh':51.81,'Draven':48.53,'Jax':47.67,'Lee Sin':46.91,'Fiora':46.33,'Katarina':46.85,
+ 'Yuumi':46.15,'Zoe':46.58,'Akali':45.02,'Skarner':45.88
 };
 const DEFAULT_WR=49.5; // 데이터 없는 챔(아크샨/바드/닐라/유나라/초가스 등)
 // 주 라인 (승률 데이터의 역할 기준). 라이너 매치업 오인 방지용(예: 요네=탑).
