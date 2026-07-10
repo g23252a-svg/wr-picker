@@ -1,0 +1,19 @@
+{
+  "name": "WR 챔 셀렉터",
+  "short_name": "WR픽",
+  "description": "와일드 리프트 드래프트 추천 엔진",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a0e14",
+  "theme_color": "#0a0e14",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

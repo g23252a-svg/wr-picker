@@ -2,17 +2,14 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<meta http-equiv="Expires" content="0">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#0a0e14">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="WR픽">
-<link rel="apple-touch-icon" id="appIcon">
-<link rel="manifest" id="appManifest">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
 <title>WR 챔 셀렉터</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -238,6 +235,20 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--gold);color:#1a130a;
   font-family:'Rajdhani';font-weight:700;font-size:13px;padding:9px 18px;border-radius:9px;opacity:0;pointer-events:none;transition:.25s;z-index:90}
 .toast.on{opacity:1}
+.datastatus{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:-2px 0 12px;padding:8px 10px;
+  border:1px solid #4a3a1e;background:#1b170f;border-radius:9px;color:#d8c49a;font-size:11px;line-height:1.45}
+.datastatus b{color:var(--gold-soft)}
+.datastatus .stale{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.05em;
+  padding:2px 6px;border-radius:5px;background:#4a3212;color:#ffd782}
+.bd-confidence{display:inline-block;margin-top:4px;font-family:'Rajdhani';font-weight:700;font-size:10px;
+  letter-spacing:.03em;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+.bd-type{font-family:'Rajdhani';font-weight:700;font-size:9px;letter-spacing:.06em;margin-left:5px;
+  padding:1px 5px;border-radius:4px;border:1px solid #31516b;color:#8ed8ff;background:#101f2c;vertical-align:middle}
+.bd-type.safe{border-color:#28513c;color:#8be0b0;background:#10241b}
+.bd-type.counter{border-color:#633438;color:#f0a0a0;background:#281317}
+.bd-type.mastery{border-color:#59451f;color:#f0c674;background:#261d0e}
+.meta-missing{color:#f0b232}
+@media (prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
 </style>
 </head>
 <body>
@@ -245,13 +256,15 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
 <div class="top">
   <div>
     <h1>WR <span>챔</span> 셀렉터</h1>
-    <div class="sub">Hextech draft engine · 30s lock · <b style="color:#f0b232">v2.5</b></div>
+    <div class="sub">Hextech draft engine · normalized core · <b id="appVersion" style="color:#f0b232">v3.0.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear" onclick="openLog()">📋 전적</button>
     <button class="gear" onclick="openCfg()">⚙ 챔폭/가중치</button>
   </div>
 </div>
+
+<div class="datastatus" id="dataStatus"></div>
 
 <div class="lanebar" id="lanebar"></div>
 
@@ -295,7 +308,7 @@ button{font-family:inherit;cursor:pointer;border:none;background:none;color:inhe
   <div class="t">추천 픽</div>
   <div class="mode" id="modeLbl"></div>
 </div>
-<div class="legend">점수 = <b>승</b> 승률(참조) + <b>팀</b> 팀 시너지 + <b>카</b> 상성/스킬 &nbsp;(합계가 총점)<br><span style="color:#7ee787;font-size:11px">✓ 승률 데이터: 패치 <b>7.2</b> 기준 (2026-07-10)</span></div>
+<div class="legend" id="metaLegend"></div>
 <div id="results"></div>
 
 <div class="logbar" id="logbar">
@@ -539,8 +552,16 @@ const LANEMAP={
  // 승률 데이터 없는 챔
  'Akshan':['mid','top'],'Bard':['sup'],'Nilah':['adc'],'Yunara':['adc'],'Cho\'Gath':['top','mid'],
 };
-const DB = C.map((r,i)=>{const al=ALIAS[r[1]]||[];return {id:i,kr:r[0],en:r[1],lanes:LANEMAP[r[1]]||r[2],cls:r[3],dmg:r[4],rng:r[5],tags:r[6],tier:r[7],cho:getChosung(r[0]),aliases:al,aliasCho:al.map(getChosung)};});
+function stableChampId(name){
+  let h=0x811c9dc5;
+  for(let i=0;i<name.length;i++){h^=name.charCodeAt(i);h=Math.imul(h,0x01000193);}
+  return (h>>>0)||1;
+}
+const DB = C.map((r,i)=>{const al=ALIAS[r[1]]||[];return {id:stableChampId(r[1]),legacyId:i,key:r[1].toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''),kr:r[0],en:r[1],lanes:LANEMAP[r[1]]||r[2],cls:r[3],dmg:r[4],rng:r[5],tags:r[6],tier:r[7],cho:getChosung(r[0]),aliases:al,aliasCho:al.map(getChosung)};});
 const byId = Object.fromEntries(DB.map(c=>[c.id,c]));
+const byKey = Object.fromEntries(DB.map(c=>[c.key,c]));
+const legacyIdToStable = Object.fromEntries(DB.map(c=>[c.legacyId,c.id]));
+if(new Set(DB.map(c=>c.id)).size!==DB.length) throw new Error('Champion stable ID collision');
 
 const LANES=[
  {k:'top',ic:'⚔️',nm:'바론(탑)'},
@@ -553,15 +574,27 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
+const APP_VERSION='3.0.0';
+const MODEL_VERSION='3.0.0-normalized';
+const SCHEMA_VERSION=3;
+const META_SNAPSHOT={targetPatch:'7.2',sourcePatch:'7.1h',capturedAt:'2026-06-30',status:'stale'};
+const META_RELIABILITY=META_SNAPSHOT.status==='fresh'?1:0.85;
+const MAX_PICKS={ally:4,enemy:5,ban:10};
+const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
-let pool={};   // id -> {comfort:0-100, owned:bool}  comfort 0 = not in pool
-let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:2};
-const WR_PATCH='7.2', WR_DATE='2026-07-10'; // 승률 데이터 수집 기준 — 갱신 시 여기만 수정
-let matches=[];      // 전적 기록: {t,lane,ally[],enemy[],pick,top,won}
-let lastCands=[];    // 현재 추천 후보 (결과 기록용)
-let famMap={};       // id -> {n,w}  매치 로그 기반 자동 숙련
-function computeFam(){ famMap={}; matches.forEach(m=>{ if(m.pick==null)return; const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0}); f.n++; if(m.won)f.w++; }); }
-function famComfort(id){ const f=famMap[id]; if(!f)return 0; return Math.max(45,Math.min(85, 50 + f.n*5 + (f.w-(f.n-f.w))*3)); }
+let pool={};   // stable champion id -> {comfort:0-100}
+let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:3};
+let matches=[];
+let lastCands=[];
+let famMap={};
+function computeFam(){ famMap={}; matches.forEach(m=>{ if(m.pick==null||!byId[m.pick])return; const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0}); f.n++; if(m.won)f.w++; }); }
+function famComfort(id){
+  const f=famMap[id]; if(!f||f.n<2)return 0;
+  const posterior=(f.w+2)/(f.n+4);                 // 2승 2패 사전분포로 소표본 과대평가 방지
+  const experience=Math.min(12,4*Math.log1p(f.n)); // 판수 보너스는 최대 +12
+  const performance=(posterior-.5)*24;             // 패배가 많으면 명확히 감점
+  return Math.round(clamp(45+experience+performance,40,75));
+}
 
 /* ============ STORAGE ============ */
 /* window.storage 폴리필: 클로드 밖 일반 브라우저에선 localStorage로 영속화 */
@@ -575,22 +608,64 @@ if(!window.storage){
     async list(){ return {keys:[]}; }
   };
 }
+function toStableId(raw){
+  if(raw==null||raw==='')return null;
+  const n=Number(raw);
+  if(Number.isFinite(n)&&byId[n])return n;
+  if(Number.isInteger(n)&&legacyIdToStable[n]!=null)return legacyIdToStable[n];
+  if(typeof raw==='string'&&byKey[raw])return byKey[raw].id;
+  return null;
+}
+function normalizeIdList(xs,max=10){
+  const out=[];
+  (Array.isArray(xs)?xs:[]).forEach(x=>{const id=toStableId(x);if(id!=null&&!out.includes(id)&&out.length<max)out.push(id);});
+  return out;
+}
+function migratePool(raw){
+  const next={};
+  if(!raw||typeof raw!=='object'||Array.isArray(raw))return next;
+  Object.entries(raw).forEach(([oldId,val])=>{
+    const id=toStableId(oldId); if(id==null)return;
+    const comfort=clamp(Number(val&&val.comfort)||0,0,100);
+    next[id]={comfort};
+  });
+  return next;
+}
+function migrateMatch(m){
+  if(!m||typeof m!=='object')return null;
+  const lane=LANEKR[m.lane]?m.lane:'mid';
+  const pick=toStableId(m.pick); if(pick==null)return null;
+  const top=toStableId(m.top);
+  const laneMark=toStableId(m.laneMark);
+  const t=Number(m.t)||Date.now();
+  return Object.assign({},m,{
+    schema:SCHEMA_VERSION,t,lane,pick,top,
+    top3:normalizeIdList(m.top3,3),ally:normalizeIdList(m.ally,4),enemy:normalizeIdList(m.enemy,5),
+    laneMark:laneMark!=null?laneMark:null,won:!!m.won
+  });
+}
+function sanitizeWeights(raw){
+  const next=Object.assign({comfort:80,tier:45,team:100,counter:100,recMode:'meta',wv:3},raw||{});
+  ['comfort','tier','team','counter'].forEach(k=>next[k]=clamp(Number(next[k])||0,0,120));
+  if(!['meta','weighted','poolonly'].includes(next.recMode))next.recMode='meta';
+  next.wv=3;
+  next.autoFam=next.autoFam!==false;
+  return next;
+}
 async function loadStore(){
-  try{
-    const p=await window.storage.get('wr_pool'); if(p&&p.value) pool=JSON.parse(p.value);
-  }catch(e){}
-  try{
-    const w=await window.storage.get('wr_weights');
-    if(w&&w.value){ const sv=JSON.parse(w.value); weights=Object.assign(weights,sv);
-      if((sv.wv||0)<2){ weights.tier=45; weights.team=100; weights.counter=100; weights.wv=2; } }
-  }catch(e){}
+  try{const p=await window.storage.get('wr_pool');if(p&&p.value)pool=migratePool(JSON.parse(p.value));}catch(e){pool={};}
+  try{const w=await window.storage.get('wr_weights');if(w&&w.value)weights=sanitizeWeights(JSON.parse(w.value));else weights=sanitizeWeights(weights);}catch(e){weights=sanitizeWeights(weights);}
 }
 async function saveStore(){
-  try{ await window.storage.set('wr_pool',JSON.stringify(pool)); }catch(e){}
-  try{ await window.storage.set('wr_weights',JSON.stringify(weights)); }catch(e){}
+  try{await window.storage.set('wr_pool',JSON.stringify(pool));}catch(e){}
+  try{await window.storage.set('wr_weights',JSON.stringify(weights));}catch(e){}
+  try{await window.storage.set('wr_schema',String(SCHEMA_VERSION));}catch(e){}
 }
-async function loadMatches(){ try{ const m=await window.storage.get('wr_matches'); if(m&&m.value) matches=JSON.parse(m.value); }catch(e){} computeFam(); }
-async function saveMatches(){ try{ await window.storage.set('wr_matches',JSON.stringify(matches)); }catch(e){} }
+async function loadMatches(){
+  try{const m=await window.storage.get('wr_matches');if(m&&m.value)matches=(JSON.parse(m.value)||[]).map(migrateMatch).filter(Boolean);}catch(e){matches=[];}
+  computeFam();
+}
+async function saveMatches(){try{await window.storage.set('wr_matches',JSON.stringify(matches));await window.storage.set('wr_schema',String(SCHEMA_VERSION));}catch(e){}}
 
 /* ============ MATCHUP MATRIX (advantage of A over B, -2..2) ============ */
 const MX={
@@ -619,12 +694,12 @@ const KIT={
  'Rammus':{ptcc:1},'Leona':{ptcc:1,aoecc:1},'Nautilus':{knockup:1,ptcc:1,aoecc:1},'Vi':{knockup:1,ptcc:1,mob:1,engage:1},
  'Lissandra':{aoecc:1,ptcc:1,curve:'mid',knockdown:1},
  // 단일 하드CC (스킬샷/점착 스턴 — 기존 미인식분)
- 'Twisted Fate':{hardcc:1},'Ahri':{hardcc:1,knockdown:1},'Bard':{hardcc:1},'Zoe':{hardcc:1},'Veigar':{hardcc:1,knockdown:1},
+ 'Twisted Fate':{hardcc:1},'Ahri':{hardcc:1,knockdown:1},'Bard':{hardcc:1},'Zoe':{hardcc:1},
  // 광역 하드CC (한타/웜바람보)
  'Galio':{knockup:1,aoecc:1,engage:1},'Amumu':{aoecc:1,engage:1,knockdown:1},'Kennen':{aoecc:1,engage:1},
  'Orianna':{aoecc:1},'Sett':{aoecc:1},'Rell':{aoecc:1,engage:1},'Sona':{aoecc:1},
  'Seraphine':{aoecc:1},'Ashe':{aoecc:1,curve:'late'},'Diana':{aoecc:1,knockup:1},
- 'Veigar':{aoecc:1,curve:'late',knockdown:1},'Maokai':{aoecc:1,engage:1},
+ 'Veigar':{hardcc:1,aoecc:1,curve:'late',knockdown:1},'Maokai':{aoecc:1,engage:1},
  // 넉업 제공 (야스오/요네 궁 시너지)
  'Malphite':{aoecc:1,engage:1,knockup:1},'Alistar':{knockup:1,engage:1},'Wukong':{knockup:1},
  'Gnar':{knockup:1,aoecc:1},'Janna':{knockup:1,disengage:1,hardcc:1},'Jarvan IV':{aoecc:1,engage:1,knockup:1},
@@ -670,29 +745,29 @@ function kitOf(c){
  letter 티어 대신 실측 승률(%)을 그대로 점수화한다. 키=영문명, 챔당 '주 라인' 승률.
  Solo=탑 / Jungle=정글 / Mid=미드 / Duo=원딜 / Support=서폿. 부 라인은 오프롤 할인으로 처리. */
 const WINRATE={
- 'Amumu':56.97,'Nunu':54.27,'Rammus':55.48,'Lillia':54.78,'Fiddlesticks':53.54,'Taliyah':51.05,
- 'Brand':52.09,'Smolder':51.89,'Zilean':52.56,'Sion':51.82,'K\'Sante':51.57,'Leona':51.76,
- 'Teemo':53.31,'Warwick':52.72,'Miss Fortune':51.84,'Rell':51.2,'Maokai':52.18,'Vi':51.43,
- 'Viktor':52.03,'Jarvan IV':51.65,'Xayah':51.1,'Singed':52.12,'Shyvana':52.09,'Kayle':51.2,
- 'Garen':51.4,'Ambessa':51.74,'Shen':52.4,'Evelynn':51.57,'Jhin':51.49,'Zyra':50.95,
- 'Ryze':51.7,'Soraka':51.12,'Nami':50.58,'Kennen':51.51,'Diana':51.49,'Ahri':51.19,
- 'Veigar':51.41,'Braum':51.93,'Twisted Fate':52.25,'Kog\'Maw':52.38,'Kassadin':51.03,'Zeri':50.83,
- 'Nautilus':48.52,'Master Yi':50.83,'Dr. Mundo':50.67,'Nidalee':51.71,'Poppy':50.77,'Ashe':50.78,
- 'Galio':50.98,'Blitzcrank':49.48,'Karma':50.61,'Sett':51.28,'Aurelion Sol':50.8,'Morgana':49.88,
- 'Ezreal':50.76,'Pantheon':50.71,'Ornn':49.95,'Milio':50.44,'Hecarim':51.14,'Nocturne':49.73,
- 'Orianna':50.7,'Vayne':50.05,'Senna':49.65,'Aurora':49.68,'Janna':49.14,'Zed':50.64,
- 'Varus':49.99,'Norra':49.36,'Malphite':50.82,'Jayce':49.41,'Rumble':50.81,'Aatrox':49.33,
- 'Kalista':50.18,'Gnar':49.51,'Annie':48.39,'Volibear':49.3,'Lulu':50.11,'Olaf':50.36,
- 'Vex':49.58,'Corki':47.81,'Lissandra':49.96,'Fizz':50.52,'Sivir':49.77,'Nasus':49.51,
- 'Xin Zhao':50.09,'Vel\'Koz':49.31,'Lux':49.64,'Irelia':49.05,'Viego':48.98,'Sona':52.0,
- 'Ziggs':49.16,'Wukong':50.33,'Yone':50.29,'Mordekaiser':49.54,'Alistar':49.21,'Kayn':49.65,
- 'Kindred':48.48,'Tryndamere':49.31,'Pyke':48.01,'Heimerdinger':49.19,'Ekko':50.08,'Urgot':50.22,
- 'Graves':49.35,'Lucian':49.15,'Rengar':48.16,'Talon':49.04,'Rakan':49.53,'Syndra':49.31,
- 'Vladimir':49.58,'Caitlyn':48.95,'Swain':48.55,'Seraphine':50.32,'Renekton':49.15,'Jinx':48.79,
- 'Yasuo':48.33,'Samira':48.71,'Darius':48.35,'Gwen':49.02,'Mel':48.84,'Kai\'Sa':48.92,
- 'Camille':48.36,'Tristana':47.91,'Gragas':49.27,'Riven':48.91,'Kha\'Zix':47.4,'Twitch':48.46,
- 'Thresh':51.81,'Draven':48.53,'Jax':47.67,'Lee Sin':46.91,'Fiora':46.33,'Katarina':46.85,
- 'Yuumi':46.15,'Zoe':46.58,'Akali':45.02,'Skarner':45.88
+ 'Amumu':57.08,'Nunu':54.85,'Rammus':55.3,'Lillia':54.14,'Fiddlesticks':53.06,'Taliyah':51.22,
+ 'Brand':52.22,'Smolder':52.11,'Zilean':52.01,'Sion':52.2,'K\'Sante':51.29,'Leona':51.49,
+ 'Teemo':52.77,'Warwick':52.17,'Miss Fortune':51.93,'Rell':51.88,'Maokai':51.77,'Vi':51.31,
+ 'Viktor':51.82,'Jarvan IV':51.48,'Xayah':50.97,'Singed':50.87,'Shyvana':52.66,'Kayle':51.16,
+ 'Garen':51.24,'Ambessa':51.8,'Shen':52.21,'Evelynn':51.14,'Jhin':51.36,'Zyra':50.86,
+ 'Ryze':51.94,'Soraka':51.33,'Nami':50.65,'Kennen':51.98,'Diana':51.63,'Ahri':51.53,
+ 'Veigar':50.98,'Braum':52.05,'Twisted Fate':52.59,'Kog\'Maw':51.61,'Kassadin':51.64,'Zeri':50.92,
+ 'Nautilus':48.56,'Master Yi':50.96,'Dr. Mundo':50.75,'Nidalee':51.48,'Poppy':51.28,'Ashe':50.51,
+ 'Galio':51.22,'Blitzcrank':49.95,'Karma':50.37,'Sett':51.0,'Aurelion Sol':50.94,'Morgana':49.86,
+ 'Ezreal':50.46,'Pantheon':50.38,'Ornn':50.05,'Milio':50.72,'Hecarim':50.87,'Nocturne':50.93,
+ 'Orianna':50.32,'Vayne':50.25,'Senna':50.22,'Aurora':49.93,'Janna':50.62,'Zed':50.12,
+ 'Varus':50.37,'Norra':50.09,'Malphite':51.23,'Jayce':50.03,'Rumble':50.94,'Aatrox':49.01,
+ 'Kalista':50.35,'Gnar':49.09,'Annie':48.51,'Volibear':50.3,'Lulu':50.08,'Olaf':50.2,
+ 'Vex':49.08,'Corki':49.86,'Lissandra':49.54,'Fizz':50.86,'Sivir':50.01,'Nasus':49.61,
+ 'Xin Zhao':50.12,'Vel\'Koz':48.62,'Lux':49.6,'Irelia':49.08,'Viego':48.72,'Sona':51.74,
+ 'Ziggs':49.38,'Wukong':49.92,'Yone':49.96,'Mordekaiser':49.5,'Alistar':48.91,'Kayn':49.57,
+ 'Kindred':48.5,'Tryndamere':49.14,'Pyke':47.3,'Heimerdinger':48.65,'Ekko':48.06,'Urgot':49.97,
+ 'Graves':49.36,'Lucian':49.0,'Rengar':48.87,'Talon':49.22,'Rakan':49.23,'Syndra':48.84,
+ 'Vladimir':49.57,'Caitlyn':49.02,'Swain':48.27,'Seraphine':50.64,'Renekton':49.2,'Jinx':48.45,
+ 'Yasuo':48.1,'Samira':48.81,'Darius':48.34,'Gwen':48.77,'Mel':48.74,'Kai\'Sa':48.59,
+ 'Camille':48.73,'Tristana':48.39,'Gragas':49.42,'Riven':47.24,'Kha\'Zix':47.51,'Twitch':47.9,
+ 'Thresh':52.04,'Draven':48.42,'Jax':47.42,'Lee Sin':47.01,'Fiora':46.74,'Katarina':46.69,
+ 'Yuumi':45.84,'Zoe':46.39,'Akali':45.49,'Skarner':46.89
 };
 const DEFAULT_WR=49.5; // 데이터 없는 챔(아크샨/바드/닐라/유나라/초가스 등)
 // 주 라인 (승률 데이터의 역할 기준). 라이너 매치업 오인 방지용(예: 요네=탑).
@@ -705,7 +780,8 @@ const PLANE_RAW={
 };
 const PLANE={}; for(const l in PLANE_RAW) PLANE_RAW[l].forEach(n=>PLANE[n]=l);
 function primeLaneOf(c){ return PLANE[c.en] || c.lanes[0]; }
-function wrOf(c){ return WINRATE[c.en]!=null ? WINRATE[c.en] : DEFAULT_WR; }
+function hasMeta(c){return WINRATE[c.en]!=null;}
+function wrOf(c){ return hasMeta(c) ? WINRATE[c.en] : DEFAULT_WR; }
 // 승률 → 메타 점수 (50%=평균). 56%대 ≈ 110+, 42%대 ≈ 28
 function metaScore(wr){ return Math.max(30, Math.min(80, 50+(wr-50)*5)); } // 승률=참조 보정(스프레드 압축)
 function wrLetter(wr){ return wr>=52?'S':wr>=50.5?'A':wr>=49?'B':wr>=47.5?'C':'D'; }
@@ -736,9 +812,12 @@ function score(cand){
   // the mastery bonus. Your mains (70~100) get a real edge, tunable by weight.
   const base = hasComfort ? comfort : 50;
   const cWR = wrOf(cand);
-  // 부 라인 픽은 승률(주 라인 기준)을 그대로 못 쓰니 메타 점수 할인 (검증 적은 오프롤)
+  const metaKnown=hasMeta(cand);
+  // 부라인/구패치 데이터 불확실성은 메타 축에만 적용한다. 팀 시너지와 카운터까지 깎지 않는다.
   const offRole = primeLaneOf(cand)!==state.lane;
-  const cTier = metaScore(cWR);
+  const rawMeta=metaScore(cWR);
+  const roleReliability=offRole?0.55:1;
+  const cTier=50+(rawMeta-50)*(metaKnown?META_RELIABILITY:0)*roleReliability;
 
   const allyP=compProfile(state.ally), enemyP=compProfile(state.enemy);
   const k=kitOf(cand);
@@ -783,11 +862,11 @@ function score(cand){
   }
 
   // ---- counter ----
-  let counter=0; const cNotes=[];
+  let counter=0; const cNotes=[]; let laner=null;
   if(state.enemy.length){
     // 상대 라이너 = 이 라인을 '주 라인'으로 쓰는 적. 플렉스 가능만으론 안 잡음
     // (예: 요네가 탑인데 미드 상대로 오인 방지).
-    const laner = (state.laneMark!=null && state.enemy.includes(state.laneMark) && byId[state.laneMark])
+    laner = (state.laneMark!=null && state.enemy.includes(state.laneMark) && byId[state.laneMark])
                || state.enemy.map(id=>byId[id]).find(c=>c && primeLaneOf(c)===state.lane)
                || state.enemy.map(id=>byId[id]).find(c=>c && c.lanes.includes(state.lane)); // 지정(🎯) > prime > 서브 포지션 폴백
     if(laner){
@@ -876,10 +955,20 @@ function score(cand){
     if(enemyP.ad-enemyP.ap>=2 && cand.cls==='tank'){counter+=3;}
   }
 
-  const cw = (weights.recMode==='meta') ? 0 : W.comfort;   // 메타 최적 모드: 실력 무시
-  const draftPart = (cTier*(W.tier/100) + team*(W.team/100) + counter*(W.counter/100)) * (offRole?0.76:1);
-  const total = base*(cw/100) + draftPart;
-  return {total, base, cTier, cWR, team, counter, teamNotes, cNotes, comfort, hasComfort, comfortAuto, offPool:!hasComfort, cwUsed:cw, offRole};
+  const cw = (weights.recMode==='meta') ? 0 : W.comfort;
+  const teamAxis=clamp(50+team,0,100);
+  const counterAxis=clamp(50+counter,0,100);
+  const tierW=W.tier;
+  const teamW=state.ally.length?W.team:0;
+  const counterW=state.enemy.length?W.counter:0;
+  const denom=cw+tierW+teamW+counterW;
+  const total=denom?((base*cw)+(cTier*tierW)+(teamAxis*teamW)+(counterAxis*counterW))/denom:50;
+  let confidence=35+(metaKnown?15:-5)+(offRole?-8:10);
+  confidence+=Math.min(12,state.ally.length*3)+Math.min(20,state.enemy.length*4);
+  if(state.laneMark!=null)confidence+=10; else if(laner)confidence+=4;
+  if(META_SNAPSHOT.status!=='fresh')confidence-=8;
+  confidence=Math.round(clamp(confidence,25,95));
+  return {total, base, cTier, rawMeta, cWR, metaKnown, team, counter, teamAxis, counterAxis, teamNotes, cNotes, comfort, hasComfort, comfortAuto, offPool:!hasComfort, cwUsed:cw, offRole, confidence};
 }
 
 function anyOwned(){ return Object.values(pool).some(p=>p&&p.comfort>0); }
@@ -890,7 +979,7 @@ function laneBar(){
     `<button class="lane ${state.lane===l.k?'on':''}" onclick="setLane('${l.k}')">
       <div class="ic">${l.ic}</div><div class="nm">${l.nm}</div></button>`).join('');
 }
-function setLane(k){state.lane=k;laneBar();render();}
+function setLane(k){state.lane=k;state.laneMark=null;laneBar();render();toast(LANEKR[k]+' 추천으로 변경');}
 
 function chips(){
   const mk=(ids,side)=>ids.map(id=>{const c=byId[id];if(!c)return '';
@@ -951,8 +1040,16 @@ function compReadout(){
   el.innerHTML=parts.join(' &nbsp;·&nbsp; ');
 }
 
+function renderAppMeta(){
+  const v=document.getElementById('appVersion');if(v)v.textContent='v'+APP_VERSION;
+  const status=document.getElementById('dataStatus');
+  if(status)status.innerHTML=`<span class="stale">PATCH BRIDGE</span><span>앱 대상 <b>${META_SNAPSHOT.targetPatch}</b> · 승률 스냅샷 <b>${META_SNAPSHOT.sourcePatch}</b> (${META_SNAPSHOT.capturedAt}) · 구패치 데이터는 메타 축 신뢰도만 자동 감쇠</span>`;
+  const legend=document.getElementById('metaLegend');
+  if(legend)legend.innerHTML=`총점은 <b>0~100 정규화</b> · <b>승</b> 메타 + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'}의 가중평균<br><span style="color:#d8c49a;font-size:11px">데이터: ${META_SNAPSHOT.sourcePatch} (${META_SNAPSHOT.capturedAt}) → ${META_SNAPSHOT.targetPatch} 과도기 보정 · 통계 없는 챔은 메타 중립 처리</span>`;
+}
+
 function render(){
-  chips();compReadout();
+  renderAppMeta();chips();compReadout();
   const owned=anyOwned();
   const mode=weights.recMode||'meta';
   document.getElementById('modeLbl').innerHTML =
@@ -972,12 +1069,19 @@ function render(){
   box.innerHTML=cands.map((o,i)=>{
     const c=o.c,s=o.s;
     const notes=[...s.teamNotes,...s.cNotes];
-    const wrTxt = `${s.cWR.toFixed(1)}% (${wrLetter(s.cWR)})`;
+    const wrTxt = s.metaKnown?`${s.cWR.toFixed(1)}% (${wrLetter(s.cWR)})`:`<span class="meta-missing">통계 부족</span>`;
     let why = notes.length? notes.map(n=>n.includes('-)')?`<span class="neg">${n}</span>`:`<b>${n}</b>`).join(' · ')
       : `승률 ${wrTxt} · ${CLSKR[c.cls]} · ${c.dmg}`;
     const tagstr = c.tags.slice(0,3).join('·');
-    // mastery badge only meaningful in weighted mode with a pool set
     let badge='';
+    const topCounter=Math.max(...cands.map(x=>x.s.counterAxis));
+    const topConfidence=Math.max(...cands.map(x=>x.s.confidence));
+    const topComfort=Math.max(...cands.map(x=>x.s.base));
+    if(i===0)badge+=`<span class="bd-type">종합 1순위</span>`;
+    else if(s.counterAxis===topCounter&&state.enemy.length)badge+=`<span class="bd-type counter">카운터픽</span>`;
+    else if(s.confidence===topConfidence)badge+=`<span class="bd-type safe">안전픽</span>`;
+    else if(mode!=='meta'&&s.base===topComfort)badge+=`<span class="bd-type mastery">숙련픽</span>`;
+    // mastery badge only meaningful in weighted mode with a pool set
     if(s.offRole) badge+=`<span class="bd-role">부라인</span>`;
     const fm=famMap[c.id];
     if(fm) badge+=`<span class="bd-fam">★내챔 ${fm.n}판 ${fm.w}승</span>`;
@@ -986,11 +1090,9 @@ function render(){
       else if(s.comfortAuto) badge+=`<span class="bd-main">자동숙련</span>`;
       else if(!fm) badge+=`<span class="bd-off">첫 챔</span>`;
     }
-    const showSuk = s.cwUsed>0; // 메타 최적 모드에선 숙련 항목 숨김
-    const bd = (showSuk?`숙${Math.round(s.base*s.cwUsed/100)} `:'')
-      +`승${Math.round(s.cTier*weights.tier/100)}`
-      +(s.team?' 팀'+(s.team>0?'+':'')+Math.round(s.team*weights.team/100):'')
-      +(s.counter?' 카'+(s.counter>0?'+':'')+Math.round(s.counter*weights.counter/100):'');
+    const showSuk = s.cwUsed>0;
+    const bd=(showSuk?`숙${Math.round(s.base)} `:'')+`승${Math.round(s.cTier)}`
+      +(state.ally.length?` 팀${Math.round(s.teamAxis)}`:'')+(state.enemy.length?` 카${Math.round(s.counterAxis)}`:'');
     return `<div class="rec ${i===0?'top1':''} ${mode==='weighted'&&owned&&s.offPool?'offpool':''}">
       <div class="rk">${i+1}</div>
       <div class="rmid">
@@ -1000,7 +1102,7 @@ function render(){
       </div>
       <div class="rscore">
         <div class="n mono">${Math.round(s.total)}</div>
-        <div class="bd mono">${bd}</div>
+        <div class="bd mono">${bd}</div><div class="bd-confidence">신뢰 ${s.confidence}%</div>
       </div>
     </div>`;
   }).join('');
@@ -1041,12 +1143,15 @@ function renderDD(){
   dd.innerHTML=ddList.map((c,i)=>
     `<button class="ddrow ${i===0?'first':''}" onclick="quickAdd(${c.id})">
       <span class="ddn">${c.kr}${c.aliases.length?`<span class="ddalias">${c.aliases[0]}</span>`:''}</span>
-      <span class="ddm">${CLSKR[c.cls]} · ${c.lanes.map(l=>lm[l]).join('/')} · ${wrOf(c).toFixed(0)}%</span>
+      <span class="ddm">${CLSKR[c.cls]} · ${c.lanes.map(l=>lm[l]).join('/')} · ${hasMeta(c)?wrOf(c).toFixed(0)+'%':'통계 부족'}</span>
     </button>`).join('');
 }
 function quickAdd(id){
-  if(state.ally.includes(id)||state.enemy.includes(id)||state.bans.includes(id))return;
-  (addSide==='ban'?state.bans:state[addSide]).push(id);
+  if(state.ally.includes(id)||state.enemy.includes(id)||state.bans.includes(id)){toast('이미 입력된 챔피언');return;}
+  const target=addSide==='ban'?state.bans:state[addSide];
+  const max=MAX_PICKS[addSide];
+  if(target.length>=max){toast(addSide==='ally'?'우리팀은 내 픽 제외 최대 4명':'최대 입력 수에 도달');return;}
+  target.push(id);
   const s=document.getElementById('mainSrch');s.value='';renderDD();
   chips();render();s.focus();
 }
@@ -1070,7 +1175,7 @@ function renderCfg(){
   const rows=champs.map(c=>{
     const cm=(pool[c.id]&&pool[c.id].comfort)||0;
     return `<div class="poolrow ${cm===0?'off':''}">
-      <div class="pn">${c.kr} <span class="pc">${CLSKR[c.cls]} · ${wrOf(c).toFixed(1)}%</span></div>
+      <div class="pn">${c.kr} <span class="pc">${CLSKR[c.cls]} · ${hasMeta(c)?wrOf(c).toFixed(1)+'%':'통계 부족'}</span></div>
       <input type="range" min="0" max="100" step="5" value="${cm}" oninput="setComfort(${c.id},+this.value)">
       <span class="pv ${cm===0?'zero':''}" id="pv${c.id}">${cm||'–'}</span>
     </div>`;
@@ -1112,7 +1217,7 @@ function setComfort(id,v){
 }
 function quickPool(id){setComfort(id,70);renderCfg();toast(champName(id)+' 숙련 70 등록');}
 function clearPool(){if(confirm('등록한 챔폭 숙련도를 전부 0으로 초기화한다. 계속?')){pool={};renderCfg();render();}}
-function resetWeights(){const rm=weights.recMode;weights={comfort:80,tier:45,team:100,counter:100,recMode:rm,wv:2};renderCfg();render();}
+function resetWeights(){const rm=weights.recMode;weights=sanitizeWeights({comfort:80,tier:45,team:100,counter:100,recMode:rm,wv:3});renderCfg();render();}
 async function saveCfg(){await saveStore();closeCfg();render();toast('저장 완료');}
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1400);}
@@ -1142,7 +1247,10 @@ function logMatch(won){
      && JSON.stringify(prev.ally)===JSON.stringify(state.ally) && JSON.stringify(prev.enemy)===JSON.stringify(state.enemy)){
     if(!confirm('직전 기록과 완전히 같은 판이다(30분 내). 중복이면 취소해라. 그래도 기록할까?'))return;
   }
-  matches.push({t:Date.now(),lane:state.lane,ally:state.ally.slice(),enemy:state.enemy.slice(),pick:pickId,top:topId,top3:lastCands.slice(0,3).map(o=>o.c.id),won:!!won});
+  const chosen=lastCands.find(o=>o.c.id===pickId);
+  matches.push({schema:SCHEMA_VERSION,t:Date.now(),patch:META_SNAPSHOT.targetPatch,sourcePatch:META_SNAPSHOT.sourcePatch,modelVersion:MODEL_VERSION,
+    lane:state.lane,laneMark:state.laneMark,ally:state.ally.slice(),enemy:state.enemy.slice(),pick:pickId,top:topId,
+    top3:lastCands.slice(0,3).map(o=>o.c.id),scoreSnapshot:chosen?{total:Math.round(chosen.s.total),meta:Math.round(chosen.s.cTier),team:Math.round(chosen.s.teamAxis),counter:Math.round(chosen.s.counterAxis),comfort:Math.round(chosen.s.base),confidence:chosen.s.confidence}:null,won:!!won});
   saveMatches(); computeFam(); render();
   toast(won?`기록 완료: ${champName(pickId)} 승 ✓`:`기록 완료: ${champName(pickId)} 패 ✗`);
 }
@@ -1198,7 +1306,7 @@ function renderLog(){
     <div class="logclear"><button onclick="exportData()" style="border-color:var(--cyan);color:var(--cyan)">백업(내보내기)</button> <button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(가져오기)</button> <button onclick="clearMatches()">전적 전체 삭제</button></div>`;
 }
 function exportData(){
-  const payload=JSON.stringify({v:2,matches,pool,weights});
+  const payload=JSON.stringify({v:SCHEMA_VERSION,exportedAt:new Date().toISOString(),appVersion:APP_VERSION,matches,pool,weights});
   try{ navigator.clipboard&&navigator.clipboard.writeText(payload); }catch(e){}
   prompt('아래 전체를 길게 눌러 복사 → 메모장에 저장. 새 파일에서 [복원]에 붙여넣으면 전적이 살아난다.',payload);
 }
@@ -1207,26 +1315,22 @@ function importData(){
   if(!raw)return;
   try{
     const d=JSON.parse(raw);
-    if(!d||!Array.isArray(d.matches)) throw 0;
-    matches=d.matches; if(d.pool)pool=d.pool; if(d.weights)Object.assign(weights,d.weights); computeFam();
-    saveMatches(); saveStore(); renderLog(); render(); toast('복원 완료: '+matches.length+'판');
+    if(!d||!Array.isArray(d.matches)||d.matches.length>10000)throw 0;
+    matches=d.matches.map(migrateMatch).filter(Boolean);
+    pool=migratePool(d.pool||{});
+    weights=sanitizeWeights(d.weights||weights);
+    computeFam();
+    saveMatches();saveStore();renderLog();render();toast('복원 완료: '+matches.length+'판');
   }catch(e){ toast('복원 실패: 형식이 잘못됐다'); }
 }
 function delMatch(t){ matches=matches.filter(m=>m.t!==t); saveMatches(); renderLog(); }
 function clearMatches(){ if(!confirm('전적 기록을 전부 삭제할까? 되돌릴 수 없다.'))return; matches=[]; saveMatches(); renderLog(); }
 
-/* ============ PWA (홈 화면 추가 시 앱처럼) ============ */
+/* ============ PWA ============ */
 function setupPWA(){
-  try{
-    const svg=`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="104" fill="#0a0e14"/><path d="M256 86 L426 256 L256 426 L86 256 Z" fill="none" stroke="#c8a04f" stroke-width="16"/><text x="256" y="298" font-family="Arial,sans-serif" font-weight="bold" font-size="142" fill="#3fd0c9" text-anchor="middle">WR</text></svg>`;
-    const iconURL=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));
-    const ic=document.getElementById('appIcon'); if(ic) ic.href=iconURL;
-    const manifest={name:'WR 챔 셀렉터',short_name:'WR픽',start_url:'.',scope:'.',display:'standalone',orientation:'portrait',
-      background_color:'#0a0e14',theme_color:'#0a0e14',
-      icons:[{src:iconURL,sizes:'192x192',type:'image/svg+xml',purpose:'any'},{src:iconURL,sizes:'512x512',type:'image/svg+xml',purpose:'any maskable'}]};
-    const mURL=URL.createObjectURL(new Blob([JSON.stringify(manifest)],{type:'application/manifest+json'}));
-    const ml=document.getElementById('appManifest'); if(ml) ml.href=mURL;
-  }catch(e){}
+  if('serviceWorker' in navigator && /^https?:$/.test(location.protocol)){
+    navigator.serviceWorker.register('./sw.js').catch(()=>{});
+  }
 }
 
 /* close config sheet on scrim tap */
@@ -1237,6 +1341,8 @@ document.getElementById('cfgScrim').addEventListener('click',e=>{if(e.target.id=
   setupPWA();
   await loadStore();
   await loadMatches();
+  await saveStore();
+  await saveMatches();
   paintAddSide();
   laneBar();render();
 })();
