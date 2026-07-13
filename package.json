@@ -1,0 +1,12 @@
+{
+  "name": "wr-picker",
+  "version": "4.0.0",
+  "private": true,
+  "description": "Wild Rift role-aware draft assistant",
+  "scripts": {
+    "test": "node tests/smoke.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
