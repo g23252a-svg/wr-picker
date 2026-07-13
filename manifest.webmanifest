@@ -1,13 +1,16 @@
 {
-  "name": "WR 챔 셀렉터",
-  "short_name": "WR픽",
-  "description": "와일드 리프트 드래프트 추천 엔진",
-  "start_url": "./index.html",
+  "id": "./index.html",
+  "name": "WR Picker · 드래프트 추천",
+  "short_name": "WR Picker",
+  "description": "패치 7.2 역할별 통계와 조합·상성·숙련도를 계산하는 와일드 리프트 드래프트 도우미",
+  "lang": "ko-KR",
+  "start_url": "./index.html?source=pwa",
   "scope": "./",
   "display": "standalone",
-  "orientation": "portrait",
+  "display_override": ["window-controls-overlay", "standalone", "minimal-ui"],
   "background_color": "#0a0e14",
   "theme_color": "#0a0e14",
+  "categories": ["games", "utilities"],
   "icons": [
     {
       "src": "icon.svg",
