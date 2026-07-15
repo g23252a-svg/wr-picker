@@ -1,8 +1,8 @@
 {
   "name": "wr-picker",
-  "version": "4.0.0",
+  "version": "4.1.0",
   "private": true,
-  "description": "Wild Rift role-aware draft assistant",
+  "description": "Wild Rift evidence-aware draft assistant",
   "scripts": {
     "test": "node tests/smoke.mjs"
   },
