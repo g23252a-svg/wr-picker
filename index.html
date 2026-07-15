@@ -269,8 +269,20 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .datastatus{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin:-2px 0 12px;padding:8px 10px;
   border:1px solid #4a3a1e;background:#1b170f;border-radius:9px;color:#d8c49a;font-size:11px;line-height:1.45}
 .datastatus b{color:var(--gold-soft)}
+.datastatus a{color:var(--cyan-soft);font-weight:700;text-decoration:underline;text-underline-offset:2px}
 .datastatus .stale{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.05em;
   padding:2px 6px;border-radius:5px;background:#4a3212;color:#ffd782}
+.datastatus .fresh{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.05em;
+  padding:2px 6px;border-radius:5px;background:#123c31;color:#9aebca}
+.datastatus .aging{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.05em;
+  padding:2px 6px;border-radius:5px;background:#46391a;color:#f5d78a}
+.decision-summary{border:1px solid #31516b;background:linear-gradient(120deg,#101f2c,#131925);
+  border-radius:12px;padding:12px 13px;margin:0 0 13px;display:grid;grid-template-columns:auto 1fr;gap:5px 12px;align-items:center}
+.decision-summary .eyebrow{font-family:'Rajdhani';font-size:10px;font-weight:700;letter-spacing:.09em;color:var(--cyan-soft);text-transform:uppercase}
+.decision-summary .pick{font-family:'Rajdhani';font-size:24px;font-weight:700;color:var(--gold-soft);line-height:1}
+.decision-summary .signal{font-size:11px;color:var(--dim);line-height:1.45}
+.decision-summary .alts{grid-column:1/-1;border-top:1px solid var(--line);padding-top:7px;margin-top:3px;font-size:10.5px;color:var(--dimmer)}
+.decision-summary .alts b{color:var(--ink)}
 .bd-confidence{display:inline-block;margin-top:4px;font-family:'Rajdhani';font-weight:700;font-size:10px;
   letter-spacing:.03em;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
 .bd-type{font-family:'Rajdhani';font-weight:700;font-size:9px;letter-spacing:.06em;margin-left:5px;
@@ -278,6 +290,8 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .bd-type.safe{border-color:#28513c;color:#8be0b0;background:#10241b}
 .bd-type.counter{border-color:#633438;color:#f0a0a0;background:#281317}
 .bd-type.mastery{border-color:#59451f;color:#f0c674;background:#261d0e}
+.bd-type.evidence{border-color:#31513f;color:#9ae7bb;background:#11251c}
+.bd-type.banrisk{border-color:#633438;color:#f0a0a0;background:#281317}
 .meta-missing{color:#f0b232}
 .sidetog2 button.on.ban{border-color:var(--gold);color:#211606;background:var(--gold)}
 .ddrow.active{background:#16283a;box-shadow:inset 3px 0 var(--cyan)}
@@ -285,6 +299,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .resultstats{display:flex;gap:7px;flex-wrap:wrap;margin-top:5px}
 .resultstats span{font-family:'Rajdhani';font-weight:700;font-size:10.5px;color:var(--dim);border:1px solid var(--line);background:var(--panel2);border-radius:5px;padding:2px 6px}
 .resultstats .hot{color:#f09da3;border-color:#5b2d35}
+.resultstats .evidence{color:#9ae7bb;border-color:#31513f}
 .updatebar{display:none;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:9px 11px;border:1px solid var(--cyan);background:var(--panel);border-radius:9px;font-size:11.5px;color:var(--dim)}
 .updatebar.on{display:flex}.updatebar button{color:var(--cyan-soft);font-weight:700}
 .footer-note{text-align:center;color:var(--dimmer);font-size:10.5px;margin-top:15px;line-height:1.55}
@@ -298,6 +313,9 @@ button:disabled{cursor:not-allowed;opacity:.38}
 [data-theme="light"] .srch{background:#fff}
 [data-theme="light"] .datastatus{background:#fff8e9;border-color:#e9ce91;color:#6e5a31}
 [data-theme="light"] .datastatus .stale{background:#f0dfb9;color:#6c4910}
+[data-theme="light"] .datastatus .fresh{background:#dff5eb;color:#176046}
+[data-theme="light"] .datastatus .aging{background:#fff0c8;color:#735510}
+[data-theme="light"] .decision-summary{background:linear-gradient(120deg,#edf8ff,#fffaf0)}
 [data-theme="light"] .bd-off{background:#fff6df}[data-theme="light"] .bd-main{background:#e7f8f6}
 [data-theme="light"] .bd-type{background:#edf7ff}[data-theme="light"] .bd-type.safe{background:#eaf8ef}
 [data-theme="light"] .bd-type.counter{background:#fff0f1}[data-theme="light"] .bd-type.mastery{background:#fff7e4}
@@ -334,7 +352,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub">Patch 7.2 draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v4.0.0</b></div>
+    <div class="sub">Patch 7.2 draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v4.1.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -399,10 +417,11 @@ button:disabled{cursor:not-allowed;opacity:.38}
 
 <section class="workspace-card result-zone" aria-labelledby="resultTitle">
   <div class="sectionhead">
-    <div><h2 id="resultTitle">추천 픽</h2><p>역할별 통계·조합·상성을 0–100 점수로 정규화합니다.</p></div>
+    <div><h2 id="resultTitle">추천 픽</h2><p>최신 역할 통계를 표본 신뢰도로 보정해 바로 고를 픽을 제시합니다.</p></div>
     <div class="mode" id="modeLbl"></div>
   </div>
   <div class="legend" id="metaLegend"></div>
+  <div id="decisionSummary" aria-live="polite"></div>
   <div id="results" aria-live="polite" aria-busy="false"></div>
 
   <div class="logbar" id="logbar">
@@ -412,7 +431,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
     <button class="lgw" onclick="logMatch(true)">✓ 승리</button>
     <button class="lgl-btn" onclick="logMatch(false)">✗ 패배</button>
   </div>
-  <p class="footer-note">통계는 판단 보조 정보이며 승리를 보장하지 않습니다. 저표본 역할은 픽률 기반으로 보수적으로 보정합니다.</p>
+  <p class="footer-note">통계는 판단 보조 정보이며 승리를 보장하지 않습니다. 중국 서버 Diamond+ 일일 통계를 사용하고 저표본 역할은 보수적으로 보정합니다.</p>
 </section>
 </main>
 
@@ -674,16 +693,19 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='4.0.0';
-const MODEL_VERSION='4.0.0-role-aware';
+const APP_VERSION='4.1.0';
+const MODEL_VERSION='4.1.0-evidence-aware';
 const SCHEMA_VERSION=4;
 const META_SNAPSHOT=Object.freeze({
   targetPatch:(window.WR_STATS_META&&window.WR_STATS_META.patch)||'7.2',
   sourcePatch:(window.WR_STATS_META&&window.WR_STATS_META.patch)||'7.2',
-  capturedAt:(window.WR_STATS_META&&window.WR_STATS_META.capturedAt)||'2026-07-13',
+  capturedAt:(window.WR_STATS_META&&window.WR_STATS_META.capturedAt)||'2026-07-15',
   region:(window.WR_STATS_META&&window.WR_STATS_META.region)||'CN',
   bracket:(window.WR_STATS_META&&window.WR_STATS_META.bracket)||'Diamond+',
-  status:'fresh'
+  rows:(window.WR_STATS_META&&window.WR_STATS_META.rows)||0,
+  champions:(window.WR_STATS_META&&window.WR_STATS_META.champions)||0,
+  source:(window.WR_STATS_META&&window.WR_STATS_META.source)||'https://www.wildriftfire.com/stats',
+  cadence:(window.WR_STATS_META&&window.WR_STATS_META.cadence)||'daily'
 });
 const MAX_PICKS={ally:4,enemy:5,ban:10};
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
@@ -920,9 +942,29 @@ function primaryStatOf(c){
 function primeLaneOf(c){const p=primaryStatOf(c);return p?p[0]:c.lanes[0];}
 function hasMeta(c,lane=state.lane){return !!statOf(c,lane);}
 function wrOf(c,lane=state.lane){const s=statOf(c,lane);return s?s.win:DEFAULT_WR;}
-// 보정 승률 → 메타 점수 (50%=평균, 극단값은 30~80으로 제한)
-function metaScore(wr){ return Math.max(30, Math.min(80, 50+(wr-50)*5)); } // 승률=참조 보정(스프레드 압축)
+// 픽률을 표본 크기의 대리값으로 사용한다. 실제 게임 수가 공개되지 않으므로
+// 저픽률 승률은 강하게 50%로 축소하고, 픽/밴 존재감은 최대 ±2점만 보조한다.
+function reliabilityOf(pick){
+  const volume=clamp(Number(pick)||0,0,15)/15;
+  return clamp(.42+.58*Math.sqrt(volume),.42,1);
+}
+function metaScore(wr,pick=0,ban=0){
+  const presence=Math.max(0,pick)+Math.max(0,ban)*.2;
+  const presenceSignal=clamp((Math.log1p(presence)-Math.log(3))*1.35,-2,2);
+  return clamp(50+(wr-50)*5.5+presenceSignal,28,84);
+}
 function wrLetter(wr){ return wr>=52?'S':wr>=50.5?'A':wr>=49?'B':wr>=47.5?'C':'D'; }
+function snapshotAgeDays(){
+  const captured=Date.parse(META_SNAPSHOT.capturedAt+'T00:00:00Z');
+  return Number.isFinite(captured)?Math.max(0,Math.floor((Date.now()-captured)/86400000)):999;
+}
+function evidenceText(s){
+  if(!s.metaKnown)return '역할 통계 없음';
+  if(s.statReliability<.65)return '고변동·저표본';
+  if(s.statReliability>=.85&&s.adjustedWR>=51)return '표본과 성과 모두 양호';
+  if(s.statReliability>=.85)return '표본 충분';
+  return '보통 표본';
+}
 
 function tierScore(t){return {S:100,A:78,B:58,C:40}[t]||52;}
 
@@ -955,9 +997,9 @@ function score(cand){
   const cPick=metaKnown?roleStat.pick:0;
   const cBan=metaKnown?roleStat.ban:0;
   // 픽률이 낮은 역할은 승률 극단값을 50% 쪽으로 축소한다. 팀/상성 축은 건드리지 않는다.
-  const statReliability=metaKnown?clamp(.55+cPick/20,.55,1):0;
+  const statReliability=metaKnown?reliabilityOf(cPick):0;
   const adjustedWR=50+(cWR-50)*statReliability;
-  const rawMeta=metaScore(adjustedWR);
+  const rawMeta=metaScore(adjustedWR,cPick,cBan);
   const cTier=metaKnown?rawMeta:50;
   const offRole=!metaKnown;
 
@@ -1105,11 +1147,13 @@ function score(cand){
   const counterW=state.enemy.length?W.counter:0;
   const denom=cw+tierW+teamW+counterW;
   const total=denom?((base*cw)+(cTier*tierW)+(teamAxis*teamW)+(counterAxis*counterW))/denom:50;
-  let confidence=35+(metaKnown?Math.round(10+statReliability*10):-8)+(offRole?-4:6);
+  const dataAge=snapshotAgeDays();
+  let confidence=(metaKnown?Math.round(40+statReliability*28):25)+(offRole?-4:4);
   confidence+=Math.min(12,state.ally.length*3)+Math.min(20,state.enemy.length*4);
   if(state.laneMark!=null)confidence+=10; else if(laner)confidence+=4;
+  if(dataAge>3)confidence-=Math.min(20,(dataAge-3)*2);
   confidence=Math.round(clamp(confidence,25,95));
-  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence};
+  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence};
 }
 
 function anyOwned(){ return Object.values(pool).some(p=>p&&p.comfort>0); }
@@ -1187,9 +1231,10 @@ function compReadout(){
 function renderAppMeta(){
   const v=document.getElementById('appVersion');if(v)v.textContent='v'+APP_VERSION;
   const status=document.getElementById('dataStatus');
-  if(status)status.innerHTML=`<span class="stale">LIVE 7.2</span><span><b>${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 175행 / 138챔프 · ${META_SNAPSHOT.capturedAt} 스냅샷</span>`;
+  const age=snapshotAgeDays(), freshness=age<=2?['fresh','최신']:age<=7?['aging',`${age}일 전`]:['stale',`${age}일 전 · 갱신 필요`];
+  if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
   const legend=document.getElementById('metaLegend');
-  if(legend)legend.innerHTML=`<b>승</b> 역할별 메타 + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'} · 저픽률 승률은 평균 쪽으로 보정`;
+  if(legend)legend.innerHTML=`<b>승</b> 표본 보정 메타 + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'} · 픽률은 신뢰도, 밴률은 가용성 위험으로 해석`;
 }
 
 function render(){
@@ -1207,6 +1252,17 @@ function render(){
     .sort((x,y)=>y.s.total-x.s.total||y.s.confidence-x.s.confidence||y.s.cWR-x.s.cWR)
     .slice(0,8);
   lastCands=cands;
+  const summary=document.getElementById('decisionSummary');
+  if(summary&&cands.length){
+    const primary=cands[0];
+    const safe=[...cands].sort((a,b)=>b.s.confidence-a.s.confidence||b.s.total-a.s.total)[0];
+    const counter=state.enemy.length?[...cands].sort((a,b)=>b.s.counterAxis-a.s.counterAxis||b.s.total-a.s.total)[0]:null;
+    const alternates=[];
+    if(safe.c.id!==primary.c.id)alternates.push(`안전 대안 <b>${safe.c.kr}</b>`);
+    if(counter&&counter.c.id!==primary.c.id&&(!safe||counter.c.id!==safe.c.id))alternates.push(`카운터 대안 <b>${counter.c.kr}</b>`);
+    summary.className='decision-summary';
+    summary.innerHTML=`<div><div class="eyebrow">지금 픽</div><div class="pick">${primary.c.kr}</div></div><div class="signal"><b>${Math.round(primary.s.total)}점 · 신뢰 ${primary.s.confidence}%</b><br>${evidenceText(primary.s)}${primary.s.metaKnown?` · 보정 승률 ${primary.s.adjustedWR.toFixed(2)}%`:''}${primary.s.cBan>=15?' · 밴 위험 높음':''}</div>${alternates.length?`<div class="alts">${alternates.join(' &nbsp;·&nbsp; ')}</div>`:''}`;
+  }else if(summary){summary.className='';summary.innerHTML='';}
   renderLogBar();
   const box=document.getElementById('results');
   if(!cands.length){box.innerHTML=`<div class="empty">이 라인에 등록된 챔피언이 없습니다.<br>설정에서 챔폭을 추가하거나 <b>메타 중심</b> 모드로 바꿔주세요.</div>`;return;}
@@ -1225,6 +1281,8 @@ function render(){
     else if(s.counterAxis===topCounter&&state.enemy.length)badge+=`<span class="bd-type counter">카운터픽</span>`;
     else if(s.confidence===topConfidence)badge+=`<span class="bd-type safe">안전픽</span>`;
     else if(mode!=='meta'&&s.base===topComfort)badge+=`<span class="bd-type mastery">숙련픽</span>`;
+    if(s.metaKnown&&s.statReliability>=.85)badge+=`<span class="bd-type evidence">표본 탄탄</span>`;
+    if(s.metaKnown&&s.cBan>=15)badge+=`<span class="bd-type banrisk">밴 주의</span>`;
     // mastery badge only meaningful in weighted mode with a pool set
     if(s.offRole) badge+=`<span class="bd-role">통계 없음</span>`;
     const fm=famMap[c.id];
@@ -1242,7 +1300,7 @@ function render(){
       <div class="rmid">
         <div class="rname">${c.kr}${badge}</div>
         <div class="rmeta">${LANEKR[state.lane]} · ${CLSKR[c.cls]} · ${c.dmg} · <span class="tg">${tagstr}</span></div>
-        <div class="resultstats"><span>승률 ${wrTxt}</span>${s.metaKnown?`<span>픽 ${s.cPick.toFixed(2)}%</span><span class="${s.cBan>=10?'hot':''}">밴 ${s.cBan.toFixed(2)}%</span>`:''}</div>
+        <div class="resultstats"><span>승률 ${wrTxt}</span>${s.metaKnown?`<span>보정 ${s.adjustedWR.toFixed(2)}%</span><span>픽 ${s.cPick.toFixed(2)}%</span><span class="${s.cBan>=10?'hot':''}">밴 ${s.cBan.toFixed(2)}%</span><span class="evidence">표본 ${Math.round(s.statReliability*100)}%</span>`:''}</div>
         <div class="rwhy">${why}</div>
       </div>
       <div class="rscore">
