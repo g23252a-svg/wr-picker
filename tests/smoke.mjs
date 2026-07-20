@@ -18,23 +18,34 @@ const context={window:{}};
 vm.runInNewContext(statsSource,context,{filename:'stats.js'});
 const meta=context.window.WR_STATS_META;
 const stats=context.window.WR_ROLE_STATS;
+const prevStats=context.window.WR_ROLE_STATS_PREV;
 const rows=Object.values(stats).flatMap(roles=>Object.entries(roles));
-assert.equal(meta.patch,'7.2');
-assert.equal(meta.capturedAt,'2026-07-15');
+assert.equal(meta.patch,'7.2a');
+assert.equal(meta.capturedAt,'2026-07-20');
+assert.equal(meta.prevPatch,'7.2');
+assert.equal(meta.prevCapturedAt,'2026-07-15');
 assert.equal(meta.source,'https://www.wildriftfire.com/stats');
 assert.equal(Object.keys(stats).length,meta.champions);
 assert.equal(rows.length,meta.rows);
-assert.equal(stats.Nidalee.jug.win,53.42);
-assert.equal(stats.Volibear.top.win,51.27);
-assert.equal(stats.Volibear.jug.win,46.74);
-assert.equal(stats.Swain.mid.win,52.27);
-assert.equal(stats.Swain.sup.win,47.43);
-for(const [role,s] of rows){
+assert.equal(stats.Kayle.mid.win,55.83);
+assert.equal(stats.Nunu.jug.win,53.75);
+assert.equal(stats.Yunara.adc.pick,20.03);
+assert.equal(stats['Master Yi'].jug.ban,55.54);
+assert.equal(stats.Teemo.top.win,51.75);
+assert.equal(stats.Teemo.mid.win,51.7);
+assert.equal(prevStats.Nidalee.jug.win,53.42);
+const allRows=rows.concat(Object.values(prevStats).flatMap(roles=>Object.entries(roles)));
+for(const [role,s] of allRows){
   assert.ok(['top','jug','mid','adc','sup'].includes(role),`invalid role ${role}`);
   assert.ok(Number.isFinite(s.win)&&s.win>=0&&s.win<=100,'invalid win rate');
   assert.ok(Number.isFinite(s.pick)&&s.pick>=0&&s.pick<=100,'invalid pick rate');
   assert.ok(Number.isFinite(s.ban)&&s.ban>=0&&s.ban<=100,'invalid ban rate');
 }
+// Every current champion/role has trend coverage when it existed in the previous snapshot.
+for(const [name,roles] of Object.entries(stats))
+  for(const role of Object.keys(roles))
+    if(prevStats[name]&&prevStats[name][role])
+      assert.ok(Number.isFinite(prevStats[name][role].win),`bad prev row ${name}/${role}`);
 
 // Evaluate the champion table, check stable identifiers and snapshot coverage.
 const cStart=html.indexOf('const C=')+'const C='.length;
@@ -53,8 +64,9 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='4.1.0'"));
+assert.ok(html.includes("const APP_VERSION='4.2.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
+assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('id="decisionSummary"'));
 assert.equal(manifest.id,'./index.html');
 assert.ok(manifest.display_override.includes('standalone'));

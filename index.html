@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="description" content="와일드 리프트 7.2 역할별 통계와 팀 조합, 상대 상성, 개인 숙련도를 함께 계산하는 드래프트 추천 도구">
+<meta name="description" content="와일드 리프트 7.2a 역할별 통계와 패치 추세, 팀 조합, 상대 상성, 개인 숙련도를 함께 계산하는 드래프트 추천 도구">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0e14">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -300,6 +300,10 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .resultstats span{font-family:'Rajdhani';font-weight:700;font-size:10.5px;color:var(--dim);border:1px solid var(--line);background:var(--panel2);border-radius:5px;padding:2px 6px}
 .resultstats .hot{color:#f09da3;border-color:#5b2d35}
 .resultstats .evidence{color:#9ae7bb;border-color:#31513f}
+.resultstats .up{color:#8be0b0;border-color:#28513c}
+.resultstats .down{color:#f0a0a0;border-color:#633438}
+.bd-type.rising{border-color:#28513c;color:#8be0b0;background:#10241b}
+.bd-type.falling{border-color:#59451f;color:#f0c674;background:#261d0e}
 .updatebar{display:none;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:9px 11px;border:1px solid var(--cyan);background:var(--panel);border-radius:9px;font-size:11.5px;color:var(--dim)}
 .updatebar.on{display:flex}.updatebar button{color:var(--cyan-soft);font-weight:700}
 .footer-note{text-align:center;color:var(--dimmer);font-size:10.5px;margin-top:15px;line-height:1.55}
@@ -352,7 +356,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub">Patch 7.2 draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v4.1.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v4.2.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -431,7 +435,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
     <button class="lgw" onclick="logMatch(true)">✓ 승리</button>
     <button class="lgl-btn" onclick="logMatch(false)">✗ 패배</button>
   </div>
-  <p class="footer-note">통계는 판단 보조 정보이며 승리를 보장하지 않습니다. 중국 서버 Diamond+ 일일 통계를 사용하고 저표본 역할은 보수적으로 보정합니다.</p>
+  <p class="footer-note">통계는 판단 보조 정보이며 승리를 보장하지 않습니다. 중국 서버 Diamond+ 일일 통계를 사용하고 저표본 역할은 보수적으로 보정하며, 직전 스냅샷 대비 추세를 소폭 반영합니다.</p>
 </section>
 </main>
 
@@ -693,8 +697,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='4.1.0';
-const MODEL_VERSION='4.1.0-evidence-aware';
+const APP_VERSION='4.2.0';
+const MODEL_VERSION='4.2.0-trend-aware';
 const SCHEMA_VERSION=4;
 const META_SNAPSHOT=Object.freeze({
   targetPatch:(window.WR_STATS_META&&window.WR_STATS_META.patch)||'7.2',
@@ -705,7 +709,9 @@ const META_SNAPSHOT=Object.freeze({
   rows:(window.WR_STATS_META&&window.WR_STATS_META.rows)||0,
   champions:(window.WR_STATS_META&&window.WR_STATS_META.champions)||0,
   source:(window.WR_STATS_META&&window.WR_STATS_META.source)||'https://www.wildriftfire.com/stats',
-  cadence:(window.WR_STATS_META&&window.WR_STATS_META.cadence)||'daily'
+  cadence:(window.WR_STATS_META&&window.WR_STATS_META.cadence)||'daily',
+  prevPatch:(window.WR_STATS_META&&window.WR_STATS_META.prevPatch)||null,
+  prevCapturedAt:(window.WR_STATS_META&&window.WR_STATS_META.prevCapturedAt)||null
 });
 const MAX_PICKS={ally:4,enemy:5,ban:10};
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
@@ -932,8 +938,15 @@ function kitOf(c){
  * Stats live in stats.js so the snapshot can be updated independently of the engine.
  * Every role keeps win / pick / ban rate instead of collapsing a champion to one lane. */
 const ROLE_STATS=window.WR_ROLE_STATS||{};
+const ROLE_STATS_PREV=window.WR_ROLE_STATS_PREV||{};
 const DEFAULT_WR=50;
 function statOf(c,lane=state.lane){return (ROLE_STATS[c.en]&&ROLE_STATS[c.en][lane])||null;}
+// 직전 스냅샷 대비 승률 변화(%p). 양쪽 표본이 어느 정도 있을 때만 신뢰(둘 다 픽률 1% 이상).
+function trendOf(c,lane=state.lane){
+  const now=statOf(c,lane), prev=ROLE_STATS_PREV[c.en]&&ROLE_STATS_PREV[c.en][lane];
+  if(!now||!prev||now.pick<1||prev.pick<1)return null;
+  return +(now.win-prev.win).toFixed(2);
+}
 function allStatsOf(c){return ROLE_STATS[c.en]||{};}
 function lanesOf(c){return [...new Set([...c.lanes,...Object.keys(allStatsOf(c))])];}
 function primaryStatOf(c){
@@ -1000,7 +1013,10 @@ function score(cand){
   const statReliability=metaKnown?reliabilityOf(cPick):0;
   const adjustedWR=50+(cWR-50)*statReliability;
   const rawMeta=metaScore(adjustedWR,cPick,cBan);
-  const cTier=metaKnown?rawMeta:50;
+  // 패치 추세(직전 스냅샷 대비 승률 변화)를 메타 축에 소폭 반영. 표본 신뢰도로 다시 감쇠.
+  const trend=metaKnown?trendOf(cand,state.lane):null;
+  const momentum=trend!=null?clamp(trend*1.2,-2.5,2.5)*statReliability:0;
+  const cTier=metaKnown?clamp(rawMeta+momentum,28,84):50;
   const offRole=!metaKnown;
 
   const allyP=compProfile(state.ally), enemyP=compProfile(state.enemy);
@@ -1153,7 +1169,7 @@ function score(cand){
   if(state.laneMark!=null)confidence+=10; else if(laner)confidence+=4;
   if(dataAge>3)confidence-=Math.min(20,(dataAge-3)*2);
   confidence=Math.round(clamp(confidence,25,95));
-  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence};
+  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence};
 }
 
 function anyOwned(){ return Object.values(pool).some(p=>p&&p.comfort>0); }
@@ -1230,11 +1246,13 @@ function compReadout(){
 
 function renderAppMeta(){
   const v=document.getElementById('appVersion');if(v)v.textContent='v'+APP_VERSION;
+  const pl=document.getElementById('patchLabel');if(pl)pl.textContent='Patch '+META_SNAPSHOT.targetPatch;
   const status=document.getElementById('dataStatus');
   const age=snapshotAgeDays(), freshness=age<=2?['fresh','최신']:age<=7?['aging',`${age}일 전`]:['stale',`${age}일 전 · 갱신 필요`];
-  if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
+  const prevTxt=META_SNAPSHOT.prevPatch?` · 추세 기준 ${META_SNAPSHOT.prevPatch}(${META_SNAPSHOT.prevCapturedAt})`:'';
+  if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>패치 ${META_SNAPSHOT.targetPatch} · ${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt}${prevTxt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
   const legend=document.getElementById('metaLegend');
-  if(legend)legend.innerHTML=`<b>승</b> 표본 보정 메타 + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'} · 픽률은 신뢰도, 밴률은 가용성 위험으로 해석`;
+  if(legend)legend.innerHTML=`<b>승</b> 표본 보정 메타(+패치 추세) + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'} · 픽률은 신뢰도, 밴률은 가용성 위험으로 해석`;
 }
 
 function render(){
@@ -1261,7 +1279,7 @@ function render(){
     if(safe.c.id!==primary.c.id)alternates.push(`안전 대안 <b>${safe.c.kr}</b>`);
     if(counter&&counter.c.id!==primary.c.id&&(!safe||counter.c.id!==safe.c.id))alternates.push(`카운터 대안 <b>${counter.c.kr}</b>`);
     summary.className='decision-summary';
-    summary.innerHTML=`<div><div class="eyebrow">지금 픽</div><div class="pick">${primary.c.kr}</div></div><div class="signal"><b>${Math.round(primary.s.total)}점 · 신뢰 ${primary.s.confidence}%</b><br>${evidenceText(primary.s)}${primary.s.metaKnown?` · 보정 승률 ${primary.s.adjustedWR.toFixed(2)}%`:''}${primary.s.cBan>=15?' · 밴 위험 높음':''}</div>${alternates.length?`<div class="alts">${alternates.join(' &nbsp;·&nbsp; ')}</div>`:''}`;
+    summary.innerHTML=`<div><div class="eyebrow">지금 픽</div><div class="pick">${primary.c.kr}</div></div><div class="signal"><b>${Math.round(primary.s.total)}점 · 신뢰 ${primary.s.confidence}%</b><br>${evidenceText(primary.s)}${primary.s.metaKnown?` · 보정 승률 ${primary.s.adjustedWR.toFixed(2)}%`:''}${primary.s.trend!=null&&Math.abs(primary.s.trend)>=1?` · 직전 패치 대비 ${primary.s.trend>0?'+':''}${primary.s.trend.toFixed(2)}%p`:''}${primary.s.cBan>=15?' · 밴 위험 높음':''}</div>${alternates.length?`<div class="alts">${alternates.join(' &nbsp;·&nbsp; ')}</div>`:''}`;
   }else if(summary){summary.className='';summary.innerHTML='';}
   renderLogBar();
   const box=document.getElementById('results');
@@ -1283,6 +1301,8 @@ function render(){
     else if(mode!=='meta'&&s.base===topComfort)badge+=`<span class="bd-type mastery">숙련픽</span>`;
     if(s.metaKnown&&s.statReliability>=.85)badge+=`<span class="bd-type evidence">표본 탄탄</span>`;
     if(s.metaKnown&&s.cBan>=15)badge+=`<span class="bd-type banrisk">밴 주의</span>`;
+    if(s.trend!=null&&s.trend>=1)badge+=`<span class="bd-type rising">패치 상승세</span>`;
+    else if(s.trend!=null&&s.trend<=-1.5)badge+=`<span class="bd-type falling">패치 하락세</span>`;
     // mastery badge only meaningful in weighted mode with a pool set
     if(s.offRole) badge+=`<span class="bd-role">통계 없음</span>`;
     const fm=famMap[c.id];
@@ -1300,7 +1320,7 @@ function render(){
       <div class="rmid">
         <div class="rname">${c.kr}${badge}</div>
         <div class="rmeta">${LANEKR[state.lane]} · ${CLSKR[c.cls]} · ${c.dmg} · <span class="tg">${tagstr}</span></div>
-        <div class="resultstats"><span>승률 ${wrTxt}</span>${s.metaKnown?`<span>보정 ${s.adjustedWR.toFixed(2)}%</span><span>픽 ${s.cPick.toFixed(2)}%</span><span class="${s.cBan>=10?'hot':''}">밴 ${s.cBan.toFixed(2)}%</span><span class="evidence">표본 ${Math.round(s.statReliability*100)}%</span>`:''}</div>
+        <div class="resultstats"><span>승률 ${wrTxt}</span>${s.metaKnown?`<span>보정 ${s.adjustedWR.toFixed(2)}%</span>${s.trend!=null?`<span class="${s.trend>=0.75?'up':s.trend<=-0.75?'down':''}">추세 ${s.trend>0?'▲':s.trend<0?'▼':'－'}${Math.abs(s.trend).toFixed(2)}%p</span>`:''}<span>픽 ${s.cPick.toFixed(2)}%</span><span class="${s.cBan>=10?'hot':''}">밴 ${s.cBan.toFixed(2)}%</span><span class="evidence">표본 ${Math.round(s.statReliability*100)}%</span>`:''}</div>
         <div class="rwhy">${why}</div>
       </div>
       <div class="rscore">
@@ -1353,7 +1373,7 @@ function renderDD(){
   dd.innerHTML=ddList.map((c,i)=>
     `<button id="ddopt${i}" role="option" aria-selected="${i===ddActive}" class="ddrow ${i===0?'first':''} ${i===ddActive?'active':''}" onclick="quickAdd(${c.id})" onmousemove="setDDActive(${i})">
       <span class="ddn">${c.kr}${c.aliases.length?`<span class="ddalias">${c.aliases[0]}</span>`:''}</span>
-      <span class="ddm">${CLSKR[c.cls]} · ${lanesOf(c).map(l=>lm[l]).join('/')} · ${hasMeta(c)?wrOf(c).toFixed(1)+'%':'통계 없음'}</span>
+      <span class="ddm">${CLSKR[c.cls]} · ${lanesOf(c).map(l=>lm[l]).join('/')} · ${hasMeta(c)?wrOf(c).toFixed(1)+'%'+(t=>t==null?'':t>=1?' ▲':t<=-1?' ▼':'')(trendOf(c)):'통계 없음'}</span>
     </button>`).join('');
 }
 function setDDActive(i){if(i===ddActive)return;ddActive=i;renderDD();}
