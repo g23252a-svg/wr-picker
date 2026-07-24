@@ -84,12 +84,14 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='5.0.0'"));
+assert.ok(html.includes("const APP_VERSION='5.1.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
 assert.ok(html.includes("const DATA_ENDPOINT="),'data endpoint missing');
 assert.ok(html.includes('id="decisionSummary"'));
+assert.ok(html.includes('상대 칩 이름을 탭하면'),'laner-mark hint missing');
+assert.ok(html.includes('class="chip.marked') || /chip\.marked|chip'\+\(marked/.test(html),'marked chip state missing');
 assert.ok(sw.includes("pathname.includes('/data/')"),'service worker must bypass cache for stat data');
 assert.equal(manifest.id,'./index.html');
 assert.ok(manifest.display_override.includes('standalone'));

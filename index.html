@@ -219,7 +219,18 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .sheet .hd .tt b.en{color:var(--red)}
 .sheethead{display:flex;align-items:center;justify-content:space-between;gap:12px}
 .sheetclose{width:34px;height:34px;border:1px solid var(--line);border-radius:8px;color:var(--dim);font-size:16px}
-.chipname{font:inherit;color:inherit;text-align:left}
+/* 상대 칩 이름은 '내 라인 상대 지정' 버튼이다. 눌러도 되는 요소임을 항상 보이게
+   흐린 🎯를 붙여두고, 지정되면 진해지면서 칩 테두리가 강조된다. */
+.chipname{font:inherit;color:inherit;text-align:left;display:inline-flex;align-items:center;gap:5px;
+  border-bottom:1px dashed var(--dimmer);padding-bottom:1px}
+.chipname .mk{font-size:11px;line-height:1;opacity:.35;transition:.12s}
+.chipname:active{color:var(--gold-soft)}
+.chip.marked{border-color:var(--gold);background:#22203a}
+.chip.marked .chipname{border-bottom-color:var(--gold);color:var(--gold-soft)}
+.chip.marked .chipname .mk{opacity:1}
+.chip.banned{opacity:.55}
+.compread .hintmark{color:var(--gold-soft)}
+[data-theme="light"] .chip.marked{background:#fff6df}
 #banBox{margin-top:8px}
 .sidetog{display:flex;align-items:center;gap:7px}
 .sidetog button{font-family:'Rajdhani';font-weight:700;font-size:13px;letter-spacing:.03em;
@@ -356,7 +367,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v5.0.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v5.1.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -697,8 +708,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='5.0.0';
-const MODEL_VERSION='5.0.0-live-data';
+const APP_VERSION='5.1.0';
+const MODEL_VERSION='5.1.0-live-data';
 const SCHEMA_VERSION=4;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -1071,7 +1082,10 @@ function score(cand){
   // 패치 추세(직전 스냅샷 대비 승률 변화)를 메타 축에 소폭 반영. 표본 신뢰도로 다시 감쇠.
   const trend=metaKnown?trendOf(cand,state.lane):null;
   const momentum=trend!=null?clamp(trend*1.2,-2.5,2.5)*statReliability:0;
-  const cTier=metaKnown?clamp(rawMeta+momentum,28,84):50;
+  // 통계가 없는 역할은 중립 50이 아니라 '평균 승률 + 존재감 0'으로 평가한다(≈48.5).
+  // 50을 주면 측정된 평균 이하 챔피언보다 높게 나와, 데이터가 없는 쪽이 유리해지는
+  // 역전이 생긴다. rawMeta가 이미 metaScore(50,0,0)이므로 분기 없이 그대로 쓴다.
+  const cTier=clamp(rawMeta+momentum,28,84);
   const offRole=!metaKnown;
 
   const allyP=compProfile(state.ally), enemyP=compProfile(state.enemy);
@@ -1240,9 +1254,12 @@ function setLane(k){if(state.lane===k)return;commitDraft(()=>{state.lane=k;state
 function chips(){
   const mk=(ids,side)=>ids.map(id=>{const c=byId[id];if(!c)return '';
     const marked=(side==='enemy'&&state.laneMark===id);
-    const nm=side==='enemy'?`<button class="chipname" onclick="markLaner(${id})" aria-pressed="${marked}" title="내 라인 상대 지정">${marked?'🎯 ':''}${c.kr}</button>`:`<span>${c.kr}</span>`;
-    const st=marked?' style="border-color:#f0b232"':(side==='bans'?' style="opacity:.55"':'');
-    return `<span class="chip"${st}>${nm}<span class="cls">${CLSKR[c.cls]}</span><button class="x" onclick="rmChamp('${side}',${id})" aria-label="${c.kr} 제거">×</button></span>`;}).join('')
+    const nm=side==='enemy'
+      ? `<button class="chipname" onclick="markLaner(${id})" aria-pressed="${marked}" title="내 라인 상대로 지정"
+          aria-label="내 라인 상대로 지정: ${c.kr}"><span class="mk" aria-hidden="true">🎯</span>${c.kr}</button>`
+      : `<span>${c.kr}</span>`;
+    const cls='chip'+(marked?' marked':'')+(side==='bans'?' banned':'');
+    return `<span class="${cls}">${nm}<span class="cls">${CLSKR[c.cls]}</span><button class="x" onclick="rmChamp('${side}',${id})" aria-label="${c.kr} 제거">×</button></span>`;}).join('')
     || `<span style="font-size:11px;color:var(--dimmer)">${side==='bans'?'밴 없음':'픽을 추가하면 정확도가 높아집니다'}</span>`;
   document.getElementById('allyChips').innerHTML=mk(state.ally,'ally');
   document.getElementById('enemyChips').innerHTML=mk(state.enemy,'enemy');
@@ -1295,6 +1312,13 @@ function compReadout(){
       else if(dap-dad>=2)s.push('AP 위주(마저↑)');
     }
     parts.push(s.length?`<span class="warn">상대: ${s.join(', ')}</span>`:`상대 조합 무난`);
+  }
+  // 라인 상대 지정은 상성 계산의 핵심 입력인데 발견하기 어려워, 픽이 들어온 뒤에도
+  // 지정 전까지 안내를 계속 노출한다.
+  if(state.enemy.length){
+    parts.push(state.laneMark!=null
+      ? `<span class="hintmark">🎯 내 라인 상대 <b>${byId[state.laneMark].kr}</b></span>`
+      : `<span class="hintmark">🎯 상대 칩 이름을 탭하면 내 라인 상대를 지정합니다</span>`);
   }
   el.innerHTML=parts.join(' &nbsp;·&nbsp; ');
 }
