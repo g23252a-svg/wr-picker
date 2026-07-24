@@ -1,0 +1,62 @@
+name: Update stats
+
+# WildRiftFire refreshes its China ranked table daily, so pull it on a schedule and
+# commit only when the upstream snapshot actually moves.
+on:
+  schedule:
+    - cron: '20 4 * * *'   # 04:20 UTC ≈ 13:20 KST, after the upstream daily refresh
+  workflow_dispatch:        # manual run from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-stats
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Fetch upstream stats
+        run: |
+          set -o pipefail
+          node scripts/fetch-stats.mjs 2>&1 | tee fetch.log
+          code=${PIPESTATUS[0]}
+          # exit 2 = snapshot written, but some upstream champions are not in the
+          # champion DB yet. Surface it loudly without blocking the data update.
+          if [ "$code" = "2" ]; then
+            echo "::warning title=Unmapped champions::New upstream champions are missing from index.html — see the job log"
+          elif [ "$code" != "0" ]; then
+            exit "$code"
+          fi
+
+      - name: Verify the app still loads the new snapshot
+        run: npm test
+
+      - name: Commit when the snapshot changed
+        run: |
+          if [ -z "$(git status --porcelain)" ]; then
+            echo "no upstream change — nothing to commit"
+            exit 0
+          fi
+          patch=$(node -p "require('./data/latest.json').patch")
+          updated=$(node -p "require('./data/latest.json').updated")
+          {
+            echo "chore(stats): patch ${patch} snapshot ${updated}"
+            echo
+            cat fetch.log
+          } > commit-msg.txt
+          rm -f fetch.log
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data stats.js
+          git commit -F commit-msg.txt
+          rm -f commit-msg.txt
+          git push

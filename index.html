@@ -356,7 +356,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v4.2.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v5.0.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -697,22 +697,27 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='4.2.0';
-const MODEL_VERSION='4.2.0-trend-aware';
+const APP_VERSION='5.0.0';
+const MODEL_VERSION='5.0.0-live-data';
 const SCHEMA_VERSION=4;
-const META_SNAPSHOT=Object.freeze({
-  targetPatch:(window.WR_STATS_META&&window.WR_STATS_META.patch)||'7.2',
-  sourcePatch:(window.WR_STATS_META&&window.WR_STATS_META.patch)||'7.2',
-  capturedAt:(window.WR_STATS_META&&window.WR_STATS_META.capturedAt)||'2026-07-15',
-  region:(window.WR_STATS_META&&window.WR_STATS_META.region)||'CN',
-  bracket:(window.WR_STATS_META&&window.WR_STATS_META.bracket)||'Diamond+',
-  rows:(window.WR_STATS_META&&window.WR_STATS_META.rows)||0,
-  champions:(window.WR_STATS_META&&window.WR_STATS_META.champions)||0,
-  source:(window.WR_STATS_META&&window.WR_STATS_META.source)||'https://www.wildriftfire.com/stats',
-  cadence:(window.WR_STATS_META&&window.WR_STATS_META.cadence)||'daily',
-  prevPatch:(window.WR_STATS_META&&window.WR_STATS_META.prevPatch)||null,
-  prevCapturedAt:(window.WR_STATS_META&&window.WR_STATS_META.prevCapturedAt)||null
-});
+/* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
+   data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
+const DATA_ENDPOINT='./data/latest.json';
+function buildMeta(m){
+  m=m||{};
+  return Object.freeze({
+    targetPatch:m.patch||'7.2',sourcePatch:m.patch||'7.2',
+    capturedAt:m.capturedAt||'2026-07-15',
+    region:m.region||'CN',bracket:m.bracket||'Diamond+',
+    rows:m.rows||0,champions:m.champions||0,
+    source:m.source||'https://www.wildriftfire.com/stats',
+    sourceNote:m.sourceNote||'',
+    cadence:m.cadence||'daily',
+    prevPatch:m.prevPatch||null,prevCapturedAt:m.prevCapturedAt||null,
+    origin:m.origin||'bundled'
+  });
+}
+let META_SNAPSHOT=buildMeta(window.WR_STATS_META);
 const MAX_PICKS={ally:4,enemy:5,ban:10};
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
@@ -937,8 +942,8 @@ function kitOf(c){
 /* ============ SCORING / PATCH 7.2 ROLE STATS ============
  * Stats live in stats.js so the snapshot can be updated independently of the engine.
  * Every role keeps win / pick / ban rate instead of collapsing a champion to one lane. */
-const ROLE_STATS=window.WR_ROLE_STATS||{};
-const ROLE_STATS_PREV=window.WR_ROLE_STATS_PREV||{};
+let ROLE_STATS=window.WR_ROLE_STATS||{};
+let ROLE_STATS_PREV=window.WR_ROLE_STATS_PREV||{};
 const DEFAULT_WR=50;
 function statOf(c,lane=state.lane){return (ROLE_STATS[c.en]&&ROLE_STATS[c.en][lane])||null;}
 // 직전 스냅샷 대비 승률 변화(%p). 양쪽 표본이 어느 정도 있을 때만 신뢰(둘 다 픽률 1% 이상).
@@ -950,7 +955,10 @@ function trendOf(c,lane=state.lane){
 function allStatsOf(c){return ROLE_STATS[c.en]||{};}
 function lanesOf(c){return [...new Set([...c.lanes,...Object.keys(allStatsOf(c))])];}
 function primaryStatOf(c){
-  return Object.entries(allStatsOf(c)).sort((a,b)=>b[1].pick-a[1].pick)[0]||null;
+  const entries=Object.entries(allStatsOf(c));
+  if(!entries.length)return null;
+  // 업스트림이 표시하는 주 라인 플래그가 있으면 그대로 쓰고, 없으면 픽률로 추정한다.
+  return entries.find(([,s])=>s.main)||entries.sort((a,b)=>b[1].pick-a[1].pick)[0];
 }
 function primeLaneOf(c){const p=primaryStatOf(c);return p?p[0]:c.lanes[0];}
 function hasMeta(c,lane=state.lane){return !!statOf(c,lane);}
@@ -980,6 +988,53 @@ function evidenceText(s){
 }
 
 function tierScore(t){return {S:100,A:78,B:58,C:40}[t]||52;}
+
+/* ============ LIVE STAT REFRESH ============
+ * 번들 stats.js는 오프라인 폴백. 앱은 매일 갱신되는 data/latest.json을 우선 적용하고,
+ * 마지막으로 성공한 응답을 캐시해 네트워크가 없어도 최신 스냅샷을 유지한다. */
+let statsBracket='diamond';
+function statsPayloadIsNewer(payload){
+  return !!(payload&&payload.updated&&payload.updated>META_SNAPSHOT.capturedAt);
+}
+function applyStatsPayload(payload,origin){
+  const key=(payload.brackets&&payload.brackets[statsBracket])?statsBracket:'diamond';
+  const bracket=payload.brackets&&payload.brackets[key];
+  if(!bracket||!bracket.stats||!Object.keys(bracket.stats).length)return false;
+  const prev=payload.prev&&payload.prev.brackets&&
+    (payload.prev.brackets[key]||payload.prev.brackets.diamond);
+  ROLE_STATS=bracket.stats;
+  ROLE_STATS_PREV=(prev&&prev.stats)||{};
+  META_SNAPSHOT=buildMeta({
+    patch:payload.patch,capturedAt:payload.updated,region:'CN',
+    bracket:bracket.label||'Diamond+',rows:bracket.rows||0,champions:bracket.champions||0,
+    source:payload.url||META_SNAPSHOT.source,sourceNote:payload.source||'',cadence:'daily',
+    prevPatch:payload.prev?payload.prev.patch:null,
+    prevCapturedAt:payload.prev?payload.prev.updated:null,
+    origin
+  });
+  return true;
+}
+async function refreshStats(){
+  // 1) 캐시된 스냅샷을 먼저 적용해 오프라인에서도 번들보다 최신 상태로 시작한다.
+  try{
+    const cached=await window.storage.get('wr_stats_cache');
+    if(cached&&cached.value){
+      const payload=JSON.parse(cached.value);
+      if(statsPayloadIsNewer(payload)&&applyStatsPayload(payload,'cache'))render();
+    }
+  }catch(e){}
+  // 2) 네트워크에서 최신본을 시도한다. 실패는 조용히 무시(번들/캐시로 계속 동작).
+  try{
+    const res=await fetch(DATA_ENDPOINT,{cache:'no-cache'});
+    if(!res.ok)return;
+    const payload=await res.json();
+    if(!payload||!payload.brackets)return;
+    try{await window.storage.set('wr_stats_cache',JSON.stringify(payload));}catch(e){}
+    if(statsPayloadIsNewer(payload)&&applyStatsPayload(payload,'live')){
+      render();announce('최신 통계로 갱신했습니다');
+    }
+  }catch(e){}
+}
 
 function compProfile(ids){
   const p={tank:0,fighter:0,assassin:0,mage:0,marksman:0,enchanter:0,ap:0,ad:0,engage:0,peel:0,frontline:0};
@@ -1250,7 +1305,8 @@ function renderAppMeta(){
   const status=document.getElementById('dataStatus');
   const age=snapshotAgeDays(), freshness=age<=2?['fresh','최신']:age<=7?['aging',`${age}일 전`]:['stale',`${age}일 전 · 갱신 필요`];
   const prevTxt=META_SNAPSHOT.prevPatch?` · 추세 기준 ${META_SNAPSHOT.prevPatch}(${META_SNAPSHOT.prevCapturedAt})`:'';
-  if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>패치 ${META_SNAPSHOT.targetPatch} · ${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt}${prevTxt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
+  const originTxt=META_SNAPSHOT.origin==='bundled'?' · <span title="네트워크 갱신 전 번들 스냅샷">번들</span>':'';
+  if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>패치 ${META_SNAPSHOT.targetPatch} · ${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt}${prevTxt}${originTxt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
   const legend=document.getElementById('metaLegend');
   if(legend)legend.innerHTML=`<b>승</b> 표본 보정 메타(+패치 추세) + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'} · 픽률은 신뢰도, 밴률은 가용성 위험으로 해석`;
 }
@@ -1619,6 +1675,7 @@ document.addEventListener('keydown',e=>{
   await saveDraft();
   paintAddSide();
   renderDraft();
+  refreshStats();
 })();
 </script>
 </body>
