@@ -367,7 +367,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v5.1.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v6.0.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -708,8 +708,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='5.1.0';
-const MODEL_VERSION='5.1.0-live-data';
+const APP_VERSION='6.0.0';
+const MODEL_VERSION='6.0.0-matchup-engine';
 const SCHEMA_VERSION=4;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -890,7 +890,18 @@ function mxAdv(a,b){ return (MX[a]&&MX[a][b]!=null)?MX[a][b]:0; }
 const PAIR={ // 유명 챔 단위 상성(보수적 선별). 후보→라이너 가점, 역방향 자동 감점
  'Teemo':{'Darius':8,'Garen':7,'Nasus':7,'Tryndamere':6},
  'Mordekaiser':{'Teemo':6},
- 'Malphite':{'Yasuo':6}
+ 'Malphite':{'Yasuo':6},
+ // [v6] 미드 정설 — 기동+매혹 메이지(아리)는 근접 암살자를 역카운터.
+ //  실사용 보고: 탈론이 아리 상대 추천됐다가 라인 삭제(클래스 매트릭스의
+ //  암살자>메이지 +2가 아리류에겐 정반대). 방향 확실한 것만 등재.
+ 'Ahri':{'Talon':6,'Zed':5,'Katarina':6,'Akali':4},
+ 'Fizz':{'Ahri':5},                                    // E 무적으로 매혹 회피
+ 'Galio':{'Ahri':5,'Katarina':6,'Akali':5,'Fizz':4},   // 대AP 개혁가
+ 'Kassadin':{'Syndra':5,'Lux':5,'Vex':4},              // 대AP 후반 (포킹 고통은 별도 감점)
+ // 서폿 정설 — 블랙실드는 그랩류 하드카운터
+ 'Morgana':{'Blitzcrank':7,'Thresh':6,'Nautilus':6,'Leona':5},
+ // 탑 정설 — %체력 트루딜은 방어템 탱커 하드카운터
+ 'Fiora':{'Malphite':5,'Sion':6,'Cho\'Gath':5,'Ornn':4},
 };
 
 /* ============ KIT ATTRIBUTES (스킬 특성 레이어) ============
@@ -904,7 +915,7 @@ const KIT={
  'Rammus':{ptcc:1},'Leona':{ptcc:1,aoecc:1},'Nautilus':{knockup:1,ptcc:1,aoecc:1},'Vi':{knockup:1,ptcc:1,mob:1,engage:1},
  'Lissandra':{aoecc:1,ptcc:1,curve:'mid',knockdown:1},
  // 단일 하드CC (스킬샷/점착 스턴 — 기존 미인식분)
- 'Twisted Fate':{hardcc:1},'Ahri':{hardcc:1,knockdown:1},'Bard':{hardcc:1},'Zoe':{hardcc:1},
+ 'Twisted Fate':{hardcc:1},'Ahri':{hardcc:1,knockdown:1,mob:2},'Bard':{hardcc:1},'Zoe':{hardcc:1},
  // 광역 하드CC (한타/웜바람보)
  'Galio':{knockup:1,aoecc:1,engage:1},'Amumu':{aoecc:1,engage:1,knockdown:1},'Kennen':{aoecc:1,engage:1},
  'Orianna':{aoecc:1},'Sett':{aoecc:1},'Rell':{aoecc:1,engage:1},'Sona':{aoecc:1},
@@ -1140,6 +1151,12 @@ function score(cand){
                || state.enemy.map(id=>byId[id]).find(c=>c && lanesOf(c).includes(state.lane)); // 지정(🎯) > prime > 서브 포지션 폴백
     if(laner){
       const laneK=kitOf(laner); let a=mxAdv(cand.cls,laner.cls)*7;
+      // [v6] 암살자↔물몸 원거리 상성은 상대의 기동·셀프피어에 따라 크게 갈린다.
+      // '암살자>메이지 +2'는 부동 메이지(신드라·직스)에만 참 — 아리(궁 3연속
+      // 이동+매혹)류는 근접 암살자를 역카운터. 도주기·CC 보유량만큼 우위 상쇄.
+      const escK=q=>Math.min(12, (q.mob||0)*4 + (q.hardcc?3:0) + (q.ptcc?4:0) + (q.disengage?3:0));
+      if(cand.cls==='assassin'&&(laner.cls==='mage'||laner.cls==='marksman')) a-=escK(laneK);
+      else if((cand.cls==='mage'||cand.cls==='marksman')&&laner.cls==='assassin') a+=Math.round(escK(k)*0.6);
       if(state.lane!=='jug'){                          // 정글은 지속 라인전이 없어 상성은 스킴/오브젝트 위주
         if(cand.rng==='r'&&laner.rng==='m')a+=5;       // 원거리 라인 우위
         if(cand.rng==='m'&&laner.rng==='r')a-=4;
@@ -1165,7 +1182,11 @@ function score(cand){
       }
       if(lPoke){ // 상대가 포킹/원거리형 → 파고드는 픽이 유리
         if(cand.rng==='m'&&k.curve==='late'){counter-=5;lNeg.push('초반 포킹에 고통');} // 근접 후반형은 포킹 라인전이 지옥(카사딘 등)
-        if(cand.tags.includes('dive')||cand.tags.includes('engage')){nz+=6;lnote.push('파고들어 응징');}
+        // [v6] 기동성 2 이상(아리류)은 파고들어도 못 잡음 — 보너스 대신 감점.
+        if(cand.tags.includes('dive')||cand.tags.includes('engage')){
+          if((laneK.mob||0)<2){nz+=6;lnote.push('파고들어 응징');}
+          else {nz-=3;lnote.push('상대 기동성에 접근 무효(-)');}
+        }
         if(cand.tags.includes('sustain')&&!lAllIn){nz+=3;lnote.push('포킹 버팀');}
         if(cand.rng==='m'&&!cand.tags.includes('dive')&&cand.cls!=='tank'){nz-=4;lnote.push('포킹에 취약(-)');}
       }
