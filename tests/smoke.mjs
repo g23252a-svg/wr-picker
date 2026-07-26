@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='5.1.0'"));
+assert.ok(html.includes("const APP_VERSION='6.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -96,5 +96,19 @@ assert.ok(sw.includes("pathname.includes('/data/')"),'service worker must bypass
 assert.equal(manifest.id,'./index.html');
 assert.ok(manifest.display_override.includes('standalone'));
 for(const asset of ['./index.html','./stats.js','./manifest.webmanifest','./icon.svg'])assert.ok(sw.includes(`'${asset}'`),`service worker missing ${asset}`);
+
+// [v6] 상성 엔진 — 기동 메이지(아리류)의 암살자 역카운터 회귀 방지.
+assert.ok(html.includes('const escK='),'assassin escape-adjust rule missing');
+assert.ok(/'Ahri':\{[^}]*mob:2/.test(html),'Ahri mobility kit missing');
+const pairSrc=html.match(/const PAIR=\{[\s\S]*?\n\};/);
+assert.ok(pairSrc,'PAIR table missing');
+const pair=Function(`return ${pairSrc[0].replace('const PAIR=','').replace(/;$/,'')}`)();
+assert.ok((pair.Ahri||{}).Talon>=4,'Ahri>Talon famous matchup missing');
+// PAIR의 모든 키·상대가 실제 로스터에 존재해야 함 (오타·삭제 챔 방지).
+for(const [a,opps] of Object.entries(pair)){
+  assert.ok(names.includes(a),`PAIR key not in roster: ${a}`);
+  for(const b of Object.keys(opps))assert.ok(names.includes(b),`PAIR opponent not in roster: ${a}>${b}`);
+}
+assert.ok(html.includes('상대 기동성에 접근 무효'),'dive-vs-mobile gating missing');
 
 console.log(`WR Picker smoke tests passed: ${champions.length} champions, ${rows.length} role rows.`);
