@@ -84,13 +84,25 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='6.0.0'"));
+assert.ok(html.includes("const APP_VERSION='6.1.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
 assert.ok(html.includes("const DATA_ENDPOINT="),'data endpoint missing');
 assert.ok(html.includes('id="decisionSummary"'));
 assert.ok(html.includes('상대 칩 이름을 탭하면'),'laner-mark hint missing');
+assert.ok(html.includes('function banSuggestions()'),'ban advice engine missing');
+assert.ok(html.includes('id="banAdvice"'),'ban advice container missing');
+assert.ok(html.includes('id="bracketSel"'),'bracket selector missing');
+assert.ok(html.includes("wr_bracket"),'bracket persistence missing');
+assert.ok(html.includes('payload.prev.brackets[key]')&&!html.includes('payload.prev.brackets.diamond'),
+  'trend baseline must be same-bracket only');
+// v5.2 리뷰에서 확정된 결함의 회귀 가드
+assert.ok(html.includes('function sanitizeStatsPayload('),'remote payload sanitizer missing');
+assert.ok(html.includes('[hidden]{display:none!important}'),'[hidden] must beat author display:flex');
+assert.ok(html.includes('mainIds.has(c.id)'),'ban advice must not suggest banning own mains');
+assert.ok(!/bsel\.innerHTML/.test(html),'bracket selector must be DOM-built, not innerHTML');
+assert.ok(html.includes('data-banid'),'ban advice focus restoration missing');
 assert.ok(html.includes('class="chip.marked') || /chip\.marked|chip'\+\(marked/.test(html),'marked chip state missing');
 assert.ok(sw.includes("pathname.includes('/data/')"),'service worker must bypass cache for stat data');
 assert.equal(manifest.id,'./index.html');

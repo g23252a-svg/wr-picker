@@ -147,6 +147,13 @@ if(!brackets.diamond)throw new Error('Diamond+ bracket missing from payload');
 
 const updated=payload.updated;
 if(!/^\d{4}-\d{2}-\d{2}$/.test(updated||''))throw new Error(`unexpected updated date: ${updated}`);
+// The upstream page is a third party and this script commits unattended, so refuse
+// anything that would end up as markup or a script fragment in the app.
+if(!/^[0-9A-Za-z.]{1,12}$/.test(payload.patch))throw new Error(`unsafe patch label: ${payload.patch}`);
+for(const [key,b] of Object.entries(brackets)){
+  if(!/^[a-z]{3,16}$/.test(key))throw new Error(`unsafe bracket key: ${key}`);
+  if(!/^[A-Za-z0-9+ .\-]{1,24}$/.test(b.label||''))throw new Error(`unsafe bracket label: ${b.label}`);
+}
 
 // Archive this upstream revision, then find the newest strictly-older archive for trends.
 fs.mkdirSync(HISTORY_DIR,{recursive:true});
