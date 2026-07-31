@@ -75,6 +75,24 @@ button:disabled{cursor:not-allowed;opacity:.38}
   padding:9px 16px;border:1px solid;white-space:nowrap}
 .lgw{color:#8be0c0;border-color:#1c4a3a;background:#0e2420}.lgw:active{background:#15362e}
 .lgl-btn{color:#e08b8b;border-color:#4a1c1c;background:#240e0e}.lgl-btn:active{background:#361515}
+.perfrow{flex:1 1 100%;display:flex;align-items:center;gap:7px;flex-wrap:wrap;
+  border-top:1px solid var(--line);margin-top:4px;padding-top:9px}
+.perfrow .pfl{font-family:'Rajdhani';font-weight:700;font-size:12px;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--dim);flex:0 0 auto}
+.pfbtns{display:flex;gap:5px;flex-wrap:wrap}
+.pfbtns button{font-family:'Rajdhani';font-weight:700;font-size:12.5px;border:1px solid var(--line);
+  border-radius:7px;padding:6px 11px;color:var(--dim);background:var(--bg);transition:.1s}
+.pfbtns button.on{border-color:var(--gold);color:#211606;background:var(--gold)}
+.pfbtns button:active{transform:scale(.95)}
+.kdain{width:118px;background:var(--bg);color:var(--ink);border:1px solid var(--line);
+  border-radius:7px;padding:7px 9px;font-size:13px;font-family:inherit}
+.kdain:focus{outline:none;border-color:var(--cyan)}
+.perfrow .pfhint{font-size:10.5px;color:var(--dimmer);flex:1 1 100%;line-height:1.4}
+.perfrow .pfhint b{color:var(--gold-soft)}
+.bd-first{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:#f0b232;
+  border:1px solid #4a3a1e;background:#241c0e;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle}
+[data-theme="light"] .pfbtns button{background:#fff}
+[data-theme="light"] .bd-first{background:#fff6df;color:#7a5200}
 .logbody{padding:14px 15px;overflow-y:auto;max-height:62vh}
 .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:16px}
 .statcard{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
@@ -383,7 +401,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v6.1.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.0.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -464,6 +482,13 @@ button:disabled{cursor:not-allowed;opacity:.38}
     <select class="lgsel" id="myPickSel"></select>
     <button class="lgw" onclick="logMatch(true)">✓ 승리</button>
     <button class="lgl-btn" onclick="logMatch(false)">✗ 패배</button>
+    <div class="perfrow" id="perfRow" role="group" aria-label="내 개인 성과 (선택)">
+      <span class="pfl">내 성과</span>
+      <div class="pfbtns" id="perfBtns"></div>
+      <label class="sr-only" for="kdaInput">KDA (킬/데스/어시)</label>
+      <input class="kdain" id="kdaInput" placeholder="KDA 예: 7/2/9" inputmode="numeric" autocomplete="off">
+      <span class="pfhint">팀운과 무관하게 <b>내 픽이 맞았는지</b>를 학습합니다</span>
+    </div>
   </div>
   <p class="footer-note">통계는 판단 보조 정보이며 승리를 보장하지 않습니다. 중국 서버 Diamond+ 일일 통계를 사용하고 저표본 역할은 보수적으로 보정하며, 직전 스냅샷 대비 추세를 소폭 반영합니다.</p>
 </section>
@@ -728,9 +753,9 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='6.1.0';
-const MODEL_VERSION='6.1.0-bracket-ban';
-const SCHEMA_VERSION=4;
+const APP_VERSION='7.0.0';
+const MODEL_VERSION='7.0.0-personal-perf';
+const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
 const DATA_ENDPOINT='./data/latest.json';
@@ -750,6 +775,10 @@ function buildMeta(m){
 }
 let META_SNAPSHOT=buildMeta(window.WR_STATS_META);
 const MAX_PICKS={ally:4,enemy:5,ban:10};
+/* 처음 잡는 챔의 실행 리스크(점수 감점).
+   목표 기준: 한 번도 안 해본 챔은 "측정 승률이 약 2%p 더 높아야" 익숙한 픽을 이긴다.
+   더 크게 잡으면 현재 챔폭에 갇혀 메타 변화를 못 따라가고, 더 작으면 무의미해진다. */
+const FIRST_PICK_PENALTY=2;
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let undoStack=[],redoStack=[];
@@ -758,14 +787,44 @@ let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:3};
 let matches=[];
 let lastCands=[];
 let famMap={};
-function computeFam(){ famMap={}; matches.forEach(m=>{ if(m.pick==null||!byId[m.pick])return; const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0}); f.n++; if(m.won)f.w++; }); }
+/* 개인 성과 등급. 승패는 팀 단위 결과라 표본이 작을 때 거의 노이즈다.
+   "졌지만 내가 SVP"는 픽이 나에게 맞았다는 강한 증거이므로 승패와 분리해 기록한다. */
+const PERF={
+  mvp:{kr:'MVP',v:1.00,tip:'이긴 팀 최우수'},
+  svp:{kr:'SVP',v:0.72,tip:'진 팀 최우수 — 픽 자체는 통했다'},
+  good:{kr:'잘함',v:0.68,tip:'평균 이상'},
+  ok:{kr:'보통',v:0.50,tip:'평범'},
+  bad:{kr:'부진',v:0.18,tip:'안 맞았다'}
+};
+// 성과 미기록 판은 승패로 대체하되, 확신을 낮게 잡는다(0.5에서 덜 벌어짐).
+function perfValue(m){
+  const p=PERF[m.perf];
+  if(p)return p.v;
+  return m.won?0.68:0.32;
+}
+function computeFam(){
+  famMap={};
+  matches.forEach(m=>{
+    if(m.pick==null||!byId[m.pick])return;
+    const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0,p:0,graded:0});
+    f.n++; if(m.won)f.w++;
+    f.p+=perfValue(m);
+    if(PERF[m.perf])f.graded++;
+  });
+}
+/* 숙련도 = "이 챔으로 내가 실제로 얼마나 잘하는가".
+   판수는 보너스가 아니라 추정의 확신도로만 쓴다. 판수를 가산점으로 주면
+   많이 졌는데도 숙련이 높게 나와(예: 13판 38%가 54점) 손해 보는 픽을 계속 밀게 된다.
+   성과 평균을 쓰므로 팀 탓 패배로 부당하게 깎이지 않는다. */
 function famComfort(id){
   const f=famMap[id]; if(!f||f.n<2)return 0;
-  const posterior=(f.w+2)/(f.n+4);                 // 2승 2패 사전분포로 소표본 과대평가 방지
-  const experience=Math.min(12,4*Math.log1p(f.n)); // 판수 보너스는 최대 +12
-  const performance=(posterior-.5)*24;             // 패배가 많으면 명확히 감점
-  return Math.round(clamp(45+experience+performance,40,75));
+  const prior=2;                                    // 평균 성과(0.5) 2판을 사전분포로
+  const posterior=(f.p+prior*0.5)/(f.n+prior);
+  const shrink=f.n/(f.n+4);                         // 표본이 적으면 50 쪽으로 축소
+  return Math.round(clamp(50+(posterior-.5)*60*shrink,30,75));
 }
+// 이 챔으로 실제로 해본 판수 (첫 픽 위험 판정용)
+function playCount(id){const f=famMap[id];return f?f.n:0;}
 
 /* ============ STORAGE ============ */
 /* window.storage 폴리필: 클로드 밖 일반 브라우저에선 localStorage로 영속화 */
@@ -809,10 +868,13 @@ function migrateMatch(m){
   const top=toStableId(m.top);
   const laneMark=toStableId(m.laneMark);
   const t=Number(m.t)||Date.now();
+  const kda=(m.kda&&['k','d','a'].every(x=>Number.isFinite(Number(m.kda[x]))))
+    ? {k:clamp(Number(m.kda.k),0,99),d:clamp(Number(m.kda.d),0,99),a:clamp(Number(m.kda.a),0,99)} : null;
   return Object.assign({},m,{
     schema:SCHEMA_VERSION,t,lane,pick,top,
     top3:normalizeIdList(m.top3,3),ally:normalizeIdList(m.ally,4),enemy:normalizeIdList(m.enemy,5),
-    laneMark:laneMark!=null?laneMark:null,won:!!m.won
+    laneMark:laneMark!=null?laneMark:null,won:!!m.won,
+    perf:PERF[m.perf]?m.perf:null,kda
   });
 }
 function sanitizeWeights(raw){
@@ -832,6 +894,24 @@ async function saveStore(){
   try{await window.storage.set('wr_pool',JSON.stringify(pool));}catch(e){}
   try{await window.storage.set('wr_weights',JSON.stringify(weights));}catch(e){}
   try{await window.storage.set('wr_schema',String(SCHEMA_VERSION));}catch(e){}
+}
+/* 기록이 하나도 없는 새 기기에서만 시드 전적을 1회 적재한다.
+   기존 기록이 있으면 절대 건드리지 않는다(덮어쓰기 사고 방지). */
+async function seedHistoryIfEmpty(){
+  if(matches.length)return false;
+  try{const flag=await window.storage.get('wr_seeded');if(flag&&flag.value)return false;}catch(e){}
+  try{
+    const res=await fetch('./data/seed-history.json',{cache:'no-cache'});
+    if(!res.ok)return false;
+    const seed=await res.json();
+    if(!seed||!Array.isArray(seed.matches)||!seed.matches.length)return false;
+    matches=seed.matches.map(migrateMatch).filter(Boolean);
+    if(!Object.keys(pool).length&&seed.pool)pool=migratePool(seed.pool);
+    computeFam();
+    await Promise.all([saveMatches(),saveStore()]);
+    try{await window.storage.set('wr_seeded','1');}catch(e){}
+    return true;
+  }catch(e){return false;}
 }
 async function loadMatches(){
   try{const m=await window.storage.get('wr_matches');if(m&&m.value)matches=(JSON.parse(m.value)||[]).map(migrateMatch).filter(Boolean);}catch(e){matches=[];}
@@ -1407,21 +1487,31 @@ function score(cand){
     if(enemyP.ad-enemyP.ap>=2 && cand.cls==='tank'){counter+=3;}
   }
 
-  const cw = (weights.recMode==='meta') ? 0 : W.comfort;
+  /* 메타 중심 모드에서도 숙련을 완전히 0으로 두지 않는다.
+     실측: 처음 잡는 챔은 2~3판째보다 승률이 크게 낮다. 숙련을 0으로 두면
+     엔진이 매판 새 챔을 추천해 이 손해를 사용자에게 그대로 떠넘긴다.
+     메타가 여전히 주도하되(35%), 손에 익은 픽이 동점을 깨도록 한다. */
+  const cw = (weights.recMode==='meta') ? W.comfort*0.35 : W.comfort;
+  // 첫 픽 위험: 한 번도 해본 적 없고 챔폭에도 없는 챔은 실전 리스크를 반영한다.
+  const games=playCount(cand.id);
+  const firstPick = games===0 && !manualC;
+  const familiarity = firstPick ? -FIRST_PICK_PENALTY : 0;
   const teamAxis=clamp(50+team,0,100);
   const counterAxis=clamp(50+counter,0,100);
   const tierW=W.tier;
   const teamW=state.ally.length?W.team:0;
   const counterW=state.enemy.length?W.counter:0;
   const denom=cw+tierW+teamW+counterW;
-  const total=denom?((base*cw)+(cTier*tierW)+(teamAxis*teamW)+(counterAxis*counterW))/denom:50;
+  const weighted=denom?((base*cw)+(cTier*tierW)+(teamAxis*teamW)+(counterAxis*counterW))/denom:50;
+  // 첫 픽 감점은 가중평균 밖에서 적용한다(축이 아니라 실행 리스크이므로).
+  const total=clamp(weighted+familiarity,0,100);
   const dataAge=snapshotAgeDays();
   let confidence=(metaKnown?Math.round(40+statReliability*28):25)+(offRole?-4:4);
   confidence+=Math.min(12,state.ally.length*3)+Math.min(20,state.enemy.length*4);
   if(state.laneMark!=null)confidence+=10; else if(laner)confidence+=4;
   if(dataAge>3)confidence-=Math.min(20,(dataAge-3)*2);
   confidence=Math.round(clamp(confidence,25,95));
-  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence};
+  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence,games,firstPick,familiarity};
 }
 
 function anyOwned(){ return Object.values(pool).some(p=>p&&p.comfort>0); }
@@ -1590,7 +1680,11 @@ function render(){
     // mastery badge only meaningful in weighted mode with a pool set
     if(s.offRole) badge+=`<span class="bd-role">통계 없음</span>`;
     const fm=famMap[c.id];
-    if(fm) badge+=`<span class="bd-fam">★내챔 ${fm.n}판 ${fm.w}승</span>`;
+    if(fm){
+      const g=fm.graded?` · 성과 ${Math.round(fm.p/fm.n*100)}`:'';
+      badge+=`<span class="bd-fam">★내챔 ${fm.n}판 ${fm.w}승${g}</span>`;
+    }
+    else if(s.firstPick) badge+=`<span class="bd-first">첫 픽</span>`;
     if(mode==='weighted'){
       if(pool[c.id]&&pool[c.id].comfort>0){ if(s.comfort>=70) badge+=`<span class="bd-main">주력</span>`; }
       else if(s.comfortAuto) badge+=`<span class="bd-main">자동숙련</span>`;
@@ -1761,9 +1855,28 @@ function renderLogBar(){
   const laneIds=new Set(DB.filter(c=>lanesOf(c).includes(state.lane)).map(c=>c.id));
   const laneC=DB.filter(c=>laneIds.has(c.id)).sort((a,b)=>a.kr.localeCompare(b.kr,'ko'));
   const restC=DB.filter(c=>!laneIds.has(c.id)).sort((a,b)=>a.kr.localeCompare(b.kr,'ko'));
-  const opt=c=>`<option value="${c.id}" ${c.id===topId?'selected':''}>${c.kr}</option>`;
+  const opt=c=>{const f=famMap[c.id];
+    return `<option value="${c.id}" ${c.id===topId?'selected':''}>${c.kr}${f?` (${f.n}판)`:''}</option>`;};
   sel.innerHTML=`<optgroup label="이 라인 (${LANEKR[state.lane]})">${laneC.map(opt).join('')}</optgroup>`
     +`<optgroup label="기타 챔">${restC.map(opt).join('')}</optgroup>`;
+  paintPerf();
+}
+let pendingPerf=null;
+function setPerf(k){
+  pendingPerf=(pendingPerf===k)?null:k;
+  paintPerf();
+  if(pendingPerf)announce(PERF[pendingPerf].kr+' 선택됨');
+}
+function paintPerf(){
+  const box=document.getElementById('perfBtns'); if(!box)return;
+  box.innerHTML=Object.entries(PERF).map(([k,p])=>
+    `<button class="${pendingPerf===k?'on':''}" aria-pressed="${pendingPerf===k}" title="${p.tip}"
+      onclick="setPerf('${k}')">${p.kr}</button>`).join('');
+}
+// "7/2/9", "7 2 9", "7-2-9" 모두 허용
+function parseKDA(raw){
+  const m=String(raw||'').match(/(\d{1,2})\D+(\d{1,2})\D+(\d{1,2})/);
+  return m?{k:+m[1],d:+m[2],a:+m[3]}:null;
 }
 function logMatch(won){
   const sel=document.getElementById('myPickSel');
@@ -1778,9 +1891,13 @@ function logMatch(won){
   const chosen=lastCands.find(o=>o.c.id===pickId);
   matches.push({schema:SCHEMA_VERSION,t:Date.now(),patch:META_SNAPSHOT.targetPatch,sourcePatch:META_SNAPSHOT.sourcePatch,modelVersion:MODEL_VERSION,
     lane:state.lane,laneMark:state.laneMark,ally:state.ally.slice(),enemy:state.enemy.slice(),pick:pickId,top:topId,
-    top3:lastCands.slice(0,3).map(o=>o.c.id),scoreSnapshot:chosen?{total:Math.round(chosen.s.total),meta:Math.round(chosen.s.cTier),team:Math.round(chosen.s.teamAxis),counter:Math.round(chosen.s.counterAxis),comfort:Math.round(chosen.s.base),confidence:chosen.s.confidence}:null,won:!!won});
+    top3:lastCands.slice(0,3).map(o=>o.c.id),scoreSnapshot:chosen?{total:Math.round(chosen.s.total),meta:Math.round(chosen.s.cTier),team:Math.round(chosen.s.teamAxis),counter:Math.round(chosen.s.counterAxis),comfort:Math.round(chosen.s.base),confidence:chosen.s.confidence}:null,won:!!won,
+    perf:pendingPerf,kda:parseKDA(document.getElementById('kdaInput')&&document.getElementById('kdaInput').value)});
+  const perfLabel=pendingPerf?' · '+PERF[pendingPerf].kr:'';
+  pendingPerf=null;
+  const kin=document.getElementById('kdaInput'); if(kin)kin.value='';
   saveMatches(); computeFam(); render();
-  toast(won?`기록 완료: ${champName(pickId)} 승 ✓`:`기록 완료: ${champName(pickId)} 패 ✗`);
+  toast((won?`기록 완료: ${champName(pickId)} 승 ✓`:`기록 완료: ${champName(pickId)} 패 ✗`)+perfLabel);
 }
 function openLog(){renderLog();openSheet('logScrim');}
 function closeLog(){closeSheet('logScrim');}
@@ -1804,19 +1921,47 @@ function renderLog(){
   const laneRows=Object.entries(byLn).sort((a,b)=>b[1].n-a[1].n).map(([L,r])=>
     `<div class="champrow"><span class="nm">${LANEKR[L]} <span style="color:var(--dim)">${r.n}판</span></span>`
     +`<span class="rec2 ${r.w/r.n>=0.5?'win':'loss'}">${r.w}승 ${r.n-r.w}패${r.fn?` · 추종 ${r.fw}-${r.fn-r.fw}`:''}</span></div>`).join('');
-  // 챔별
+  // 챔별 (성과 평균 포함 — 승패보다 표본 효율이 좋다)
   const byCh={};
-  matches.forEach(m=>{const k=m.pick; if(!byCh[k])byCh[k]={w:0,n:0}; byCh[k].n++; if(m.won)byCh[k].w++;});
+  matches.forEach(m=>{const k=m.pick; if(!byCh[k])byCh[k]={w:0,n:0,p:0,g:0}; const r=byCh[k];
+    r.n++; if(m.won)r.w++; r.p+=perfValue(m); if(PERF[m.perf])r.g++;});
   const champRows=Object.entries(byCh).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>
-    `<div class="champrow"><span class="nm">${champName(+id)} <span style="color:var(--dim)">${r.n}판</span></span>`
+    `<div class="champrow"><span class="nm">${champName(+id)} <span style="color:var(--dim)">${r.n}판${r.g?` · 성과 ${Math.round(r.p/r.n*100)}`:''}</span></span>`
     +`<span class="rec2 ${r.w/r.n>=0.5?'win':'loss'}">${r.w}승 ${r.n-r.w}패 · ${pct(r.w,r.n)}%</span></div>`).join('');
+
+  /* ── 경험도별: 처음 잡는 챔이 실제로 얼마나 손해인지 (사후편향 없이 그 시점 기준) ── */
+  const chron=matches.slice().sort((a,b)=>a.t-b.t);
+  const seenN={}, expB={first:{n:0,w:0},early:{n:0,w:0},known:{n:0,w:0}};
+  chron.forEach(m=>{const c=seenN[m.pick]||0;
+    const b=c===0?expB.first:c<3?expB.early:expB.known; b.n++; if(m.won)b.w++;
+    seenN[m.pick]=c+1;});
+  const expRow=(lbl,b)=>b.n?`<div class="champrow"><span class="nm">${lbl} <span style="color:var(--dim)">${b.n}판</span></span>`
+    +`<span class="rec2 ${b.w/b.n>=0.5?'win':'loss'}">${pct(b.w,b.n)}%</span></div>`:'';
+  const expRows=expRow('처음 잡는 챔',expB.first)+expRow('2~3판째',expB.early)+expRow('4판째 이상',expB.known);
+
+  /* ── 엔진 버전별: "패치 후 나빠졌나"를 인상이 아니라 데이터로 확인 ── */
+  const byVer={};
+  chron.forEach(m=>{const k=m.modelVersion||'(초기)'; if(!byVer[k])byVer[k]={n:0,w:0,first:m.t};
+    byVer[k].n++; if(m.won)byVer[k].w++;});
+  const verRows=Object.entries(byVer).sort((a,b)=>a[1].first-b[1].first).map(([k,r])=>
+    `<div class="champrow"><span class="nm">${k} <span style="color:var(--dim)">${r.n}판</span></span>`
+    +`<span class="rec2 ${r.w/r.n>=0.5?'win':'loss'}">${pct(r.w,r.n)}%</span></div>`).join('');
+
+  /* ── 챔폭 건강검진: 등록해뒀지만 실제로는 지고 있는 챔 ── */
+  const stale=Object.entries(byCh).filter(([id,r])=>r.n>=4&&r.w/r.n<0.45&&pool[+id]&&pool[+id].comfort>0)
+    .sort((a,b)=>a[1].w/a[1].n-b[1].w/b[1].n);
+  const staleBox=stale.length?`<div class="logsec">챔폭 점검</div>`+stale.map(([id,r])=>
+    `<div class="champrow"><span class="nm">${champName(+id)} <span style="color:var(--dim)">${r.n}판</span></span>`
+    +`<span class="rec2 loss">${pct(r.w,r.n)}% · 숙련 내리기 권장</span></div>`).join(''):'';
   // 최근 기록
   const recent=matches.slice().sort((a,b)=>b.t-a.t).slice(0,30).map(m=>{
     const d=new Date(m.t), md=`${d.getMonth()+1}/${d.getDate()}`;
     const cl=clsOf(m);
+    const pf=PERF[m.perf]?` <span style="color:var(--gold-soft);font-size:11px">${PERF[m.perf].kr}</span>`:'';
+    const kd=m.kda?` · ${m.kda.k}/${m.kda.d}/${m.kda.a}`:'';
     return `<div class="mrow"><span class="res ${m.won?'win':'loss'}">${m.won?'승':'패'}</span>`
-      +`<span class="info"><div class="l1">${LANEKR[m.lane]} · <b>${champName(m.pick)}</b>${cl==='f'?' <span style="color:var(--cyan);font-size:11px">★추천</span>':cl==='t3'?' <span style="color:var(--dim);font-size:11px">☆톱3</span>':''}</div>`
-      +`<div class="l2">${md} · vs ${m.enemy.length?m.enemy.map(champName).join(', '):'(상대 미입력)'}</div></span>`
+      +`<span class="info"><div class="l1">${LANEKR[m.lane]} · <b>${champName(m.pick)}</b>${pf}${cl==='f'?' <span style="color:var(--cyan);font-size:11px">★추천</span>':cl==='t3'?' <span style="color:var(--dim);font-size:11px">☆톱3</span>':''}</div>`
+      +`<div class="l2">${md}${kd} · vs ${m.enemy.length?m.enemy.map(champName).join(', '):'(상대 미입력)'}</div></span>`
       +`<button class="del" onclick="delMatch(${m.t})" aria-label="${champName(m.pick)} ${md} 기록 삭제">✕</button></div>`;
   }).join('');
   body.innerHTML=
@@ -1827,8 +1972,16 @@ function renderLog(){
       <div class="statcard"><div class="k">톱3 내 픽</div><div class="v ${pct(tw,t3m.length)>=50?'win':'loss'}">${pct(tw,t3m.length)}<small>% (${t3m.length}판)</small></div></div>
       <div class="statcard"><div class="k">이탈 픽</div><div class="v ${pct(ow,off.length)>=50?'win':'loss'}">${pct(ow,off.length)}<small>% (${off.length}판)</small></div></div>
       <div class="statcard"><div class="k">최근 10판</div><div class="v ${pct(r10w,r10.length)>=50?'win':'loss'}">${pct(r10w,r10.length)}<small>% (${r10.length}판)</small></div></div>
+      ${(()=>{const g=matches.filter(m=>PERF[m.perf]);
+        if(!g.length)return `<div class="statcard" style="grid-column:1/-1"><div class="k">내 성과 기록</div><div class="v" style="font-size:13px;font-weight:600;color:var(--dim);line-height:1.5">아직 없음 — 기록할 때 <b style="color:var(--gold-soft)">MVP·SVP</b>를 같이 눌러두면<br>팀운과 분리해서 내 픽이 맞았는지 학습합니다</div></div>`;
+        const carry=g.filter(m=>!m.won&&(m.perf==='svp'||m.perf==='mvp')).length;
+        return `<div class="statcard"><div class="k">평균 성과</div><div class="v">${Math.round(g.reduce((a,m)=>a+perfValue(m),0)/g.length*100)}<small>/100 (${g.length}판)</small></div></div>`
+          +`<div class="statcard"><div class="k">졌지만 내가 최우수</div><div class="v">${carry}<small>판</small></div></div>`;})()}
     </div>
+    <div class="logsec">챔피언 경험도별 <span style="color:var(--dimmer);font-weight:500;text-transform:none">— 처음 잡는 챔의 실제 손해</span></div>${expRows}
     <div class="logsec">라인별</div>${laneRows}
+    ${staleBox}
+    <div class="logsec">엔진 버전별 <span style="color:var(--dimmer);font-weight:500;text-transform:none">— 10판 미만은 참고만</span></div>${verRows}
     <div class="logsec">챔별 승률</div>${champRows}
     <div class="logsec">최근 기록</div>${recent}
     <div class="logclear"><button onclick="exportData()" style="border-color:var(--cyan);color:var(--cyan)">백업(내보내기)</button> <button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(가져오기)</button> <button onclick="clearMatches()">전적 전체 삭제</button></div>`;
@@ -1897,12 +2050,14 @@ document.addEventListener('keydown',e=>{
   setupPWA();
   await loadStore();
   await loadMatches();
+  const seeded=await seedHistoryIfEmpty();
   await loadDraft();
   await saveStore();
   await saveMatches();
   await saveDraft();
   paintAddSide();
   renderDraft();
+  if(seeded)toast(`전적 ${matches.length}판을 불러왔습니다`);
   refreshStats();
 })();
 </script>

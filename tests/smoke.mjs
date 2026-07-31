@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='6.1.0'"));
+assert.ok(html.includes("const APP_VERSION='7.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -108,6 +108,19 @@ assert.ok(sw.includes("pathname.includes('/data/')"),'service worker must bypass
 assert.equal(manifest.id,'./index.html');
 assert.ok(manifest.display_override.includes('standalone'));
 for(const asset of ['./index.html','./stats.js','./manifest.webmanifest','./icon.svg'])assert.ok(sw.includes(`'${asset}'`),`service worker missing ${asset}`);
+
+// [v7] 개인 성과 학습 — 승패 단독 학습으로 되돌아가지 않도록 고정.
+assert.ok(html.includes('const PERF='),'performance grade table missing');
+assert.ok(html.includes('function perfValue('),'performance value fn missing');
+assert.ok(/svp:\{[^}]*v:0\.\d+/.test(html),'SVP grade missing');
+assert.ok(html.includes('function playCount('),'play count fn missing');
+assert.ok(html.includes('id="perfBtns"'),'performance buttons missing');
+assert.ok(html.includes('function parseKDA('),'KDA parser missing');
+assert.ok(html.includes('const SCHEMA_VERSION=5'),'schema must be bumped for perf/kda');
+// 메타 모드가 숙련을 완전히 0으로 만들면 매판 새 챔을 추천하게 된다(챔 churn 회귀).
+assert.ok(!/recMode==='meta'\)\s*\?\s*0\s*:/.test(html),'meta mode must not zero out mastery weight');
+assert.ok(/recMode==='meta'\)\s*\?\s*W\.comfort\*/.test(html),'meta mode comfort floor missing');
+assert.ok(html.includes('FIRST_PICK_PENALTY'),'first-pick risk missing');
 
 // [v6] 상성 엔진 — 기동 메이지(아리류)의 암살자 역카운터 회귀 방지.
 assert.ok(html.includes('const escK='),'assassin escape-adjust rule missing');
