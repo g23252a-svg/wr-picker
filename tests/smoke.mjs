@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='7.0.0'"));
+assert.ok(html.includes("const APP_VERSION='7.1.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -121,6 +121,13 @@ assert.ok(html.includes('const SCHEMA_VERSION=5'),'schema must be bumped for per
 assert.ok(!/recMode==='meta'\)\s*\?\s*0\s*:/.test(html),'meta mode must not zero out mastery weight');
 assert.ok(/recMode==='meta'\)\s*\?\s*W\.comfort\*/.test(html),'meta mode comfort floor missing');
 assert.ok(html.includes('FIRST_PICK_PENALTY'),'first-pick risk missing');
+// 분석 탭 — 소표본 오진을 막는 유의성 판정이 핵심이므로 고정한다.
+assert.ok(html.includes('function analysisModel()'),'analysis model missing');
+assert.ok(html.includes('function renderAnalysis()'),'analysis renderer missing');
+assert.ok(html.includes('function binomAtMost('),'significance test missing');
+assert.ok(html.includes('id="tabAna"')&&html.includes('id="tabRec"'),'log tabs missing');
+assert.ok(html.includes('MIN_BUCKET'),'small-sample gating missing');
+assert.ok(!/expRows|staleBox|seenN/.test(html),'dead analysis code left in records tab');
 
 // [v6] 상성 엔진 — 기동 메이지(아리류)의 암살자 역카운터 회귀 방지.
 assert.ok(html.includes('const escK='),'assassin escape-adjust rule missing');

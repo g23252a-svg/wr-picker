@@ -93,6 +93,42 @@ button:disabled{cursor:not-allowed;opacity:.38}
   border:1px solid #4a3a1e;background:#241c0e;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle}
 [data-theme="light"] .pfbtns button{background:#fff}
 [data-theme="light"] .bd-first{background:#fff6df;color:#7a5200}
+.logtabs{display:flex;gap:6px;padding:10px 15px 0;border-bottom:1px solid var(--line)}
+.logtabs button{font-family:'Rajdhani';font-weight:700;font-size:13.5px;letter-spacing:.04em;
+  border:1px solid var(--line);border-bottom:none;border-radius:8px 8px 0 0;padding:8px 18px;
+  color:var(--dim);background:var(--bg);position:relative;top:1px}
+.logtabs button[aria-selected="true"]{color:var(--cyan);border-color:var(--line);background:var(--panel2);
+  box-shadow:inset 0 2px 0 var(--cyan)}
+/* 분석 카드 */
+.dx{border:1px solid var(--line);background:var(--bg);border-radius:11px;padding:12px 13px;margin-bottom:10px}
+.dx .dxh{display:flex;align-items:baseline;justify-content:space-between;gap:8px;margin-bottom:8px}
+.dx .dxt{font-family:'Rajdhani';font-weight:700;font-size:13.5px;letter-spacing:.03em;color:var(--ink)}
+.dx .dxn{font-size:10.5px;color:var(--dimmer);font-family:'Rajdhani';font-weight:600}
+.dx .dxs{font-size:11.5px;color:var(--dim);line-height:1.55;margin-top:7px}
+.dx .dxs b{color:var(--gold-soft);font-weight:600}
+.bar{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px}
+.bar .bl{flex:0 0 92px;color:var(--dim);font-size:11.5px}
+.bar .bt{flex:1;height:16px;background:var(--panel);border-radius:4px;overflow:hidden;position:relative;min-width:40px}
+.bar .bf{height:100%;background:linear-gradient(90deg,var(--cyan),var(--cyan-soft));border-radius:4px}
+.bar .bf.lo{background:linear-gradient(90deg,#a4444b,#d65a5a)}
+.bar .bf.mid{background:linear-gradient(90deg,#8a7330,var(--gold))}
+.bar .bv{flex:0 0 76px;text-align:right;font-family:'Rajdhani';font-weight:700;font-size:12.5px}
+.bar .bv small{color:var(--dimmer);font-weight:600;font-size:10px;margin-left:3px}
+.bar.weak .bl,.bar.weak .bv{opacity:.5}
+.spark{display:flex;align-items:flex-end;gap:3px;height:52px;margin:8px 0 4px}
+.spark div{flex:1;background:var(--cyan);border-radius:2px 2px 0 0;min-height:3px;position:relative}
+.spark div.lo{background:var(--red)}
+.spark div.hi{background:var(--green)}
+.sparkx{display:flex;justify-content:space-between;font-size:9.5px;color:var(--dimmer)}
+.verdict{border-radius:9px;padding:10px 12px;margin-bottom:11px;font-size:12px;line-height:1.6}
+.verdict.calm{border:1px solid #31513f;background:#11251c;color:#b9e8cd}
+.verdict.warn{border:1px solid #5b4a1e;background:#241d0e;color:#f0d9a0}
+.verdict b{color:#fff}
+[data-theme="light"] .verdict.calm{background:#eaf8ef;color:#1c5c3c;border-color:#a8d9c3}
+[data-theme="light"] .verdict.warn{background:#fff6df;color:#6e5320;border-color:#e9ce91}
+[data-theme="light"] .verdict b{color:#111}
+[data-theme="light"] .logtabs button{background:#eef2f6}
+[data-theme="light"] .logtabs button[aria-selected="true"]{background:#fff}
 .logbody{padding:14px 15px;overflow-y:auto;max-height:62vh}
 .statgrid{display:grid;grid-template-columns:1fr 1fr;gap:9px;margin-bottom:16px}
 .statcard{background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
@@ -401,7 +437,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.0.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.1.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -497,8 +533,12 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <!-- match record sheet -->
 <div class="scrim" id="logScrim" role="presentation" aria-hidden="true">
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="logTitle" tabindex="-1">
-    <div class="hd sheethead"><div class="tt" id="logTitle">전적 · <b>기록 & 통계</b></div><button class="sheetclose" onclick="closeLog()" aria-label="전적 창 닫기">✕</button></div>
-    <div class="logbody" id="logBody"></div>
+    <div class="hd sheethead"><div class="tt" id="logTitle">전적 · <b>기록 & 분석</b></div><button class="sheetclose" onclick="closeLog()" aria-label="전적 창 닫기">✕</button></div>
+    <div class="logtabs" role="tablist" aria-label="전적 보기">
+      <button role="tab" id="tabRec" aria-selected="true" aria-controls="logBody" onclick="setLogTab('rec')">기록</button>
+      <button role="tab" id="tabAna" aria-selected="false" aria-controls="logBody" onclick="setLogTab('ana')">분석</button>
+    </div>
+    <div class="logbody" id="logBody" role="tabpanel" aria-labelledby="tabRec"></div>
     <div class="ft"><button onclick="closeLog()">닫기</button></div>
   </div>
 </div>
@@ -753,8 +793,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='7.0.0';
-const MODEL_VERSION='7.0.0-personal-perf';
+const APP_VERSION='7.1.0';
+const MODEL_VERSION='7.1.0-personal-perf';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -1899,10 +1939,196 @@ function logMatch(won){
   saveMatches(); computeFam(); render();
   toast((won?`기록 완료: ${champName(pickId)} 승 ✓`:`기록 완료: ${champName(pickId)} 패 ✗`)+perfLabel);
 }
+/* ============ 분석 ============
+ * 원칙: 표본을 항상 같이 보여주고, 작은 표본으로 단정하지 않는다.
+ * 승패는 팀 단위 노이즈가 크므로 "정상 변동인지"를 먼저 판정한다. */
+const MIN_BUCKET=8;                       // 이 미만은 '표본 부족'으로 표시만
+// 받침 유무에 따라 목적격 조사를 고른다 (원딜'을' / 미드'를')
+const hasBatchim=s=>{const c=s.charCodeAt(s.length-1);return c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28!==0;};
+const objP=s=>s+(hasBatchim(s)?'을':'를');
+function binomAtMost(k,n,p){              // P(X ≤ k), 이항분포
+  let s=0,c=1;
+  for(let i=0;i<=k;i++){ if(i>0)c=c*(n-i+1)/i; s+=c*Math.pow(p,i)*Math.pow(1-p,n-i); }
+  return Math.min(1,s);
+}
+function barRow(label,w,n,{weak=false,note=''}={}){
+  const r=n?w/n:0, p=Math.round(r*100);
+  const cls=n<MIN_BUCKET?'':(r>=0.55?'':r<0.45?'lo':'mid');
+  return `<div class="bar ${n<MIN_BUCKET||weak?'weak':''}">
+    <span class="bl">${label}</span>
+    <span class="bt"><span class="bf ${cls}" style="width:${Math.max(2,p)}%"></span></span>
+    <span class="bv">${n?p+'%':'—'}<small>${n}판${note?' '+note:''}</small></span></div>`;
+}
+function analysisModel(){
+  const M=matches.slice().sort((a,b)=>a.t-b.t);
+  const n=M.length, w=M.filter(m=>m.won).length, base=n?w/n:0.5;
+  const out={n,w,base,notes:[],insights:[]};
+  if(!n)return out;
+
+  // 최근 폼: 10판 블록 + 최근 10판이 통계적으로 유의한 부진인지
+  out.blocks=[];
+  for(let i=0;i<n;i+=10){const c=M.slice(i,i+10);if(c.length<4)continue;
+    out.blocks.push({from:i+1,to:i+c.length,n:c.length,w:c.filter(m=>m.won).length});}
+  const last10=M.slice(-10), l10w=last10.filter(m=>m.won).length;
+  out.last10={n:last10.length,w:l10w};
+  // 전체 평균 대비 최근 10판이 나올 확률 (한쪽 꼬리)
+  out.last10P=last10.length>=10?binomAtMost(l10w,last10.length,Math.max(0.35,Math.min(0.65,base))):null;
+
+  // 입력 성실도
+  out.input=[['상대 4-5명',m=>(m.enemy||[]).length>=4],['상대 2-3명',m=>{const e=(m.enemy||[]).length;return e>=2&&e<=3;}],
+             ['상대 0-1명',m=>(m.enemy||[]).length<=1]].map(([k,f])=>{
+    const g=M.filter(f);return {k,n:g.length,w:g.filter(m=>m.won).length};});
+
+  // 챔피언 경험도 (그 시점 기준 — 사후편향 없음)
+  const seen={};const exp={first:{n:0,w:0},early:{n:0,w:0},known:{n:0,w:0}};
+  M.forEach(m=>{const c=seen[m.pick]||0;const b=c===0?exp.first:c<3?exp.early:exp.known;
+    b.n++;if(m.won)b.w++;seen[m.pick]=c+1;});
+  out.exp=exp;
+
+  // 라인 집중도
+  const ln={};
+  M.forEach(m=>{const r=ln[m.lane]=ln[m.lane]||{n:0,w:0,ch:new Set()};r.n++;if(m.won)r.w++;r.ch.add(m.pick);});
+  out.lanes=Object.entries(ln).map(([k,v])=>({k,n:v.n,w:v.w,ch:v.ch.size})).sort((a,b)=>b.n-a.n);
+
+  // 하루 N판째 (피로)
+  const byDay={};
+  M.forEach(m=>{const d=new Date(m.t),k=`${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;(byDay[k]=byDay[k]||[]).push(m);});
+  const ord={'1–2판째':{n:0,w:0},'3–4판째':{n:0,w:0},'5–6판째':{n:0,w:0},'7판째 이후':{n:0,w:0}};
+  Object.values(byDay).forEach(list=>list.sort((a,b)=>a.t-b.t).forEach((m,i)=>{
+    const b=ord[i<2?'1–2판째':i<4?'3–4판째':i<6?'5–6판째':'7판째 이후'];b.n++;if(m.won)b.w++;}));
+  out.daily=ord;
+
+  // 성과(MVP/SVP) 기록분
+  const graded=M.filter(m=>PERF[m.perf]);
+  out.perf={n:graded.length,avg:graded.length?graded.reduce((a,m)=>a+perfValue(m),0)/graded.length:0,
+    carried:graded.filter(m=>!m.won&&(m.perf==='svp'||m.perf==='mvp')).length,
+    threw:graded.filter(m=>m.won&&m.perf==='bad').length};
+
+  // 챔별 (3판 이상)
+  const ch={};
+  M.forEach(m=>{const r=ch[m.pick]=ch[m.pick]||{n:0,w:0};r.n++;if(m.won)r.w++;});
+  out.champs=Object.entries(ch).map(([id,v])=>({id:+id,...v})).filter(c=>c.n>=3).sort((a,b)=>b.n-a.n);
+  out.oneOff=Object.values(ch).filter(c=>c.n===1);
+
+  /* ── 실행 가능한 인사이트: 표본이 충분하고 차이가 큰 것만 ── */
+  const ins=out.insights;
+  const inp4=out.input.find(x=>x.k==='상대 4-5명'), inpLow=out.input.find(x=>x.k==='상대 0-1명');
+  if(inp4&&inpLow&&inp4.n>=MIN_BUCKET&&inpLow.n>=5){
+    const gap=(inp4.w/inp4.n-inpLow.w/inpLow.n)*100;
+    if(gap>=12)ins.push({t:'상대 픽을 끝까지 입력하세요',
+      d:`상대를 4명 이상 넣은 판 <b>${Math.round(inp4.w/inp4.n*100)}%</b> vs 거의 안 넣은 판 <b>${Math.round(inpLow.w/inpLow.n*100)}%</b>. 정보를 넣을수록 추천 정확도가 올라갑니다.`});
+  }
+  if(exp.first.n>=MIN_BUCKET&&exp.early.n>=MIN_BUCKET){
+    const gap=(exp.early.w/exp.early.n-exp.first.w/exp.first.n)*100;
+    if(gap>=10)ins.push({t:'처음 잡는 챔을 줄이세요',
+      d:`처음 잡는 챔 <b>${Math.round(exp.first.w/exp.first.n*100)}%</b> vs 2~3판째 <b>${Math.round(exp.early.w/exp.early.n*100)}%</b>. 새 챔은 한 번에 하나씩만 늘리는 편이 유리합니다.`});
+  }
+  const big=out.lanes.filter(l=>l.n>=MIN_BUCKET);
+  if(big.length>=2){
+    const best=big.reduce((a,b)=>a.w/a.n>b.w/b.n?a:b), worst=big.reduce((a,b)=>a.w/a.n<b.w/b.n?a:b);
+    if((best.w/best.n-worst.w/worst.n)*100>=15)ins.push({t:`${LANEKR[best.k]}에 집중하고 ${objP(LANEKR[worst.k])} 줄이세요`,
+      d:`${LANEKR[best.k]} <b>${Math.round(best.w/best.n*100)}%</b>(${best.n}판) vs ${LANEKR[worst.k]} <b>${Math.round(worst.w/worst.n*100)}%</b>(${worst.n}판).`});
+  }
+  const late=out.daily['7판째 이후'], early2=out.daily['1–2판째'];
+  if(late.n>=MIN_BUCKET&&early2.n>=MIN_BUCKET&&(early2.w/early2.n-late.w/late.n)*100>=12)
+    ins.push({t:'하루 6판을 넘기면 접으세요',
+      d:`하루 1–2판째 <b>${Math.round(early2.w/early2.n*100)}%</b> → 7판째 이후 <b>${Math.round(late.w/late.n*100)}%</b>. 길게 할수록 손해입니다.`});
+  const stale=out.champs.filter(c=>c.n>=4&&c.w/c.n<0.42&&pool[c.id]&&pool[c.id].comfort>0);
+  if(stale.length)ins.push({t:'챔폭에서 내릴 챔이 있습니다',
+    d:stale.map(c=>`<b>${champName(c.id)}</b> ${c.n}판 ${Math.round(c.w/c.n*100)}%`).join(', ')+' — 설정에서 숙련도를 낮추면 추천에서 덜 밀어줍니다.'});
+  if(out.oneOff.length>=8){
+    const ow=out.oneOff.filter(c=>c.w).length;
+    ins.push({t:'한 번만 잡고 버린 챔이 많습니다',
+      d:`${out.oneOff.length}종 · 합계 <b>${Math.round(ow/out.oneOff.length*100)}%</b>. 챔을 3~4개로 좁히면 숙련이 쌓입니다.`});
+  }
+  return out;
+}
+function renderAnalysis(){
+  const a=analysisModel();
+  const body=document.getElementById('logBody');
+  if(!a.n){body.innerHTML=`<div class="logempty">기록이 쌓이면 여기서<br>내 플레이 패턴을 분석해 드립니다.</div>`;return;}
+  const P=v=>Math.round(v*100);
+
+  // 최근 폼 판정 — 소표본 오진(예: "10판 30%니까 망했다")을 막는 게 핵심
+  let verdict='';
+  if(a.last10.n>=10){
+    const l=P(a.last10.w/a.last10.n), b=P(a.base);
+    const normal=a.last10P==null||a.last10P>0.05;
+    verdict=`<div class="verdict ${normal?'calm':'warn'}">`
+      +(normal
+        ? `최근 10판 <b>${l}%</b>는 전체 평균 <b>${b}%</b> 기준 <b>정상 변동 범위</b>입니다`
+          +(a.last10P!=null?` (이 정도가 나올 확률 ${Math.round(a.last10P*100)}%)`:'')
+          +`. 10판으로는 실력 변화를 판단할 수 없습니다 — 30판 이상 쌓고 보세요.`
+        : `최근 10판 <b>${l}%</b>는 전체 평균 <b>${b}%</b> 대비 <b>통계적으로 유의한 부진</b>입니다 (확률 ${Math.round(a.last10P*100)}%). 아래 지표를 점검해 보세요.`)
+      +`</div>`;
+  }
+
+  const insights=a.insights.length
+    ? `<div class="logsec">이렇게 하면 오릅니다</div>`+a.insights.map((x,i)=>
+        `<div class="dx"><div class="dxh"><span class="dxt">${i+1}. ${x.t}</span></div><div class="dxs">${x.d}</div></div>`).join('')
+    : `<div class="dx"><div class="dxs">뚜렷한 패턴을 찾을 만큼 표본이 모이지 않았습니다. 30판 이상 쌓이면 더 정확해집니다.</div></div>`;
+
+  const maxBlock=Math.max(...a.blocks.map(b=>b.w/b.n),0.01);
+  const spark=a.blocks.length>=2?`<div class="dx">
+    <div class="dxh"><span class="dxt">10판 단위 승률 추이</span><span class="dxn">${a.n}판 · 전체 ${P(a.base)}%</span></div>
+    <div class="spark">${a.blocks.map(b=>{const r=b.w/b.n;
+      return `<div class="${r>=0.6?'hi':r<0.4?'lo':''}" style="height:${Math.max(6,r/maxBlock*100)}%" title="${b.from}-${b.to}판 ${P(r)}%"></div>`;}).join('')}</div>
+    <div class="sparkx"><span>${a.blocks[0].from}판</span><span>최근 ${a.blocks[a.blocks.length-1].to}판</span></div>
+    <div class="dxs">막대 하나가 10판입니다. 위아래로 흔들리는 게 정상이며, 한두 블록의 하락은 실력 변화가 아닙니다.</div></div>`:'';
+
+  const inputCard=`<div class="dx">
+    <div class="dxh"><span class="dxt">앱 입력 성실도 → 승률</span><span class="dxn">상대 픽 입력 개수별</span></div>
+    ${a.input.map(x=>barRow(x.k,x.w,x.n)).join('')}
+    <div class="dxs">상대를 많이 넣을수록 상성·조합 계산이 정확해집니다. 8판 미만 구간은 흐리게 표시됩니다.</div></div>`;
+
+  const expCard=`<div class="dx">
+    <div class="dxh"><span class="dxt">챔피언 경험도별 승률</span><span class="dxn">그 시점 기준</span></div>
+    ${barRow('처음 잡는 챔',a.exp.first.w,a.exp.first.n)}
+    ${barRow('2~3판째',a.exp.early.w,a.exp.early.n)}
+    ${barRow('4판째 이상',a.exp.known.w,a.exp.known.n)}
+    <div class="dxs">처음 잡는 챔의 손해가 크면 추천에서 <b>첫 픽</b> 배지가 붙은 챔을 피하는 게 좋습니다.</div></div>`;
+
+  const laneCard=`<div class="dx">
+    <div class="dxh"><span class="dxt">라인별 승률과 집중도</span><span class="dxn">사용 챔 종류</span></div>
+    ${a.lanes.map(l=>barRow(LANEKR[l.k],l.w,l.n,{note:`· ${l.ch}종`})).join('')}
+    <div class="dxs">한 라인에 챔을 적게 쓸수록 숙련이 빨리 쌓입니다.</div></div>`;
+
+  const dailyCard=`<div class="dx">
+    <div class="dxh"><span class="dxt">하루 몇 판째인가</span><span class="dxn">피로 확인</span></div>
+    ${Object.entries(a.daily).map(([k,v])=>barRow(k,v.w,v.n)).join('')}
+    <div class="dxs">뒤 구간이 확연히 낮으면 그 판수에서 멈추는 게 이득입니다.</div></div>`;
+
+  const perfCard=a.perf.n?`<div class="dx">
+    <div class="dxh"><span class="dxt">내 개인 성과</span><span class="dxn">${a.perf.n}판 기록됨</span></div>
+    <div class="dxs">평균 성과 <b>${Math.round(a.perf.avg*100)}/100</b>
+      · 졌지만 내가 최우수 <b>${a.perf.carried}판</b>${a.perf.threw?` · 이겼지만 부진 <b>${a.perf.threw}판</b>`:''}<br>
+      성과는 팀운과 분리된 신호라 승패보다 적은 표본으로도 픽 적합도를 판단합니다.</div></div>`
+    :`<div class="dx"><div class="dxh"><span class="dxt">내 개인 성과</span><span class="dxn">미기록</span></div>
+      <div class="dxs">결과를 기록할 때 <b>MVP·SVP</b>를 같이 눌러두면, 트롤 만나서 진 판이 챔피언 평가를 깎지 않습니다.</div></div>`;
+
+  const champCard=a.champs.length?`<div class="dx">
+    <div class="dxh"><span class="dxt">주요 챔피언</span><span class="dxn">3판 이상</span></div>
+    ${a.champs.slice(0,10).map(c=>barRow(champName(c.id),c.w,c.n)).join('')}
+    ${a.oneOff.length?`<div class="dxs">그 외 <b>${a.oneOff.length}종</b>을 한 판씩만 사용했습니다 (합계 ${Math.round(a.oneOff.filter(c=>c.w).length/a.oneOff.length*100)}%).</div>`:''}
+    </div>`:'';
+
+  body.innerHTML=verdict+insights+spark+inputCard+expCard+laneCard+dailyCard+perfCard+champCard;
+}
+let logTab='rec';
+function setLogTab(t){
+  logTab=t;
+  const rec=document.getElementById('tabRec'), ana=document.getElementById('tabAna');
+  rec.setAttribute('aria-selected',String(t==='rec'));
+  ana.setAttribute('aria-selected',String(t==='ana'));
+  document.getElementById('logBody').setAttribute('aria-labelledby',t==='rec'?'tabRec':'tabAna');
+  document.getElementById('logBody').scrollTop=0;
+  t==='rec'?renderLogRecords():renderAnalysis();
+}
+function renderLog(){ logTab==='ana'?renderAnalysis():renderLogRecords(); }
 function openLog(){renderLog();openSheet('logScrim');}
 function closeLog(){closeSheet('logScrim');}
 function pct(w,n){return n?Math.round(w/n*100):0;}
-function renderLog(){
+function renderLogRecords(){
   const body=document.getElementById('logBody');
   if(!matches.length){
     body.innerHTML=`<div class="logempty">아직 기록이 없다.<br>챔 선택 화면 아래 <b>"이 판 결과 기록"</b>에서<br>내 픽 고르고 ✓이김 / ✗짐 누르면 여기 쌓인다.</div><div class="logclear"><button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(가져오기)</button></div>`;
@@ -1929,30 +2155,14 @@ function renderLog(){
     `<div class="champrow"><span class="nm">${champName(+id)} <span style="color:var(--dim)">${r.n}판${r.g?` · 성과 ${Math.round(r.p/r.n*100)}`:''}</span></span>`
     +`<span class="rec2 ${r.w/r.n>=0.5?'win':'loss'}">${r.w}승 ${r.n-r.w}패 · ${pct(r.w,r.n)}%</span></div>`).join('');
 
-  /* ── 경험도별: 처음 잡는 챔이 실제로 얼마나 손해인지 (사후편향 없이 그 시점 기준) ── */
-  const chron=matches.slice().sort((a,b)=>a.t-b.t);
-  const seenN={}, expB={first:{n:0,w:0},early:{n:0,w:0},known:{n:0,w:0}};
-  chron.forEach(m=>{const c=seenN[m.pick]||0;
-    const b=c===0?expB.first:c<3?expB.early:expB.known; b.n++; if(m.won)b.w++;
-    seenN[m.pick]=c+1;});
-  const expRow=(lbl,b)=>b.n?`<div class="champrow"><span class="nm">${lbl} <span style="color:var(--dim)">${b.n}판</span></span>`
-    +`<span class="rec2 ${b.w/b.n>=0.5?'win':'loss'}">${pct(b.w,b.n)}%</span></div>`:'';
-  const expRows=expRow('처음 잡는 챔',expB.first)+expRow('2~3판째',expB.early)+expRow('4판째 이상',expB.known);
-
   /* ── 엔진 버전별: "패치 후 나빠졌나"를 인상이 아니라 데이터로 확인 ── */
   const byVer={};
-  chron.forEach(m=>{const k=m.modelVersion||'(초기)'; if(!byVer[k])byVer[k]={n:0,w:0,first:m.t};
-    byVer[k].n++; if(m.won)byVer[k].w++;});
+  matches.forEach(m=>{const k=m.modelVersion||'(초기)'; if(!byVer[k])byVer[k]={n:0,w:0,first:m.t};
+    byVer[k].n++; if(m.won)byVer[k].w++; if(m.t<byVer[k].first)byVer[k].first=m.t;});
   const verRows=Object.entries(byVer).sort((a,b)=>a[1].first-b[1].first).map(([k,r])=>
     `<div class="champrow"><span class="nm">${k} <span style="color:var(--dim)">${r.n}판</span></span>`
     +`<span class="rec2 ${r.w/r.n>=0.5?'win':'loss'}">${pct(r.w,r.n)}%</span></div>`).join('');
 
-  /* ── 챔폭 건강검진: 등록해뒀지만 실제로는 지고 있는 챔 ── */
-  const stale=Object.entries(byCh).filter(([id,r])=>r.n>=4&&r.w/r.n<0.45&&pool[+id]&&pool[+id].comfort>0)
-    .sort((a,b)=>a[1].w/a[1].n-b[1].w/b[1].n);
-  const staleBox=stale.length?`<div class="logsec">챔폭 점검</div>`+stale.map(([id,r])=>
-    `<div class="champrow"><span class="nm">${champName(+id)} <span style="color:var(--dim)">${r.n}판</span></span>`
-    +`<span class="rec2 loss">${pct(r.w,r.n)}% · 숙련 내리기 권장</span></div>`).join(''):'';
   // 최근 기록
   const recent=matches.slice().sort((a,b)=>b.t-a.t).slice(0,30).map(m=>{
     const d=new Date(m.t), md=`${d.getMonth()+1}/${d.getDate()}`;
@@ -1978,9 +2188,7 @@ function renderLog(){
         return `<div class="statcard"><div class="k">평균 성과</div><div class="v">${Math.round(g.reduce((a,m)=>a+perfValue(m),0)/g.length*100)}<small>/100 (${g.length}판)</small></div></div>`
           +`<div class="statcard"><div class="k">졌지만 내가 최우수</div><div class="v">${carry}<small>판</small></div></div>`;})()}
     </div>
-    <div class="logsec">챔피언 경험도별 <span style="color:var(--dimmer);font-weight:500;text-transform:none">— 처음 잡는 챔의 실제 손해</span></div>${expRows}
     <div class="logsec">라인별</div>${laneRows}
-    ${staleBox}
     <div class="logsec">엔진 버전별 <span style="color:var(--dimmer);font-weight:500;text-transform:none">— 10판 미만은 참고만</span></div>${verRows}
     <div class="logsec">챔별 승률</div>${champRows}
     <div class="logsec">최근 기록</div>${recent}
