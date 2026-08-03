@@ -123,6 +123,8 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .verdict{border-radius:9px;padding:10px 12px;margin-bottom:11px;font-size:12px;line-height:1.6}
 .verdict.calm{border:1px solid #31513f;background:#11251c;color:#b9e8cd}
 .verdict.warn{border:1px solid #5b4a1e;background:#241d0e;color:#f0d9a0}
+.verdict.good{border:1px solid #2b5a7a;background:#0f1f2b;color:#a8d8f0}
+[data-theme="light"] .verdict.good{background:#eaf4fb;color:#1c4a68;border-color:#a8cbe0}
 .verdict b{color:#fff}
 [data-theme="light"] .verdict.calm{background:#eaf8ef;color:#1c5c3c;border-color:#a8d9c3}
 [data-theme="light"] .verdict.warn{background:#fff6df;color:#6e5320;border-color:#e9ce91}
@@ -453,7 +455,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.2.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.2.1</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -809,7 +811,7 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='7.2.0';
+const APP_VERSION='7.2.1';
 const MODEL_VERSION='7.2.0-personal-perf';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
@@ -1994,8 +1996,14 @@ function analysisModel(){
     out.blocks.push({from:i+1,to:i+c.length,n:c.length,w:c.filter(m=>m.won).length});}
   const last10=M.slice(-10), l10w=last10.filter(m=>m.won).length;
   out.last10={n:last10.length,w:l10w};
-  // 전체 평균 대비 최근 10판이 나올 확률 (한쪽 꼬리)
-  out.last10P=last10.length>=10?binomAtMost(l10w,last10.length,Math.max(0.35,Math.min(0.65,base))):null;
+  // 전체 평균 대비 최근 10판이 이례적인지 — 부진과 호조를 모두 본다(양측).
+  if(last10.length>=9){
+    const p=Math.max(0.35,Math.min(0.65,base)), n=last10.length;
+    const lo=binomAtMost(l10w,n,p);                 // 이 정도로 못할 확률
+    const hi=1-binomAtMost(l10w-1,n,p);             // 이 정도로 잘할 확률
+    out.last10P=Math.min(lo,hi);
+    out.last10Dir=lo<=hi?'down':'up';
+  }else{out.last10P=null;out.last10Dir=null;}
 
   // 입력 성실도
   out.input=[['상대 4-5명',m=>(m.enemy||[]).length>=4],['상대 2-3명',m=>{const e=(m.enemy||[]).length;return e>=2&&e<=3;}],
@@ -2074,15 +2082,18 @@ function renderAnalysis(){
 
   // 최근 폼 판정 — 소표본 오진(예: "10판 30%니까 망했다")을 막는 게 핵심
   let verdict='';
-  if(a.last10.n>=10){
-    const l=P(a.last10.w/a.last10.n), b=P(a.base);
-    const normal=a.last10P==null||a.last10P>0.05;
-    verdict=`<div class="verdict ${normal?'calm':'warn'}">`
-      +(normal
-        ? `최근 10판 <b>${l}%</b>는 전체 평균 <b>${b}%</b> 기준 <b>정상 변동 범위</b>입니다`
+  if(a.last10.n>=9){
+    const l=P(a.last10.w/a.last10.n), b=P(a.base), n=a.last10.n;
+    const notable=a.last10P!=null&&a.last10P<=0.05;
+    const up=a.last10Dir==='up';
+    verdict=`<div class="verdict ${!notable?'calm':up?'good':'warn'}">`
+      +(!notable
+        ? `최근 ${n}판 <b>${l}%</b>는 전체 평균 <b>${b}%</b> 기준 <b>정상 변동 범위</b>입니다`
           +(a.last10P!=null?` (이 정도가 나올 확률 ${Math.round(a.last10P*100)}%)`:'')
-          +`. 10판으로는 실력 변화를 판단할 수 없습니다 — 30판 이상 쌓고 보세요.`
-        : `최근 10판 <b>${l}%</b>는 전체 평균 <b>${b}%</b> 대비 <b>통계적으로 유의한 부진</b>입니다 (확률 ${Math.round(a.last10P*100)}%). 아래 지표를 점검해 보세요.`)
+          +`. ${n}판으로는 실력 변화를 판단할 수 없습니다 — 30판 이상 쌓고 보세요.`
+        : up
+        ? `최근 ${n}판 <b>${l}%</b>는 전체 평균 <b>${b}%</b> 대비 <b>이례적으로 좋습니다</b> (우연일 확률 ${Math.round(a.last10P*100)}%). 다만 ${n}판은 여전히 적으니, 지금 잘 되는 챔·라인을 유지하면서 30판까지 지켜보세요.`
+        : `최근 ${n}판 <b>${l}%</b>는 전체 평균 <b>${b}%</b> 대비 <b>이례적으로 나쁩니다</b> (우연일 확률 ${Math.round(a.last10P*100)}%). 아래 지표를 점검해 보세요.`)
       +`</div>`;
   }
 

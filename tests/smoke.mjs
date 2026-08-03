@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='7.2.0'"));
+assert.ok(html.includes("const APP_VERSION='7.2.1'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
