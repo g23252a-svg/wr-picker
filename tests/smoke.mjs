@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='7.1.0'"));
+assert.ok(html.includes("const APP_VERSION='7.2.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -128,6 +128,13 @@ assert.ok(html.includes('function binomAtMost('),'significance test missing');
 assert.ok(html.includes('id="tabAna"')&&html.includes('id="tabRec"'),'log tabs missing');
 assert.ok(html.includes('MIN_BUCKET'),'small-sample gating missing');
 assert.ok(!/expRows|staleBox|seenN/.test(html),'dead analysis code left in records tab');
+// 자동 백업 — 전적이 기기에 갇히지 않도록 하는 경로
+assert.ok(html.includes('async function autoBackupWrite('),'auto-backup writer missing');
+assert.ok(html.includes('showSaveFilePicker'),'file handle picker missing');
+assert.ok(html.includes('async function restoreAutoBackup('),'auto-backup handle restore missing');
+assert.ok(html.includes('function backupPayload()'),'shared backup payload missing');
+assert.ok(html.includes('async function copyBackup()'),'clipboard fallback missing');
+assert.ok(/saveMatches\(\)\{[\s\S]{0,400}autoBackupWrite/.test(html),'saveMatches must sync auto-backup');
 
 // [v6] 상성 엔진 — 기동 메이지(아리류)의 암살자 역카운터 회귀 방지.
 assert.ok(html.includes('const escK='),'assassin escape-adjust rule missing');

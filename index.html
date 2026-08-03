@@ -147,6 +147,22 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .mrow .info .l2{color:var(--dim);font-size:11.5px;margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mrow .del{color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:3px 9px;font-size:15px;flex-shrink:0}
 .logempty{color:var(--dim);text-align:center;padding:24px 10px;font-size:13.5px;line-height:1.6}
+.abk{display:flex;align-items:center;gap:10px;justify-content:space-between;
+  border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:11px 12px;margin-bottom:4px}
+.abk b{font-family:'Rajdhani';font-weight:700;font-size:13px;color:var(--ink)}
+.abk span{font-size:11px;color:var(--dim);line-height:1.5;display:inline-block;margin-top:3px}
+.abk button{flex:0 0 auto;font-family:'Rajdhani';font-weight:700;font-size:12.5px;
+  border:1px solid var(--cyan);color:var(--cyan);border-radius:8px;padding:8px 14px}
+.abk button:active{background:var(--cyan);color:#06201f}
+.abk.on{border-color:#28513c;background:#10241b}
+.abk.on b{color:#8be0b0}
+.abk.on button{border-color:var(--line);color:var(--dim)}
+.abk.warn{border-color:#5b4a1e;background:#241d0e}
+.abk.warn b{color:#f0c674}
+[data-theme="light"] .abk.on{background:#eaf8ef;border-color:#a8d9c3}
+[data-theme="light"] .abk.on b{color:#1c5c3c}
+[data-theme="light"] .abk.warn{background:#fff6df;border-color:#e9ce91}
+[data-theme="light"] .abk.warn b{color:#6e5320}
 .logclear{margin-top:14px;text-align:center}
 .logclear button{color:var(--red);border:1px solid #3a1c1c;border-radius:8px;padding:7px 16px;font-size:12.5px;font-family:'Rajdhani';font-weight:600}
 
@@ -437,7 +453,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.1.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.2.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -793,8 +809,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='7.1.0';
-const MODEL_VERSION='7.1.0-personal-perf';
+const APP_VERSION='7.2.0';
+const MODEL_VERSION='7.2.0-personal-perf';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -957,7 +973,14 @@ async function loadMatches(){
   try{const m=await window.storage.get('wr_matches');if(m&&m.value)matches=(JSON.parse(m.value)||[]).map(migrateMatch).filter(Boolean);}catch(e){matches=[];}
   computeFam();
 }
-async function saveMatches(){try{await window.storage.set('wr_matches',JSON.stringify(matches));await window.storage.set('wr_schema',String(SCHEMA_VERSION));}catch(e){}}
+let autoBackupAt=null;
+async function saveMatches(){
+  try{await window.storage.set('wr_matches',JSON.stringify(matches));await window.storage.set('wr_schema',String(SCHEMA_VERSION));}catch(e){}
+  // 기록이 늘 때마다 지정한 파일에도 동기화한다(설정돼 있을 때만).
+  if(typeof autoBackupWrite==='function'&&autoBackupHandle){
+    if(await autoBackupWrite(true))autoBackupAt=new Date().toISOString();
+  }
+}
 
 function sanitizeDraft(raw){
   const d=raw&&typeof raw==='object'?raw:{};
@@ -2192,12 +2215,117 @@ function renderLogRecords(){
     <div class="logsec">엔진 버전별 <span style="color:var(--dimmer);font-weight:500;text-transform:none">— 10판 미만은 참고만</span></div>${verRows}
     <div class="logsec">챔별 승률</div>${champRows}
     <div class="logsec">최근 기록</div>${recent}
-    <div class="logclear"><button onclick="exportData()" style="border-color:var(--cyan);color:var(--cyan)">백업(내보내기)</button> <button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(가져오기)</button> <button onclick="clearMatches()">전적 전체 삭제</button></div>`;
+    <div class="logsec">백업</div>${autoBackupBox()}
+    <div class="logclear"><button onclick="exportData()" style="border-color:var(--cyan);color:var(--cyan)">백업(내보내기)</button> <button onclick="copyBackup()" style="border-color:var(--cyan);color:var(--cyan)">복사</button> <button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(가져오기)</button> <button onclick="clearMatches()">전적 전체 삭제</button></div>`;
+}
+function backupPayload(){
+  return JSON.stringify({v:SCHEMA_VERSION,exportedAt:new Date().toISOString(),appVersion:APP_VERSION,
+    matches,pool,weights,draft:sanitizeDraft(state)},null,2);
 }
 function exportData(){
-  const payload=JSON.stringify({v:SCHEMA_VERSION,exportedAt:new Date().toISOString(),appVersion:APP_VERSION,matches,pool,weights,draft:sanitizeDraft(state)},null,2);
+  const payload=backupPayload();
   const blob=new Blob([payload],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
   a.href=url;a.download=`wr-picker-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('백업 파일을 저장했습니다');
+}
+async function copyBackup(){
+  try{await navigator.clipboard.writeText(backupPayload());toast('백업 JSON을 복사했습니다');}
+  catch(e){prompt('아래 내용을 복사하세요.',backupPayload());}
+}
+
+/* ============ 자동 백업 ============
+ * 전적이 브라우저 저장소에만 있으면 기기를 벗어나지 못하고, 백업도 매번 수동이라
+ * 실제로는 잘 안 하게 된다. 파일 핸들을 한 번만 지정받아 IndexedDB에 보관하고,
+ * 이후 판을 기록할 때마다 같은 파일에 덮어쓴다.
+ * (File System Access API — 데스크톱 Chrome/Edge. 미지원 브라우저는 복사/다운로드로 폴백) */
+const AUTOBK_DB='wr-picker-fs', AUTOBK_KEY='backupHandle';
+let autoBackupHandle=null, autoBackupState='off'; // off | ready | denied | unsupported
+const autoBackupSupported=()=>typeof window.showSaveFilePicker==='function';
+function idb(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(AUTOBK_DB,1);
+    r.onupgradeneeded=()=>{if(!r.result.objectStoreNames.contains('h'))r.result.createObjectStore('h');};
+    r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+  });
+}
+async function idbPut(v){const db=await idb();return new Promise((res,rej)=>{
+  const t=db.transaction('h','readwrite');t.objectStore('h').put(v,AUTOBK_KEY);
+  t.oncomplete=()=>res();t.onerror=()=>rej(t.error);});}
+async function idbGet(){const db=await idb();return new Promise((res,rej)=>{
+  const t=db.transaction('h','readonly'),q=t.objectStore('h').get(AUTOBK_KEY);
+  q.onsuccess=()=>res(q.result||null);q.onerror=()=>rej(q.error);});}
+async function idbDel(){const db=await idb();return new Promise((res)=>{
+  const t=db.transaction('h','readwrite');t.objectStore('h').delete(AUTOBK_KEY);t.oncomplete=()=>res();});}
+
+async function enableAutoBackup(){
+  if(!autoBackupSupported()){
+    toast('이 브라우저는 자동 백업을 지원하지 않습니다');
+    autoBackupState='unsupported';renderLog();return;
+  }
+  try{
+    const h=await window.showSaveFilePicker({
+      suggestedName:'wr-picker-backup.json',
+      types:[{description:'WR Picker 백업',accept:{'application/json':['.json']}}]
+    });
+    autoBackupHandle=h;autoBackupState='ready';
+    await idbPut(h);
+    await autoBackupWrite(true);
+    toast('자동 백업을 켰습니다');
+  }catch(e){ if(e&&e.name!=='AbortError')toast('자동 백업 설정 실패'); }
+  renderLog();
+}
+async function disableAutoBackup(){
+  autoBackupHandle=null;autoBackupState='off';
+  try{await idbDel();}catch(e){}
+  try{await window.storage.delete('wr_autobk_at');}catch(e){}
+  toast('자동 백업을 껐습니다');renderLog();
+}
+async function autoBackupWrite(silent){
+  if(!autoBackupHandle)return false;
+  try{
+    const perm=await autoBackupHandle.queryPermission({mode:'readwrite'});
+    if(perm!=='granted'){
+      // 권한은 사용자 제스처에서만 다시 받을 수 있다. 조용히 보류하고 상태만 표시.
+      if(silent){autoBackupState='denied';return false;}
+      const req=await autoBackupHandle.requestPermission({mode:'readwrite'});
+      if(req!=='granted'){autoBackupState='denied';renderLog();return false;}
+    }
+    const w=await autoBackupHandle.createWritable();
+    await w.write(backupPayload());await w.close();
+    autoBackupState='ready';
+    try{await window.storage.set('wr_autobk_at',new Date().toISOString());}catch(e){}
+    return true;
+  }catch(e){autoBackupState='denied';return false;}
+}
+async function restoreAutoBackup(){
+  if(!autoBackupSupported()){autoBackupState='unsupported';return;}
+  try{
+    const h=await idbGet();
+    if(!h)return;
+    autoBackupHandle=h;
+    const perm=await h.queryPermission({mode:'readwrite'});
+    autoBackupState=(perm==='granted')?'ready':'denied';
+  }catch(e){autoBackupState='off';}
+}
+// 권한이 보류된 경우 사용자 제스처로 다시 잡아준다.
+async function resumeAutoBackup(){
+  if(!autoBackupHandle)return enableAutoBackup();
+  const ok=await autoBackupWrite(false);
+  if(ok)toast('자동 백업을 다시 연결했습니다');
+  renderLog();
+}
+function autoBackupBox(){
+  const at=autoBackupAt?new Date(autoBackupAt):null;
+  const when=at?`${at.getMonth()+1}/${at.getDate()} ${String(at.getHours()).padStart(2,'0')}:${String(at.getMinutes()).padStart(2,'0')}`:'—';
+  if(autoBackupState==='ready')
+    return `<div class="abk on"><div><b>자동 백업 켜짐</b><br><span>판을 기록할 때마다 지정한 파일에 저장됩니다 · 최근 ${when}</span></div>
+      <button onclick="disableAutoBackup()">끄기</button></div>`;
+  if(autoBackupState==='denied')
+    return `<div class="abk warn"><div><b>자동 백업 권한이 끊겼습니다</b><br><span>브라우저를 다시 열면 파일 권한이 초기화됩니다. 아래를 눌러 다시 연결하세요.</span></div>
+      <button onclick="resumeAutoBackup()">다시 연결</button></div>`;
+  if(autoBackupState==='unsupported')
+    return `<div class="abk"><div><b>자동 백업 미지원 브라우저</b><br><span>PC용 Chrome·Edge에서 사용할 수 있습니다. 그 전까지는 아래 <b>복사</b>나 <b>백업</b>을 쓰세요.</span></div></div>`;
+  return `<div class="abk"><div><b>자동 백업 꺼짐</b><br><span>파일을 한 번만 지정하면, 이후 매 판 자동으로 저장됩니다. 기기가 바뀌어도 그 파일로 복원할 수 있습니다.</span></div>
+    <button onclick="enableAutoBackup()">켜기</button></div>`;
 }
 function importData(){
   const input=document.createElement('input');input.type='file';input.accept='application/json,.json';
@@ -2258,6 +2386,8 @@ document.addEventListener('keydown',e=>{
   setupPWA();
   await loadStore();
   await loadMatches();
+  await restoreAutoBackup();
+  try{const a=await window.storage.get('wr_autobk_at');if(a&&a.value)autoBackupAt=a.value;}catch(e){}
   const seeded=await seedHistoryIfEmpty();
   await loadDraft();
   await saveStore();
