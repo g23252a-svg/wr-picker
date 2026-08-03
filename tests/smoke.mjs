@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='7.2.1'"));
+assert.ok(html.includes("const APP_VERSION='7.3.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -134,7 +134,26 @@ assert.ok(html.includes('showSaveFilePicker'),'file handle picker missing');
 assert.ok(html.includes('async function restoreAutoBackup('),'auto-backup handle restore missing');
 assert.ok(html.includes('function backupPayload()'),'shared backup payload missing');
 assert.ok(html.includes('async function copyBackup()'),'clipboard fallback missing');
-assert.ok(/saveMatches\(\)\{[\s\S]{0,400}autoBackupWrite/.test(html),'saveMatches must sync auto-backup');
+assert.ok(/saveMatches\(\)\{[\s\S]{0,1200}autoBackupWrite/.test(html),'saveMatches must sync auto-backup');
+/* 데이터 보호 — 과거 전적이 조용히 사라지는 경로를 막는 가드.
+   각 항목은 실제로 존재했던 손실 경로에 대응한다. */
+assert.ok(html.includes('function mergeMatches('),'match merge missing');
+// 복원이 통째로 덮어쓰면 그 뒤에 쌓인 판이 전부 사라진다.
+assert.ok(!/matches=d\.matches\.map\(migrateMatch\)/.test(html),'import must merge, not replace');
+assert.ok(/const \{merged,added\}=mergeMatches\(matches,incoming\)/.test(html),'import must use merge');
+// 챔피언 ID를 못 찾아도 판을 버리지 않는다.
+assert.ok(html.includes('out.pickRaw=m.pick'),'unresolved picks must be preserved');
+assert.ok(!/const pick=toStableId\(m\.pick\);\s*if\(pick==null\)return null;/.test(html),
+  'migrateMatch must not drop matches with unknown champions');
+// 파괴적 작업 전 스냅샷 + 되돌리기
+assert.ok(html.includes('async function snapshotBeforeDestructive('),'destructive snapshot missing');
+assert.ok(html.includes('async function rollbackRestore('),'rollback missing');
+assert.ok(/clearMatches\(\)\{[\s\S]{0,600}snapshotBeforeDestructive/.test(html),'clear must snapshot first');
+// 저장 실패를 조용히 삼키면 안 된다.
+assert.ok(html.includes('saveFailed=true'),'save failure must be surfaced');
+assert.ok(html.includes('id="storageWarn"'),'storage warning banner missing');
+// 시드는 병합만 한다.
+assert.ok(/seedHistoryIfEmpty\(\)\{[\s\S]{0,900}mergeMatches/.test(html),'seed must merge, not overwrite');
 
 // [v6] 상성 엔진 — 기동 메이지(아리류)의 암살자 역카운터 회귀 방지.
 assert.ok(html.includes('const escK='),'assassin escape-adjust rule missing');

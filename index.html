@@ -405,6 +405,13 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .bd-type.falling{border-color:#59451f;color:#f0c674;background:#261d0e}
 .updatebar{display:none;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:9px 11px;border:1px solid var(--cyan);background:var(--panel);border-radius:9px;font-size:11.5px;color:var(--dim)}
 .updatebar.on{display:flex}.updatebar button{color:var(--cyan-soft);font-weight:700}
+.storagewarn{margin-bottom:12px;padding:11px 13px;border:1px solid var(--red);background:#2a1216;
+  border-radius:9px;font-size:12px;color:#f0b8bc;line-height:1.6}
+.storagewarn b{color:#fff}
+.storagewarn button{margin-left:4px;border:1px solid var(--red);border-radius:7px;padding:5px 11px;
+  color:#f0a0a0;font-family:'Rajdhani';font-weight:700;font-size:12px}
+[data-theme="light"] .storagewarn{background:#fff0f1;color:#8a2b34;border-color:#efc8cc}
+[data-theme="light"] .storagewarn b{color:#5c1a21}
 .footer-note{text-align:center;color:var(--dimmer);font-size:10.5px;margin-top:15px;line-height:1.55}
 [data-theme="light"] .lane.on,[data-theme="light"] .rec.top1{background:linear-gradient(180deg,#fff8e8,#fff)}
 [data-theme="light"] .ddrow.first,[data-theme="light"] .ddrow.active{background:#e9f6f5}
@@ -455,7 +462,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.2.1</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.3.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -466,6 +473,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 </header>
 
 <div class="updatebar" id="updateBar" role="status"><span>새 버전이 준비되었습니다.</span><button onclick="applyUpdate()">지금 새로고침</button></div>
+<div class="storagewarn" id="storageWarn" role="alert" hidden></div>
 
 <main class="appgrid" id="mainContent">
 <section class="workspace-card draft-zone" aria-labelledby="draftTitle">
@@ -811,8 +819,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='7.2.1';
-const MODEL_VERSION='7.2.0-personal-perf';
+const APP_VERSION='7.3.0';
+const MODEL_VERSION='7.3.0-personal-perf';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -922,18 +930,42 @@ function migratePool(raw){
 function migrateMatch(m){
   if(!m||typeof m!=='object')return null;
   const lane=LANEKR[m.lane]?m.lane:'mid';
-  const pick=toStableId(m.pick); if(pick==null)return null;
+  /* 챔피언이 이름 변경·삭제되어 ID를 못 찾아도 판을 버리지 않는다.
+     예전에는 여기서 null을 반환해 그 판이 영구히 사라졌다. 원본 값을 pickRaw로
+     보존하면 나중에 DB가 복구됐을 때 되살릴 수 있고, 최소한 판수는 지켜진다. */
+  const pick=toStableId(m.pick);
   const top=toStableId(m.top);
   const laneMark=toStableId(m.laneMark);
   const t=Number(m.t)||Date.now();
   const kda=(m.kda&&['k','d','a'].every(x=>Number.isFinite(Number(m.kda[x]))))
     ? {k:clamp(Number(m.kda.k),0,99),d:clamp(Number(m.kda.d),0,99),a:clamp(Number(m.kda.a),0,99)} : null;
-  return Object.assign({},m,{
+  const out=Object.assign({},m,{
     schema:SCHEMA_VERSION,t,lane,pick,top,
     top3:normalizeIdList(m.top3,3),ally:normalizeIdList(m.ally,4),enemy:normalizeIdList(m.enemy,5),
     laneMark:laneMark!=null?laneMark:null,won:!!m.won,
     perf:PERF[m.perf]?m.perf:null,kda
   });
+  // 해석 불가한 픽은 원본을 보존해 둔다(복구 가능 + 판수 유지).
+  if(pick==null&&m.pick!=null)out.pickRaw=m.pick; else delete out.pickRaw;
+  return out;
+}
+/* 전적 병합: 같은 판(timestamp 기준)은 한 번만. 기존 기록은 절대 사라지지 않는다. */
+function mergeMatches(current,incoming){
+  const byT=new Map();
+  for(const m of current)if(m&&Number.isFinite(m.t))byT.set(m.t,m);
+  let added=0;
+  for(const m of incoming){
+    if(!m||!Number.isFinite(m.t))continue;
+    if(byT.has(m.t)){
+      // 같은 판이면 정보가 더 많은 쪽(성과·KDA 기록분)을 남긴다.
+      const cur=byT.get(m.t);
+      if(!cur.perf&&m.perf)cur.perf=m.perf;
+      if(!cur.kda&&m.kda)cur.kda=m.kda;
+      continue;
+    }
+    byT.set(m.t,m);added++;
+  }
+  return {merged:[...byT.values()].sort((a,b)=>a.t-b.t),added};
 }
 function sanitizeWeights(raw){
   const next=Object.assign({comfort:80,tier:45,team:100,counter:100,recMode:'meta',wv:3},raw||{});
@@ -956,14 +988,16 @@ async function saveStore(){
 /* 기록이 하나도 없는 새 기기에서만 시드 전적을 1회 적재한다.
    기존 기록이 있으면 절대 건드리지 않는다(덮어쓰기 사고 방지). */
 async function seedHistoryIfEmpty(){
-  if(matches.length)return false;
+  if(matches.length)return false;                 // 기록이 있으면 절대 건드리지 않는다
   try{const flag=await window.storage.get('wr_seeded');if(flag&&flag.value)return false;}catch(e){}
   try{
     const res=await fetch('./data/seed-history.json',{cache:'no-cache'});
     if(!res.ok)return false;
     const seed=await res.json();
     if(!seed||!Array.isArray(seed.matches)||!seed.matches.length)return false;
-    matches=seed.matches.map(migrateMatch).filter(Boolean);
+    // 덮어쓰기가 아니라 병합 — 경합 상황에서도 기존 판이 사라지지 않는다.
+    const {merged}=mergeMatches(matches,seed.matches.map(migrateMatch).filter(Boolean));
+    matches=merged;
     if(!Object.keys(pool).length&&seed.pool)pool=migratePool(seed.pool);
     computeFam();
     await Promise.all([saveMatches(),saveStore()]);
@@ -975,13 +1009,29 @@ async function loadMatches(){
   try{const m=await window.storage.get('wr_matches');if(m&&m.value)matches=(JSON.parse(m.value)||[]).map(migrateMatch).filter(Boolean);}catch(e){matches=[];}
   computeFam();
 }
-let autoBackupAt=null;
+let autoBackupAt=null, saveFailed=false;
 async function saveMatches(){
-  try{await window.storage.set('wr_matches',JSON.stringify(matches));await window.storage.set('wr_schema',String(SCHEMA_VERSION));}catch(e){}
+  /* 저장 실패를 삼키면 사용자는 기록이 남은 줄 알고 계속 플레이한다.
+     실패하면 상태를 표시하고, 자동 백업 파일 쪽이라도 살린다. */
+  try{
+    await window.storage.set('wr_matches',JSON.stringify(matches));
+    await window.storage.set('wr_schema',String(SCHEMA_VERSION));
+    if(saveFailed){saveFailed=false;renderStorageWarn();}
+  }catch(e){
+    saveFailed=true;renderStorageWarn();
+    toast('저장 실패 — 백업으로 내보내세요');
+  }
   // 기록이 늘 때마다 지정한 파일에도 동기화한다(설정돼 있을 때만).
   if(typeof autoBackupWrite==='function'&&autoBackupHandle){
     if(await autoBackupWrite(true))autoBackupAt=new Date().toISOString();
   }
+}
+function renderStorageWarn(){
+  const el=document.getElementById('storageWarn'); if(!el)return;
+  el.hidden=!saveFailed;
+  el.innerHTML=saveFailed
+    ? `⚠ <b>전적이 저장되지 않고 있습니다.</b> 브라우저 저장 공간이 가득 찼거나 시크릿 모드일 수 있습니다.
+       지금 바로 <button onclick="exportData()">백업 내보내기</button>를 눌러 파일로 보관하세요.` : '';
 }
 
 function sanitizeDraft(raw){
@@ -2227,7 +2277,8 @@ function renderLogRecords(){
     <div class="logsec">챔별 승률</div>${champRows}
     <div class="logsec">최근 기록</div>${recent}
     <div class="logsec">백업</div>${autoBackupBox()}
-    <div class="logclear"><button onclick="exportData()" style="border-color:var(--cyan);color:var(--cyan)">백업(내보내기)</button> <button onclick="copyBackup()" style="border-color:var(--cyan);color:var(--cyan)">복사</button> <button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(가져오기)</button> <button onclick="clearMatches()">전적 전체 삭제</button></div>`;
+    <div class="logclear"><button onclick="exportData()" style="border-color:var(--cyan);color:var(--cyan)">백업(내보내기)</button> <button onclick="copyBackup()" style="border-color:var(--cyan);color:var(--cyan)">복사</button> <button onclick="importData()" style="border-color:var(--cyan);color:var(--cyan)">복원(합치기)</button> <button onclick="rollbackRestore()" style="border-color:var(--gold);color:var(--gold-soft)">되돌리기</button> <button onclick="clearMatches()">전적 전체 삭제</button></div>
+    <p style="font-size:10.5px;color:var(--dimmer);text-align:center;margin-top:8px;line-height:1.6">복원은 <b>덮어쓰지 않고 합칩니다</b> — 같은 판은 자동으로 걸러집니다.<br>되돌리기는 복원·전체삭제 직전 상태로 복구합니다.</p>`;
 }
 function backupPayload(){
   return JSON.stringify({v:SCHEMA_VERSION,exportedAt:new Date().toISOString(),appVersion:APP_VERSION,
@@ -2338,21 +2389,61 @@ function autoBackupBox(){
   return `<div class="abk"><div><b>자동 백업 꺼짐</b><br><span>파일을 한 번만 지정하면, 이후 매 판 자동으로 저장됩니다. 기기가 바뀌어도 그 파일로 복원할 수 있습니다.</span></div>
     <button onclick="enableAutoBackup()">켜기</button></div>`;
 }
+/* 되돌리기 스냅샷: 복원·전체삭제 직전 상태를 따로 저장해 실수를 되살릴 수 있게 한다. */
+async function snapshotBeforeDestructive(reason){
+  try{
+    await window.storage.set('wr_rollback',JSON.stringify({
+      at:new Date().toISOString(),reason,count:matches.length,matches,pool
+    }));
+  }catch(e){}
+}
+async function rollbackRestore(){
+  try{
+    const r=await window.storage.get('wr_rollback');
+    if(!r||!r.value){toast('되돌릴 스냅샷이 없습니다');return;}
+    const s=JSON.parse(r.value);
+    if(!Array.isArray(s.matches)){toast('스냅샷이 손상되었습니다');return;}
+    if(!confirm(`${s.at.slice(0,16).replace('T',' ')} 시점의 ${s.count}판으로 되돌립니다.\n지금 기록과 합쳐집니다. 계속할까요?`))return;
+    const {merged,added}=mergeMatches(matches,s.matches.map(migrateMatch).filter(Boolean));
+    matches=merged;
+    if(s.pool&&Object.keys(s.pool).length&&!Object.keys(pool).length)pool=migratePool(s.pool);
+    computeFam();await Promise.all([saveMatches(),saveStore()]);
+    renderLog();render();toast(`되돌리기 완료: ${added}판 복구 (총 ${matches.length}판)`);
+  }catch(e){toast('되돌리기 실패');}
+}
 function importData(){
   const input=document.createElement('input');input.type='file';input.accept='application/json,.json';
   input.onchange=async()=>{const file=input.files&&input.files[0];if(!file)return;
     try{
-      if(file.size>5*1024*1024)throw new Error('too large');
+      if(file.size>20*1024*1024)throw new Error('too large');
       const d=JSON.parse(await file.text());
       if(!d||!Array.isArray(d.matches)||d.matches.length>10000)throw new Error('invalid');
-      matches=d.matches.map(migrateMatch).filter(Boolean);pool=migratePool(d.pool||{});weights=sanitizeWeights(d.weights||weights);
-      if(d.draft)state=sanitizeDraft(d.draft);computeFam();
-      await Promise.all([saveMatches(),saveStore(),saveDraft()]);renderLog();renderDraft();toast('복원 완료: '+matches.length+'판');
+      const incoming=d.matches.map(migrateMatch).filter(Boolean);
+      const before=matches.length;
+      await snapshotBeforeDestructive('import');
+      /* 기본 동작은 '병합'이다. 예전에는 통째로 덮어써서, 오래된 백업을 불러오면
+         그 뒤에 쌓인 판이 전부 사라졌다. */
+      const {merged,added}=mergeMatches(matches,incoming);
+      const dupes=incoming.length-added;
+      matches=merged;
+      // 챔폭·가중치는 비어 있을 때만 받아온다(현재 설정을 덮지 않음).
+      if(Object.keys(pool).length===0)pool=migratePool(d.pool||{});
+      if(d.weights&&before===0)weights=sanitizeWeights(d.weights);
+      computeFam();
+      await Promise.all([saveMatches(),saveStore()]);
+      renderLog();renderDraft();
+      toast(`복원 완료: ${added}판 추가${dupes?` · 중복 ${dupes}판 건너뜀`:''} · 총 ${matches.length}판`);
     }catch(e){toast('복원 실패: 올바른 WR Picker 백업이 아닙니다');}
   };input.click();
 }
 function delMatch(t){matches=matches.filter(m=>m.t!==t);computeFam();saveMatches();renderLog();render();}
-function clearMatches(){ if(!confirm('전적 기록을 전부 삭제할까요? 되돌릴 수 없습니다.'))return; matches=[];computeFam();saveMatches();renderLog();render(); }
+async function clearMatches(){
+  if(!confirm(`전적 ${matches.length}판을 전부 삭제할까요?\n삭제 직전 상태는 스냅샷으로 남아 "되돌리기"로 복구할 수 있습니다.`))return;
+  if(!confirm('한 번 더 확인합니다. 정말 삭제할까요?'))return;
+  await snapshotBeforeDestructive('clear');
+  matches=[];computeFam();await saveMatches();renderLog();render();
+  toast('삭제했습니다 · 되돌리기로 복구 가능');
+}
 
 /* ============ PWA ============ */
 let deferredInstallPrompt=null,waitingWorker=null,reloadingForUpdate=false;
@@ -2406,6 +2497,7 @@ document.addEventListener('keydown',e=>{
   await saveDraft();
   paintAddSide();
   renderDraft();
+  renderStorageWarn();
   if(seeded)toast(`전적 ${matches.length}판을 불러왔습니다`);
   refreshStats();
 })();
