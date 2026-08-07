@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='8.0.0'"));
+assert.ok(html.includes("const APP_VERSION='8.0.1'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -124,6 +124,9 @@ assert.ok(/recMode==='meta'\)\s*\?\s*W\.comfort\*/.test(html),'meta mode comfort
 assert.ok(html.includes('function effectiveComfort('),'measured/manual comfort blend missing');
 assert.ok(html.includes('function kdaValue('),'KDA signal missing');
 assert.ok(/perfValue\(m\)\{[\s\S]{0,400}kdaValue/.test(html),'perfValue must use KDA');
+// 승리는 성과가 나빠도 깎이면 안 된다(하한 보장), 패배는 성과가 좋으면 올라가야 한다.
+assert.ok(/m\.won\?Math\.max\(outcome,blend\):blend/.test(html),
+  'a win must never score below its outcome value');
 // 수동 comfort가 실측을 덮어쓰는 옛 구조로 되돌아가면 안 된다.
 assert.ok(!/const comfort = manualC \|\| autoC/.test(html),'manual comfort must not override measured');
 assert.ok(/effectiveComfort\(cand\.id\)/.test(html),'score() must use effectiveComfort');

@@ -468,7 +468,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v8.0.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v8.0.1</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -825,7 +825,7 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='8.0.0';
+const APP_VERSION='8.0.1';
 const MODEL_VERSION='8.0.0-earned-mastery';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
@@ -875,15 +875,22 @@ function kdaValue(k){
   const r=(k.k+k.a)/Math.max(1,k.d);
   return clamp(r/(r+2.5),0.08,0.92);
 }
-/* 한 판의 '내 성과' 점수(0~1). 등급과 KDA가 함께 있으면 등급을 주로,
-   KDA로 보정한다. 둘 다 없으면 승패로 대체하되 확신을 낮게 잡는다. */
+/* 한 판의 '내 성과' 점수(0~1).
+   승리와 개인 성과는 각각 독립적인 '플러스 신호'로 다룬다.
+   - 이긴 판은 성과가 나빠도 깎이지 않는다(승리 자체가 목적이므로 하한 보장).
+   - 진 판이라도 성과가 좋으면 중립 위로 올라간다(팀 탓 패배를 벌하지 않음).
+   - 지고 성과도 나쁠 때만 내려간다. */
 function perfValue(m){
   const g=PERF[m.perf]?PERF[m.perf].v:null;
   const k=kdaValue(m.kda);
-  if(g!=null&&k!=null)return g*0.65+k*0.35;
-  if(g!=null)return g;
-  if(k!=null)return k*0.8+(m.won?0.68:0.32)*0.2;
-  return m.won?0.68:0.32;
+  const outcome=m.won?0.68:0.32;
+  let p=null;                                   // 성과 신호(등급 주도, KDA 보정)
+  if(g!=null&&k!=null)p=g*0.65+k*0.35;
+  else if(g!=null)p=g;
+  else if(k!=null)p=k;
+  if(p==null)return outcome;                    // 성과 정보 없으면 승패만
+  const blend=outcome*0.4+p*0.6;
+  return m.won?Math.max(outcome,blend):blend;
 }
 function computeFam(){
   famMap={};
