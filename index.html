@@ -473,7 +473,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v8.1.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v8.2.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -832,8 +832,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='8.1.0';
-const MODEL_VERSION='8.1.0-lane-and-variance';
+const APP_VERSION='8.2.0';
+const MODEL_VERSION='8.2.0-allround-goal';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -1020,9 +1020,11 @@ function mergeMatches(current,incoming){
   return {merged:[...byT.values()].sort((a,b)=>a.t-b.t),added};
 }
 function sanitizeWeights(raw){
-  const next=Object.assign({comfort:80,tier:45,team:100,counter:100,recMode:'meta',wv:3},raw||{});
+  const next=Object.assign({comfort:80,tier:45,team:100,counter:100,recMode:'meta',wv:3,goal:'allround'},raw||{});
   ['comfort','tier','team','counter'].forEach(k=>next[k]=clamp(Number(next[k])||0,0,120));
   if(!['meta','weighted','poolonly'].includes(next.recMode))next.recMode='meta';
+  // 목표: 승률 우선(약한 라인을 줄임) vs 전 포지션 숙련(라인마다 주력을 좁힘)
+  if(!['winrate','allround'].includes(next.goal))next.goal='allround';
   next.wv=3;
   next.autoFam=next.autoFam!==false;
   return next;
@@ -2025,6 +2027,13 @@ function renderCfg(){
       </div>
       <div class="poolnote" style="margin-top:7px"><b>메타 중심</b>: 역할 통계·팀 조합·상성을 계산합니다. <b>숙련 가중</b>: 아래 숙련도를 함께 반영합니다. <b>내 챔폭만</b>: 숙련도 0 초과인 챔피언만 비교합니다.</div>
     </div>
+    <div class="grp"><div class="gl">목표</div>
+      <div class="scopetog">
+        <button aria-pressed="${(weights.goal||'allround')==='allround'}" class="${(weights.goal||'allround')==='allround'?'on':''}" onclick="setGoal('allround')">전 포지션 숙련</button>
+        <button aria-pressed="${weights.goal==='winrate'}" class="${weights.goal==='winrate'?'on':''}" onclick="setGoal('winrate')">승률 우선</button>
+      </div>
+      <div class="poolnote" style="margin-top:7px"><b>전 포지션 숙련</b>: 라인을 줄이라는 조언을 하지 않고, 라인마다 주력을 좁히는 쪽으로 안내합니다. <b>승률 우선</b>: 잘 되는 라인에 집중하라고 안내합니다. 추천 점수 계산은 두 경우 모두 동일하며, <b>분석 탭의 조언만</b> 달라집니다.</div>
+    </div>
     <div class="grp"><div class="gl">가중치 ${m==='meta'?'<span style="color:var(--dimmer);font-weight:500">(숙련도는 메타 중심 모드에서 제외)</span>':''}</div>
       ${wRow('comfort','숙련도')}${wRow('tier','승률(참조)')}${wRow('team','팀 시너지')}${wRow('counter','상성/스킬')}
     </div>
@@ -2044,6 +2053,8 @@ function renderCfg(){
     <div class="savebar"><button onclick="saveCfg()">저장하고 닫기</button></div>`;
 }
 function setMode(m){weights.recMode=m;renderCfg();render();}
+function setGoal(g){weights.goal=g;saveStore();renderCfg();if(logTab==='ana')renderAnalysis();
+  toast(g==='allround'?'전 포지션 숙련 목표':'승률 우선 목표');}
 function setComfort(id,v){
   if(!pool[id])pool[id]={comfort:0};
   pool[id].comfort=v;
@@ -2126,7 +2137,9 @@ function logMatch(won){
 const MIN_BUCKET=8;                       // 이 미만은 '표본 부족'으로 표시만
 // 받침 유무에 따라 목적격 조사를 고른다 (원딜'을' / 미드'를')
 const hasBatchim=s=>{const c=s.charCodeAt(s.length-1);return c>=0xAC00&&c<=0xD7A3&&(c-0xAC00)%28!==0;};
-const objP=s=>s+(hasBatchim(s)?'을':'를');
+const objP=s=>s+(hasBatchim(s)?'을':'를');   // 목적격
+const topP=s=>s+(hasBatchim(s)?'은':'는');   // 주제격
+const subP=s=>s+(hasBatchim(s)?'이':'가');   // 주격
 function binomAtMost(k,n,p){              // P(X ≤ k), 이항분포
   let s=0,c=1;
   for(let i=0;i<=k;i++){ if(i>0)c=c*(n-i+1)/i; s+=c*Math.pow(p,i)*Math.pow(1-p,n-i); }
@@ -2172,10 +2185,23 @@ function analysisModel(){
     b.n++;if(m.won)b.w++;seen[m.pick]=c+1;});
   out.exp=exp;
 
-  // 라인 집중도
+  // 라인 집중도 + 라인별 성장(전반 vs 후반) + 라인 안에서의 주력/처분 후보
   const ln={};
-  M.forEach(m=>{const r=ln[m.lane]=ln[m.lane]||{n:0,w:0,ch:new Set()};r.n++;if(m.won)r.w++;r.ch.add(m.pick);});
-  out.lanes=Object.entries(ln).map(([k,v])=>({k,n:v.n,w:v.w,ch:v.ch.size})).sort((a,b)=>b.n-a.n);
+  M.forEach(m=>{const r=ln[m.lane]=ln[m.lane]||{n:0,w:0,ch:new Set(),games:[]};r.n++;if(m.won)r.w++;r.ch.add(m.pick);r.games.push(m);});
+  out.lanes=Object.entries(ln).map(([k,v])=>{
+    const g=v.games, h=Math.ceil(g.length/2);
+    const early=g.slice(0,h), late=g.slice(h);
+    // 라인 안 챔피언별 성적 — 무엇을 남기고 무엇을 버릴지가 '전 포지션 숙련'의 핵심
+    const per={};
+    g.forEach(m=>{const r=per[m.pick]=per[m.pick]||{n:0,w:0};r.n++;if(m.won)r.w++;});
+    const ranked=Object.entries(per).map(([id,r])=>({id:+id,...r})).sort((a,b)=>b.n-a.n);
+    return {k,n:v.n,w:v.w,ch:v.ch.size,
+      early:{n:early.length,w:early.filter(m=>m.won).length},
+      late:{n:late.length,w:late.filter(m=>m.won).length},
+      keep:ranked.filter(c=>c.n>=3&&c.w/c.n>=0.6),
+      drop:ranked.filter(c=>c.n>=3&&c.w/c.n<0.4),
+      once:ranked.filter(c=>c.n===1).length, champs:ranked};
+  }).sort((a,b)=>b.n-a.n);
 
   // 하루 N판째 (피로)
   const byDay={};
@@ -2225,10 +2251,41 @@ function analysisModel(){
       d:`처음 잡는 챔 <b>${Math.round(exp.first.w/exp.first.n*100)}%</b> vs 2~3판째 <b>${Math.round(exp.early.w/exp.early.n*100)}%</b>. 새 챔은 한 번에 하나씩만 늘리는 편이 유리합니다.`});
   }
   const big=out.lanes.filter(l=>l.n>=MIN_BUCKET);
+  const goal=(weights.goal==='winrate')?'winrate':'allround';
+  out.goal=goal;
   if(big.length>=2){
     const best=big.reduce((a,b)=>a.w/a.n>b.w/b.n?a:b), worst=big.reduce((a,b)=>a.w/a.n<b.w/b.n?a:b);
-    if((best.w/best.n-worst.w/worst.n)*100>=15)ins.push({t:`${LANEKR[best.k]}에 집중하고 ${objP(LANEKR[worst.k])} 줄이세요`,
-      d:`${LANEKR[best.k]} <b>${Math.round(best.w/best.n*100)}%</b>(${best.n}판) vs ${LANEKR[worst.k]} <b>${Math.round(worst.w/worst.n*100)}%</b>(${worst.n}판).`});
+    const gap=(best.w/best.n-worst.w/worst.n)*100;
+    if(gap>=15){
+      if(goal==='winrate'){
+        ins.push({t:`${LANEKR[best.k]}에 집중하고 ${objP(LANEKR[worst.k])} 줄이세요`,
+          d:`${LANEKR[best.k]} <b>${Math.round(best.w/best.n*100)}%</b>(${best.n}판) vs ${LANEKR[worst.k]} <b>${Math.round(worst.w/worst.n*100)}%</b>(${worst.n}판).`});
+      }else{
+        /* 전 포지션 숙련이 목표면 라인을 버리라고 하지 않는다.
+           대신 그 라인 안에서 되는 챔과 안 되는 챔을 갈라준다. */
+        const w=worst;
+        const keep=w.keep.map(c=>`<b>${champName(c.id)}</b> ${Math.round(c.w/c.n*100)}%`).join(', ');
+        const drop=w.drop.map(c=>`<b>${champName(c.id)}</b> ${Math.round(c.w/c.n*100)}%`).join(', ');
+        ins.push({t:`${topP(LANEKR[w.k])} 라인이 아니라 챔 문제입니다`,
+          d:`${LANEKR[w.k]} 전체 <b>${Math.round(w.w/w.n*100)}%</b>(${w.n}판)인데`
+            +(keep?` 잘 되는 픽은 ${keep}`:' 아직 자리잡은 픽이 없고')
+            +(drop?`, 발목 잡는 픽은 ${drop}입니다.`:'.')
+            +` 라인을 줄이는 대신 <b>이 라인 주력을 2~3개로 좁히면</b> 승률과 숙련을 같이 올릴 수 있습니다.`});
+      }
+    }
+  }
+  /* 전 포지션 숙련 목표: 챔이 흩어진 라인을 짚어준다(라인을 버리라는 말은 하지 않음). */
+  if(goal==='allround'){
+    const scattered=out.lanes.filter(l=>l.n>=MIN_BUCKET&&l.n/l.ch<2.4)
+      .sort((a,b)=>a.n/a.ch-b.n/b.ch)[0];
+    if(scattered)ins.push({t:`${LANEKR[scattered.k]} 주력을 좁히세요`,
+      d:`${scattered.n}판에 <b>${scattered.ch}종</b>을 썼습니다(판당 ${(scattered.n/scattered.ch).toFixed(1)}판).`
+        +` 포지션을 넓히려면 라인 수가 아니라 <b>라인마다의 주력 수</b>를 줄여야 숙련이 쌓입니다.`});
+    const growing=out.lanes.filter(l=>l.early.n>=4&&l.late.n>=4)
+      .map(l=>({l,d:(l.late.w/l.late.n-l.early.w/l.early.n)*100}))
+      .filter(x=>x.d>=20).sort((a,b)=>b.d-a.d)[0];
+    if(growing)ins.push({t:`${subP(LANEKR[growing.l.k])} 확실히 늘고 있습니다`,
+      d:`전반 <b>${Math.round(growing.l.early.w/growing.l.early.n*100)}%</b> → 후반 <b>${Math.round(growing.l.late.w/growing.l.late.n*100)}%</b>. 지금 방식을 유지하세요.`});
   }
   const late=out.daily['7판째 이후'], early2=out.daily['1–2판째'];
   if(late.n>=MIN_BUCKET&&early2.n>=MIN_BUCKET&&(early2.w/early2.n-late.w/late.n)*100>=12)
@@ -2297,6 +2354,37 @@ function renderAnalysis(){
     ${a.lanes.map(l=>barRow(LANEKR[l.k],l.w,l.n,{note:`· ${l.ch}종`})).join('')}
     <div class="dxs">한 라인에 챔을 적게 쓸수록 숙련이 빨리 쌓입니다.</div></div>`;
 
+  /* 전 포지션 숙련이 목표일 때 가장 중요한 화면 —
+     라인마다 '늘고 있는가'와 '무엇을 남기고 무엇을 버릴가'를 한 번에 본다. */
+  const growCard=(()=>{
+    const rows=a.lanes.filter(l=>l.n>=5);
+    if(!rows.length)return '';
+    return `<div class="dx">
+      <div class="dxh"><span class="dxt">라인별 성장과 주력 정리</span><span class="dxn">전반 → 후반</span></div>
+      ${rows.map(l=>{
+        const e=l.early.n?Math.round(l.early.w/l.early.n*100):null;
+        const t=l.late.n?Math.round(l.late.w/l.late.n*100):null;
+        const arrow=(e!=null&&t!=null)?(t-e>=10?'<b style="color:#8be0b0">↑</b>':t-e<=-10?'<b style="color:#f0a0a0">↓</b>':'<span style="color:var(--dimmer)">→</span>'):'';
+        const keep=l.keep.map(c=>`${champName(c.id)} ${Math.round(c.w/c.n*100)}%`).join(', ');
+        const drop=l.drop.map(c=>`${champName(c.id)} ${Math.round(c.w/c.n*100)}%`).join(', ');
+        return `<div style="padding:7px 0;border-bottom:1px solid #131a24">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px">
+            <span style="font-family:'Rajdhani';font-weight:700;font-size:13px">${LANEKR[l.k]}
+              <span style="color:var(--dimmer);font-weight:600;font-size:10.5px">${l.n}판 · ${l.ch}종</span></span>
+            <span class="mono" style="font-size:12px;color:var(--dim)">${e!=null?e+'%':'—'} ${arrow} ${t!=null?t+'%':'—'}</span>
+          </div>
+          <div style="font-size:11px;color:var(--dim);margin-top:3px;line-height:1.5">
+            ${keep?`<span style="color:#8be0b0">유지 ${keep}</span>`:''}
+            ${keep&&drop?' · ':''}
+            ${drop?`<span style="color:#f0a0a0">정리 ${drop}</span>`:''}
+            ${!keep&&!drop?'<span style="color:var(--dimmer)">3판 이상 쌓인 픽이 아직 없습니다</span>':''}
+            ${l.once?` <span style="color:var(--dimmer)">· 1판만 한 챔 ${l.once}종</span>`:''}
+          </div></div>`;}).join('')}
+      <div class="dxs">${a.goal==='allround'
+        ? '목표가 <b>전 포지션 숙련</b>이므로 라인을 버리라고 하지 않습니다. 대신 라인마다 <b>주력 2~3개</b>로 좁히는 게 가장 빠른 길입니다.'
+        : '목표가 <b>승률 우선</b>입니다. 잘 되는 라인에 시간을 몰아주세요. (설정에서 목표를 바꿀 수 있습니다)'}</div></div>`;
+  })();
+
   const dailyCard=`<div class="dx">
     <div class="dxh"><span class="dxt">하루 몇 판째인가</span><span class="dxn">피로 확인</span></div>
     ${Object.entries(a.daily).map(([k,v])=>barRow(k,v.w,v.n)).join('')}
@@ -2339,7 +2427,7 @@ function renderAnalysis(){
     ${a.oneOff.length?`<div class="dxs">그 외 <b>${a.oneOff.length}종</b>을 한 판씩만 사용했습니다 (합계 ${Math.round(a.oneOff.filter(c=>c.w).length/a.oneOff.length*100)}%).</div>`:''}
     </div>`:'';
 
-  body.innerHTML=verdict+insights+spark+inputCard+expCard+laneCard+duoCard+tiCard+dailyCard+perfCard+champCard;
+  body.innerHTML=verdict+insights+spark+growCard+inputCard+expCard+laneCard+duoCard+tiCard+dailyCard+perfCard+champCard;
 }
 let logTab='rec';
 function setLogTab(t){

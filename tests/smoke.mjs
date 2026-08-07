@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='8.1.0'"));
+assert.ok(html.includes("const APP_VERSION='8.2.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -142,6 +142,13 @@ assert.ok(html.includes('function isUncontrolled('),'team-issue predicate missin
 assert.ok(html.includes('id="teamIssueBtn"'),'team-issue button missing');
 assert.ok(/isUncontrolled\(m\)&&!m\.won/.test(html),'only losses may be neutralised');
 assert.ok(html.includes('teamIssue'),'teamIssue must persist on records');
+// [v8.2] 목표 설정 — '전 포지션 숙련'이면 라인을 버리라는 조언을 하지 않는다.
+assert.ok(html.includes("next.goal='allround'"),'goal setting missing');
+assert.ok(html.includes('function setGoal('),'goal toggle missing');
+assert.ok(html.includes('라인이 아니라 챔 문제입니다'),'allround advice missing');
+assert.ok(html.includes('주력을 좁히세요'),'lane-narrowing advice missing');
+assert.ok(html.includes('const topP=')&&html.includes('const subP='),'Korean particle helpers missing');
+assert.ok(!/\$\{LANEKR\[[^\]]+\]\}(는|가) /.test(html),'hardcoded Korean particle after lane name');
 // 수동 comfort가 실측을 덮어쓰는 옛 구조로 되돌아가면 안 된다.
 assert.ok(!/const comfort = manualC \|\| autoC/.test(html),'manual comfort must not override measured');
 assert.ok(/effectiveComfort\(cand\.id\)/.test(html),'score() must use effectiveComfort');
