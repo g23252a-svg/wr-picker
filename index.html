@@ -86,6 +86,11 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .pfbtns button:active{transform:scale(.95)}
 .kdain{width:118px;background:var(--bg);color:var(--ink);border:1px solid var(--line);
   border-radius:7px;padding:7px 9px;font-size:13px;font-family:inherit}
+.tibtn{font-family:'Rajdhani';font-weight:700;font-size:12.5px;border:1px solid var(--line);
+  border-radius:7px;padding:6px 11px;color:var(--dim);background:var(--bg);transition:.1s}
+.tibtn.on{border-color:var(--red);color:#fff;background:var(--red)}
+.tibtn:active{transform:scale(.95)}
+[data-theme="light"] .tibtn{background:#fff}
 .kdain:focus{outline:none;border-color:var(--cyan)}
 .perfrow .pfhint{font-size:10.5px;color:var(--dimmer);flex:1 1 100%;line-height:1.4}
 .perfrow .pfhint b{color:var(--gold-soft)}
@@ -468,7 +473,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v8.0.1</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v8.1.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -555,7 +560,9 @@ button:disabled{cursor:not-allowed;opacity:.38}
       <div class="pfbtns" id="perfBtns"></div>
       <label class="sr-only" for="kdaInput">KDA (킬/데스/어시)</label>
       <input class="kdain" id="kdaInput" placeholder="KDA 예: 7/2/9" inputmode="numeric" autocomplete="off">
-      <span class="pfhint">팀운과 무관하게 <b>내 픽이 맞았는지</b>를 학습합니다</span>
+      <button class="tibtn" id="teamIssueBtn" aria-pressed="false" onclick="toggleTeamIssue()"
+        title="트롤·잠수·역할 미준수 등 내가 통제할 수 없던 판">⚠ 팀 문제</button>
+      <span class="pfhint">팀운과 무관하게 <b>내 픽이 맞았는지</b>를 학습합니다 · <b>팀 문제</b>로 표시한 패배는 챔피언 평가에서 제외됩니다</span>
     </div>
   </div>
   <p class="footer-note">통계는 판단 보조 정보이며 승리를 보장하지 않습니다. 중국 서버 Diamond+ 일일 통계를 사용하고 저표본 역할은 보수적으로 보정하며, 직전 스냅샷 대비 추세를 소폭 반영합니다.</p>
@@ -825,8 +832,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='8.0.1';
-const MODEL_VERSION='8.0.0-earned-mastery';
+const APP_VERSION='8.1.0';
+const MODEL_VERSION='8.1.0-lane-and-variance';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -875,6 +882,10 @@ function kdaValue(k){
   const r=(k.k+k.a)/Math.max(1,k.d);
   return clamp(r/(r+2.5),0.08,0.92);
 }
+/* 통제 불가 판: 팀 문제(트롤·잠수·역할 미준수)로 결과가 결정된 판.
+   이런 판의 패배를 챔피언 탓으로 학습하면 멀쩡한 픽이 부당하게 깎인다.
+   다만 자기 신고는 편향되기 쉬우므로 비율을 분석 탭에 그대로 노출한다. */
+function isUncontrolled(m){return !!m.teamIssue;}
 /* 한 판의 '내 성과' 점수(0~1).
    승리와 개인 성과는 각각 독립적인 '플러스 신호'로 다룬다.
    - 이긴 판은 성과가 나빠도 깎이지 않는다(승리 자체가 목적이므로 하한 보장).
@@ -896,10 +907,13 @@ function computeFam(){
   famMap={};
   matches.forEach(m=>{
     if(m.pick==null||!byId[m.pick])return;
-    const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0,p:0,graded:0});
+    const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0,p:0,graded:0,skipped:0});
     f.n++; if(m.won)f.w++;
-    f.p+=perfValue(m);
     if(PERF[m.perf])f.graded++;
+    /* 팀 문제로 표시된 패배는 챔피언 평가에서 중립 처리한다.
+       (이긴 판은 그대로 반영 — 승리는 어떻게 얻었든 성과다) */
+    if(isUncontrolled(m)&&!m.won){f.p+=0.5;f.skipped++;}
+    else f.p+=perfValue(m);
   });
 }
 /* 숙련도 = "이 챔으로 내가 실제로 얼마나 잘하는가".
@@ -980,7 +994,8 @@ function migrateMatch(m){
     schema:SCHEMA_VERSION,t,lane,pick,top,
     top3:normalizeIdList(m.top3,3),ally:normalizeIdList(m.ally,4),enemy:normalizeIdList(m.enemy,5),
     laneMark:laneMark!=null?laneMark:null,won:!!m.won,
-    perf:PERF[m.perf]?m.perf:null,kda
+    perf:PERF[m.perf]?m.perf:null,kda,
+    teamIssue:m.teamIssue?1:undefined
   });
   // 해석 불가한 픽은 원본을 보존해 둔다(복구 가능 + 판수 유지).
   if(pick==null&&m.pick!=null)out.pickRaw=m.pick; else delete out.pickRaw;
@@ -1198,6 +1213,27 @@ const KIT={
  // 단일 강이니시
  'Pantheon':{engage:1,hardcc:1},'Hecarim':{engage:1},
  'Lee Sin':{knockup:1}, 'Xin Zhao':{knockup:1}, 'Blitzcrank':{knockup:1,ptcc:1},'Thresh':{ptcc:1},'Pyke':{ptcc:1}, 'Rakan':{knockup:1}, 'Aatrox':{knockup:1}, 'Sion':{knockup:1}, 'Ornn':{knockup:1}, 'Braum':{knockup:1}, 'Zac':{knockup:1}, 'Taliyah':{knockup:1},};
+/* ============ 라인전 사거리(reach) ============
+ * 와일드리프트는 라인전 비중이 커서, 같은 '원거리'끼리도 사거리 차이가 라인
+ * 주도권을 가른다(오리아나 공 배치 vs 케넨 550 — 엔진이 둘을 같게 보고 있었다).
+ * 정확한 수치는 패치마다 바뀌므로 등급만 쓴다. 방향이 확실한 챔만 등재하고
+ * 나머지는 1(보통)로 둔다 — 근거 없는 값을 지어내지 않는다.
+ *   2 = 장거리(스킬 사거리로 안전하게 견제)
+ *   1 = 보통 (기본값)
+ *   0 = 단거리(딜을 넣으려면 붙어야 함) / 근접 */
+const REACH={
+  // 장거리 견제형
+  'Orianna':2,'Ziggs':2,'Vel\'Koz':2,'Lux':2,'Brand':2,'Syndra':2,'Veigar':2,
+  'Seraphine':2,'Karma':2,'Zoe':2,'Heimerdinger':2,'Aurelion Sol':2,'Morgana':2,'Zyra':2,
+  'Caitlyn':2,'Jhin':2,'Varus':2,'Ashe':2,'Kog\'Maw':2,'Senna':2,
+  // 단거리(원거리지만 딜 넣으려면 접근 필요)
+  'Kennen':0,'Corki':0,'Kai\'Sa':0,'Tristana':0,'Twitch':0,'Smolder':0,'Vayne':0,
+  'Teemo':0,'Kayle':0,
+};
+function reachOf(c){
+  if(REACH[c.en]!=null)return REACH[c.en];
+  return c.rng==='m'?0:1;                       // 근접은 0, 나머지 원거리는 보통
+}
 function kitOf(c){
   const t=c.tags,cls=c.cls;
   const o={
@@ -1546,7 +1582,7 @@ function score(cand){
                || state.enemy.map(id=>byId[id]).find(c=>c && primeLaneOf(c)===state.lane)
                || state.enemy.map(id=>byId[id]).find(c=>c && lanesOf(c).includes(state.lane)); // 지정(🎯) > prime > 서브 포지션 폴백
     if(laner){
-      const laneK=kitOf(laner); let a=mxAdv(cand.cls,laner.cls)*7;
+      const laneK=kitOf(laner); let a=mxAdv(cand.cls,laner.cls)*7; let lReach='';
       // [v6] 암살자↔물몸 원거리 상성은 상대의 기동·셀프피어에 따라 크게 갈린다.
       // '암살자>메이지 +2'는 부동 메이지(신드라·직스)에만 참 — 아리(궁 3연속
       // 이동+매혹)류는 근접 암살자를 역카운터. 도주기·CC 보유량만큼 우위 상쇄.
@@ -1556,11 +1592,22 @@ function score(cand){
       if(state.lane!=='jug'){                          // 정글은 지속 라인전이 없어 상성은 스킴/오브젝트 위주
         if(cand.rng==='r'&&laner.rng==='m')a+=5;       // 원거리 라인 우위
         if(cand.rng==='m'&&laner.rng==='r')a-=4;
+        /* [v8.1] 사거리 우열 — 와일드리프트는 라인전이 승패를 크게 좌우하고,
+           같은 원거리끼리도 사거리 차이가 주도권을 가른다. 사거리가 짧은 쪽은
+           CS·견제를 손해 보며 버텨야 한다(예: 케넨이 오리아나 상대로 겪는 상황). */
+        const rc=reachOf(cand), rl=reachOf(laner);
+        if(rc!==rl&&cand.rng==='r'&&laner.rng==='r'){
+          const gap=rc-rl;                              // +면 내가 길다
+          a+=gap*6;
+          if(gap<0)lReach='사거리 열세로 견제 손해';
+          else lReach='사거리 우위로 안전 견제';
+        }
       } else a=Math.round(a*0.5);                       // 정글 매치업 프록시 절반
       counter+=a;
       const lPos=[], lNeg=[];
       const pd=((PAIR[cand.en]||{})[laner.en]!=null)?PAIR[cand.en][laner.en]:-(((PAIR[laner.en]||{})[cand.en])||0);
       if(pd){counter+=pd;(pd>0?lPos:lNeg).push('유명 상성 '+(pd>0?'우위':'열세'));}
+      if(lReach)(lReach.includes('열세')?lNeg:lPos).push(lReach);
       if(a>=6)lPos.push('상성 우위');
       else if(a<=-6)lNeg.push('상성 불리');
 
@@ -2027,11 +2074,17 @@ function renderLogBar(){
     +`<optgroup label="기타 챔">${restC.map(opt).join('')}</optgroup>`;
   paintPerf();
 }
-let pendingPerf=null;
+let pendingPerf=null, pendingTeamIssue=false;
 function setPerf(k){
   pendingPerf=(pendingPerf===k)?null:k;
   paintPerf();
   if(pendingPerf)announce(PERF[pendingPerf].kr+' 선택됨');
+}
+function toggleTeamIssue(){
+  pendingTeamIssue=!pendingTeamIssue;
+  const b=document.getElementById('teamIssueBtn');
+  if(b){b.classList.toggle('on',pendingTeamIssue);b.setAttribute('aria-pressed',String(pendingTeamIssue));}
+  announce(pendingTeamIssue?'팀 문제로 표시됨':'팀 문제 표시 해제');
 }
 function paintPerf(){
   const box=document.getElementById('perfBtns'); if(!box)return;
@@ -2058,9 +2111,11 @@ function logMatch(won){
   matches.push({schema:SCHEMA_VERSION,t:Date.now(),patch:META_SNAPSHOT.targetPatch,sourcePatch:META_SNAPSHOT.sourcePatch,modelVersion:MODEL_VERSION,
     lane:state.lane,laneMark:state.laneMark,ally:state.ally.slice(),enemy:state.enemy.slice(),pick:pickId,top:topId,
     top3:lastCands.slice(0,3).map(o=>o.c.id),scoreSnapshot:chosen?{total:Math.round(chosen.s.total),meta:Math.round(chosen.s.cTier),team:Math.round(chosen.s.teamAxis),counter:Math.round(chosen.s.counterAxis),comfort:Math.round(chosen.s.base),confidence:chosen.s.confidence}:null,won:!!won,
-    perf:pendingPerf,kda:parseKDA(document.getElementById('kdaInput')&&document.getElementById('kdaInput').value)});
-  const perfLabel=pendingPerf?' · '+PERF[pendingPerf].kr:'';
+    perf:pendingPerf,kda:parseKDA(document.getElementById('kdaInput')&&document.getElementById('kdaInput').value),
+    teamIssue:pendingTeamIssue||undefined});
+  const perfLabel=(pendingPerf?' · '+PERF[pendingPerf].kr:'')+(pendingTeamIssue?' · 팀 문제':'');
   pendingPerf=null;
+  if(pendingTeamIssue)toggleTeamIssue();
   const kin=document.getElementById('kdaInput'); if(kin)kin.value='';
   saveMatches(); computeFam(); render();
   toast((won?`기록 완료: ${champName(pickId)} 승 ✓`:`기록 완료: ${champName(pickId)} 패 ✗`)+perfLabel);
@@ -2129,6 +2184,20 @@ function analysisModel(){
   Object.values(byDay).forEach(list=>list.sort((a,b)=>a.t-b.t).forEach((m,i)=>{
     const b=ord[i<2?'1–2판째':i<4?'3–4판째':i<6?'5–6판째':'7판째 이후'];b.n++;if(m.won)b.w++;}));
   out.daily=ord;
+
+  /* 통제 불가 판: 자기 신고라 편향될 수 있으므로 비율을 그대로 보여준다.
+     "내 탓 아님"이 40%를 넘으면 그 자체가 점검 신호다. */
+  const ti=M.filter(isUncontrolled);
+  out.teamIssue={n:ti.length,w:ti.filter(m=>m.won).length,
+    rest:M.length-ti.length,restW:M.filter(m=>!isUncontrolled(m)&&m.won).length};
+
+  /* 원딜 라인 변수: 아군에 서폿류(엔첸터·탱커)가 있었는지로 본다.
+     자기 신고가 아니라 드래프트 입력에서 나오는 객관 지표다. */
+  const adcG=M.filter(m=>m.lane==='adc'&&(m.ally||[]).length);
+  const hasSup=m=>(m.ally||[]).some(id=>byId[id]&&['enchanter','tank'].includes(byId[id].cls));
+  const withSup=adcG.filter(hasSup), noSup=adcG.filter(m=>!hasSup(m));
+  out.duo={with:{n:withSup.length,w:withSup.filter(m=>m.won).length},
+           without:{n:noSup.length,w:noSup.filter(m=>m.won).length}};
 
   // 성과(MVP/SVP) 기록분
   const graded=M.filter(m=>PERF[m.perf]);
@@ -2233,6 +2302,29 @@ function renderAnalysis(){
     ${Object.entries(a.daily).map(([k,v])=>barRow(k,v.w,v.n)).join('')}
     <div class="dxs">뒤 구간이 확연히 낮으면 그 판수에서 멈추는 게 이득입니다.</div></div>`;
 
+  const tiCard=(()=>{
+    const t=a.teamIssue;
+    if(!t||!t.n)return `<div class="dx">
+      <div class="dxh"><span class="dxt">통제 불가 판</span><span class="dxn">미기록</span></div>
+      <div class="dxs">트롤·잠수·역할 미준수로 진 판은 기록할 때 <b>⚠ 팀 문제</b>를 눌러두세요.
+        그 패배는 챔피언 평가에서 제외돼, 멀쩡한 픽이 부당하게 깎이지 않습니다.</div></div>`;
+    const rate=t.n/(t.n+t.rest);
+    return `<div class="dx">
+      <div class="dxh"><span class="dxt">통제 불가 판</span><span class="dxn">${t.n} / ${t.n+t.rest}판</span></div>
+      ${barRow('팀 문제 표시',t.w,t.n)}
+      ${barRow('그 외',t.restW,t.rest)}
+      <div class="dxs">${rate>=0.4
+        ? `전체의 <b>${Math.round(rate*100)}%</b>를 팀 문제로 표시했습니다. 비율이 높으면 판단이 한쪽으로 기운 것일 수 있으니, 정말 손쓸 수 없던 판만 남기는 게 학습에 정확합니다.`
+        : `표시한 패배는 챔피언 평가에서 제외됩니다. 승리는 어떻게 얻었든 그대로 반영합니다.`}</div></div>`;
+  })();
+
+  const duoCard=(a.duo&&(a.duo.with.n+a.duo.without.n)>=6)?`<div class="dx">
+    <div class="dxh"><span class="dxt">원딜 — 서폿 유무별</span><span class="dxn">아군 입력 기준</span></div>
+    ${barRow('서폿류 있음',a.duo.with.w,a.duo.with.n)}
+    ${barRow('서폿류 없음',a.duo.without.w,a.duo.without.n)}
+    <div class="dxs">아군에 엔첸터·탱커가 없으면 봇 라인 변수가 커집니다. 드래프트에서 아군 서폿이 안 잡히면
+      <b>원딜 대신 통제력이 큰 라인</b>을 고르는 것도 방법입니다.</div></div>`:'';
+
   const perfCard=a.perf.n?`<div class="dx">
     <div class="dxh"><span class="dxt">내 개인 성과</span><span class="dxn">${a.perf.n}판 기록됨</span></div>
     <div class="dxs">평균 성과 <b>${Math.round(a.perf.avg*100)}/100</b>
@@ -2247,7 +2339,7 @@ function renderAnalysis(){
     ${a.oneOff.length?`<div class="dxs">그 외 <b>${a.oneOff.length}종</b>을 한 판씩만 사용했습니다 (합계 ${Math.round(a.oneOff.filter(c=>c.w).length/a.oneOff.length*100)}%).</div>`:''}
     </div>`:'';
 
-  body.innerHTML=verdict+insights+spark+inputCard+expCard+laneCard+dailyCard+perfCard+champCard;
+  body.innerHTML=verdict+insights+spark+inputCard+expCard+laneCard+duoCard+tiCard+dailyCard+perfCard+champCard;
 }
 let logTab='rec';
 function setLogTab(t){

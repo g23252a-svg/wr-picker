@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='8.0.1'"));
+assert.ok(html.includes("const APP_VERSION='8.1.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -127,6 +127,21 @@ assert.ok(/perfValue\(m\)\{[\s\S]{0,400}kdaValue/.test(html),'perfValue must use
 // 승리는 성과가 나빠도 깎이면 안 된다(하한 보장), 패배는 성과가 좋으면 올라가야 한다.
 assert.ok(/m\.won\?Math\.max\(outcome,blend\):blend/.test(html),
   'a win must never score below its outcome value');
+// [v8.1] 라인전 사거리 — 와일드리프트는 라인전 비중이 커서 같은 원거리끼리도 갈린다.
+assert.ok(html.includes('const REACH='),'reach table missing');
+assert.ok(html.includes('function reachOf('),'reachOf missing');
+assert.ok(/'Orianna':2/.test(html)&&/'Kennen':0/.test(html),'key reach entries missing');
+assert.ok(html.includes('사거리 열세로 견제 손해'),'reach disadvantage note missing');
+const reachSrc=html.match(/const REACH=\{[\s\S]*?\n\};/);
+assert.ok(reachSrc,'REACH block not parseable');
+const reach=Function(`return ${reachSrc[0].replace('const REACH=','').replace(/;$/,'')}`)();
+for(const n of Object.keys(reach))assert.ok(names.includes(n),`REACH champion not in roster: ${n}`);
+for(const v of Object.values(reach))assert.ok([0,1,2].includes(v),'reach tier must be 0/1/2');
+// [v8.1] 팀 문제로 진 판은 챔피언 평가에서 중립 처리한다.
+assert.ok(html.includes('function isUncontrolled('),'team-issue predicate missing');
+assert.ok(html.includes('id="teamIssueBtn"'),'team-issue button missing');
+assert.ok(/isUncontrolled\(m\)&&!m\.won/.test(html),'only losses may be neutralised');
+assert.ok(html.includes('teamIssue'),'teamIssue must persist on records');
 // 수동 comfort가 실측을 덮어쓰는 옛 구조로 되돌아가면 안 된다.
 assert.ok(!/const comfort = manualC \|\| autoC/.test(html),'manual comfort must not override measured');
 assert.ok(/effectiveComfort\(cand\.id\)/.test(html),'score() must use effectiveComfort');
