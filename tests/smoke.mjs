@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='8.2.0'"));
+assert.ok(html.includes("const APP_VERSION='8.3.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -149,6 +149,22 @@ assert.ok(html.includes('라인이 아니라 챔 문제입니다'),'allround adv
 assert.ok(html.includes('주력을 좁히세요'),'lane-narrowing advice missing');
 assert.ok(html.includes('const topP=')&&html.includes('const subP='),'Korean particle helpers missing');
 assert.ok(!/\$\{LANEKR\[[^\]]+\]\}(는|가) /.test(html),'hardcoded Korean particle after lane name');
+// [v8.3] 전술 브리핑 — 가이드 원문 요약을 앱에서 보여준다.
+assert.ok(html.includes('function tacticsPanel('),'tactics panel missing');
+assert.ok(html.includes('async function loadGuides()'),'guide loader missing');
+assert.ok(html.includes('function situationalTips('),'situational tips missing');
+assert.ok(html.includes('GUIDE_BASE'),'guide link base missing');
+// slug는 URL에 들어가므로 정제되어야 한다.
+assert.ok(/\/\^\[a-z0-9-\]\{2,40\}\$\//.test(html),'guide slug must be validated');
+const guides=JSON.parse(fs.readFileSync(new URL('../data/guides.json',import.meta.url),'utf8'));
+assert.ok(guides.champions&&Object.keys(guides.champions).length>=100,'guides.json too small');
+for(const [name,g] of Object.entries(guides.champions)){
+  assert.ok(names.includes(name),`guide champion not in roster: ${name}`);
+  assert.match(g.slug,/^[a-z0-9-]{2,40}$/,`bad guide slug: ${name}`);
+  for(const rel of [].concat(g.counteredBy||[],g.synergy||[]))
+    assert.match(rel.slug,/^[a-z0-9-]{2,40}$/,`bad related slug in ${name}`);
+}
+assert.ok(sw.includes("'./data/guides.json'"),'guides must be precached for offline');
 // 수동 comfort가 실측을 덮어쓰는 옛 구조로 되돌아가면 안 된다.
 assert.ok(!/const comfort = manualC \|\| autoC/.test(html),'manual comfort must not override measured');
 assert.ok(/effectiveComfort\(cand\.id\)/.test(html),'score() must use effectiveComfort');

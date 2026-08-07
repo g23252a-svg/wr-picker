@@ -74,13 +74,16 @@ function championNames(){
   return new Set(Function(`return ${html.slice(s,e)}`)().map(row=>row[1]));
 }
 
-function normaliseBracket(rows,known,unknown){
+function normaliseBracket(rows,known,unknown,slugs){
   const stats={};
   for(const r of rows){
     const name=RENAME[r.champion]||r.champion;
     const role=ROLE[r.role];
     if(!role){unknown.add(`role:${r.role}`);continue;}
     if(!known.has(name)){unknown.add(`champion:${r.champion}`);continue;}
+    // 가이드 URL slug는 업스트림이 알려주는 값을 그대로 쓴다.
+    // 이름에서 유추하면 틀린다(예: Nunu & Willump → nunu-amp-willump).
+    if(slugs&&r.slug&&/^[a-z0-9-]{2,40}$/.test(r.slug))slugs[name]=r.slug;
     const entry={win:r.win,pick:r.pick,ban:r.ban};
     if(r.tier)entry.tier=r.tier;          // WildRiftFire tier-list grade
     if(r.main)entry.main=1;               // upstream flag: this is the champion's primary role
@@ -138,10 +141,11 @@ const known=championNames();
 const unknown=new Set();
 
 const brackets={};
+const slugs={};                                   // 챔피언 → 가이드 URL slug (업스트림 제공값)
 for(const [key,b] of Object.entries(payload.brackets)){
   const rows=Array.isArray(b.rows)?b.rows:[];
   if(!rows.length)continue;                       // Legendary is empty until it populates
-  brackets[key]={label:b.label,stats:normaliseBracket(rows,known,unknown)};
+  brackets[key]={label:b.label,stats:normaliseBracket(rows,known,unknown,slugs)};
 }
 if(!brackets.diamond)throw new Error('Diamond+ bracket missing from payload');
 
@@ -198,6 +202,7 @@ const statsJs=renderStatsJs({
 const latest={
   patch:payload.patch,updated,source:payload.source,url:SOURCE_URL,
   generatedFrom:'scripts/fetch-stats.mjs',
+  slugs,                                          // 가이드 수집기와 앱 링크가 함께 쓴다
   brackets:Object.fromEntries(Object.entries(brackets).map(([k,b])=>[k,{
     label:b.label,rows:countRows(b.stats),champions:Object.keys(b.stats).length,stats:b.stats
   }])),
