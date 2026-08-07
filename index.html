@@ -495,7 +495,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v8.3.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v8.4.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -854,8 +854,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='8.3.0';
-const MODEL_VERSION='8.3.0-tactics';
+const APP_VERSION='8.4.0';
+const MODEL_VERSION='8.4.0-real-matchups';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -1454,6 +1454,19 @@ function guideUrl(c){
   const slug=(g&&g.slug)||guideSlugs[c.en];
   return slug?GUIDE_BASE+slug:null;
 }
+/* 가이드가 명시한 상성. 우리가 추정한 클래스 매트릭스보다 신뢰도가 높으므로
+   같은 크기(±14 = 매트릭스 최대치)로 얹어 사실상 덮어쓰게 한다.
+   양쪽이 서로를 카운터로 지목하면 상쇄되어 0이 된다 — 그게 맞는 처리다. */
+function guideMatchup(cand,laner){
+  if(!GUIDES)return {v:0,note:''};
+  const gc=guideOf(cand), gl=guideOf(laner);
+  if(!gc||!gl)return {v:0,note:''};
+  const beats=(g,slug)=>(g.counteredBy||[]).some(x=>x.slug===slug);
+  let v=0; const notes=[];
+  if(beats(gl,gc.slug)){v+=14;notes.push('가이드 상성: '+laner.kr+' 카운터');}
+  if(beats(gc,gl.slug)){v-=14;notes.push('가이드 상성: '+laner.kr+'에게 불리');}
+  return {v,note:notes.join(', ')};
+}
 // 가이드가 slug로 가리키는 상대를 한글 이름으로 바꾼다(로스터에 있을 때만).
 function slugToChamp(slug){
   if(!GUIDES)return null;
@@ -1650,6 +1663,18 @@ function score(cand){
                || state.enemy.map(id=>byId[id]).find(c=>c && lanesOf(c).includes(state.lane)); // 지정(🎯) > prime > 서브 포지션 폴백
     if(laner){
       const laneK=kitOf(laner); let a=mxAdv(cand.cls,laner.cls)*7; let lReach='';
+      const lGuidePos=[], lGuideNeg=[];
+      /* [v8.4] 가이드가 명시한 상성이 있으면 그것을 우선한다.
+         클래스 매트릭스는 추정이라 '전사 < 메이지' 같은 규칙이 이렐리아·야스오처럼
+         파고드는 전사에겐 정반대로 작동한다. 실제 카운터 데이터로 덮어쓴다. */
+      const gm=guideMatchup(cand,laner);
+      if(gm.v){a+=gm.v;(gm.v>0?lGuidePos:lGuideNeg).push(gm.note);}
+      /* 상대의 카운터 목록을 알고 있는데 내가 거기 없다면, 클래스 추정만으로 준
+         우위는 근거가 약하다(예: '암살자>메이지 +14'가 탈론을 실제 카운터인
+         이렐리아보다 높게 만들었다). 실데이터가 있을 때만 추측을 절반으로 줄인다.
+         불리 판정은 그대로 둔다 — 약한 건 여전히 약하다. */
+      if(a>0&&gm.v<=0&&guideOf(laner)&&(guideOf(laner).counteredBy||[]).length)
+        a=Math.round(a*0.5);
       // [v6] 암살자↔물몸 원거리 상성은 상대의 기동·셀프피어에 따라 크게 갈린다.
       // '암살자>메이지 +2'는 부동 메이지(신드라·직스)에만 참 — 아리(궁 3연속
       // 이동+매혹)류는 근접 암살자를 역카운터. 도주기·CC 보유량만큼 우위 상쇄.
@@ -1671,7 +1696,7 @@ function score(cand){
         }
       } else a=Math.round(a*0.5);                       // 정글 매치업 프록시 절반
       counter+=a;
-      const lPos=[], lNeg=[];
+      const lPos=[...lGuidePos], lNeg=[...lGuideNeg];
       const pd=((PAIR[cand.en]||{})[laner.en]!=null)?PAIR[cand.en][laner.en]:-(((PAIR[laner.en]||{})[cand.en])||0);
       if(pd){counter+=pd;(pd>0?lPos:lNeg).push('유명 상성 '+(pd>0?'우위':'열세'));}
       if(lReach)(lReach.includes('열세')?lNeg:lPos).push(lReach);
@@ -1692,10 +1717,15 @@ function score(cand){
       }
       if(lPoke){ // 상대가 포킹/원거리형 → 파고드는 픽이 유리
         if(cand.rng==='m'&&k.curve==='late'){counter-=5;lNeg.push('초반 포킹에 고통');} // 근접 후반형은 포킹 라인전이 지옥(카사딘 등)
-        // [v6] 기동성 2 이상(아리류)은 파고들어도 못 잡음 — 보너스 대신 감점.
+        /* [v6] 기동성 2 이상(아리류)은 파고들어도 못 잡음 — 보너스 대신 감점.
+           [v8.4] 접근 자체가 어려운 경우도 구분한다. 근접 챔이 장거리 견제형을
+           상대할 땐 '들어가면 이긴다'가 아니라 '들어가는 게 문제'다. */
         if(cand.tags.includes('dive')||cand.tags.includes('engage')){
-          if((laneK.mob||0)<2){nz+=6;lnote.push('파고들어 응징');}
-          else {nz-=3;lnote.push('상대 기동성에 접근 무효(-)');}
+          if((laneK.mob||0)>=2){nz-=3;lnote.push('상대 기동성에 접근 무효(-)');}
+          else if(cand.rng==='m'&&reachOf(laner)>=2&&(k.mob||0)<2){
+            nz+=2;lnote.push('접근만 하면 유리하나 진입이 어려움');
+          }
+          else {nz+=6;lnote.push('파고들어 응징');}
         }
         if(cand.tags.includes('sustain')&&!lAllIn){nz+=3;lnote.push('포킹 버팀');}
         if(cand.rng==='m'&&!cand.tags.includes('dive')&&cand.cls!=='tank'){nz-=4;lnote.push('포킹에 취약(-)');}

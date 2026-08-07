@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='8.3.0'"));
+assert.ok(html.includes("const APP_VERSION='8.4.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -165,6 +165,19 @@ for(const [name,g] of Object.entries(guides.champions)){
     assert.match(rel.slug,/^[a-z0-9-]{2,40}$/,`bad related slug in ${name}`);
 }
 assert.ok(sw.includes("'./data/guides.json'"),'guides must be precached for offline');
+// [v8.4] 가이드가 명시한 상성이 클래스 추정보다 우선한다.
+assert.ok(html.includes('function guideMatchup('),'guide matchup missing');
+assert.ok(html.includes('가이드 상성'),'guide matchup note missing');
+assert.ok(/a=Math\.round\(a\*0\.5\)/.test(html),'class-matrix guess must be damped when real data exists');
+assert.ok(html.includes('접근만 하면 유리하나 진입이 어려움'),'melee-vs-long-reach dive gate missing');
+// 가이드 카운터 데이터가 실제로 로스터 챔피언을 가리켜야 쓸모가 있다.
+const slugToName={};
+for(const [n,g] of Object.entries(guides.champions))slugToName[g.slug]=n;
+let resolvable=0,total=0;
+for(const g of Object.values(guides.champions))
+  for(const rel of (g.counteredBy||[])){total++;if(slugToName[rel.slug])resolvable++;}
+assert.ok(total>=200,`too few counter relations: ${total}`);
+assert.ok(resolvable/total>=0.9,`counter slugs mostly unresolvable: ${resolvable}/${total}`);
 // 수동 comfort가 실측을 덮어쓰는 옛 구조로 되돌아가면 안 된다.
 assert.ok(!/const comfort = manualC \|\| autoC/.test(html),'manual comfort must not override measured');
 assert.ok(/effectiveComfort\(cand\.id\)/.test(html),'score() must use effectiveComfort');
