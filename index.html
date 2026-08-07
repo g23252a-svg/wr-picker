@@ -91,6 +91,12 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .perfrow .pfhint b{color:var(--gold-soft)}
 .bd-first{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:#f0b232;
   border:1px solid #4a3a1e;background:#241c0e;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle}
+.bd-adj{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.03em;border-radius:4px;
+  padding:1px 6px;margin-left:6px;vertical-align:middle;border:1px solid}
+.bd-adj.dn{color:#f0a0a0;border-color:#633438;background:#281317}
+.bd-adj.up{color:#8be0b0;border-color:#28513c;background:#10241b}
+[data-theme="light"] .bd-adj.dn{background:#fff0f1;color:#a62f3a}
+[data-theme="light"] .bd-adj.up{background:#eaf8ef;color:#1c5c3c}
 [data-theme="light"] .pfbtns button{background:#fff}
 [data-theme="light"] .bd-first{background:#fff6df;color:#7a5200}
 .logtabs{display:flex;gap:6px;padding:10px 15px 0;border-bottom:1px solid var(--line)}
@@ -462,7 +468,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v7.3.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v8.0.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -819,8 +825,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='7.3.0';
-const MODEL_VERSION='7.3.0-personal-perf';
+const APP_VERSION='8.0.0';
+const MODEL_VERSION='8.0.0-earned-mastery';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -841,10 +847,10 @@ function buildMeta(m){
 }
 let META_SNAPSHOT=buildMeta(window.WR_STATS_META);
 const MAX_PICKS={ally:4,enemy:5,ban:10};
-/* 처음 잡는 챔의 실행 리스크(점수 감점).
-   목표 기준: 한 번도 안 해본 챔은 "측정 승률이 약 2%p 더 높아야" 익숙한 픽을 이긴다.
-   더 크게 잡으면 현재 챔폭에 갇혀 메타 변화를 못 따라가고, 더 작으면 무의미해진다. */
-const FIRST_PICK_PENALTY=2;
+/* v8: 첫 픽에 점수 감점을 두지 않는다(값 0 = 정보성 배지만 표시).
+   메타가 좋은 새 챔을 시도해야 주력이 늘어나고, 막으면 현재 챔폭에 갇힌다.
+   손해는 '해봤는데 성과가 나빴다'는 실측으로만 반영한다. */
+const FIRST_PICK_PENALTY=0;
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let undoStack=[],redoStack=[];
@@ -862,10 +868,21 @@ const PERF={
   ok:{kr:'보통',v:0.50,tip:'평범'},
   bad:{kr:'부진',v:0.18,tip:'안 맞았다'}
 };
-// 성과 미기록 판은 승패로 대체하되, 확신을 낮게 잡는다(0.5에서 덜 벌어짐).
+/* KDA를 성과 신호로 환산. (K+A)/D 를 포화 함수로 0~1에 매핑하며 2.5를 중앙(0.5)으로 둔다.
+   KDA도 팀 상황에 흔들리지만 승패보다 개인 기여를 훨씬 직접적으로 반영한다. */
+function kdaValue(k){
+  if(!k||![k.k,k.d,k.a].every(v=>Number.isFinite(v)))return null;
+  const r=(k.k+k.a)/Math.max(1,k.d);
+  return clamp(r/(r+2.5),0.08,0.92);
+}
+/* 한 판의 '내 성과' 점수(0~1). 등급과 KDA가 함께 있으면 등급을 주로,
+   KDA로 보정한다. 둘 다 없으면 승패로 대체하되 확신을 낮게 잡는다. */
 function perfValue(m){
-  const p=PERF[m.perf];
-  if(p)return p.v;
+  const g=PERF[m.perf]?PERF[m.perf].v:null;
+  const k=kdaValue(m.kda);
+  if(g!=null&&k!=null)return g*0.65+k*0.35;
+  if(g!=null)return g;
+  if(k!=null)return k*0.8+(m.won?0.68:0.32)*0.2;
   return m.won?0.68:0.32;
 }
 function computeFam(){
@@ -881,13 +898,26 @@ function computeFam(){
 /* 숙련도 = "이 챔으로 내가 실제로 얼마나 잘하는가".
    판수는 보너스가 아니라 추정의 확신도로만 쓴다. 판수를 가산점으로 주면
    많이 졌는데도 숙련이 높게 나와(예: 13판 38%가 54점) 손해 보는 픽을 계속 밀게 된다.
-   성과 평균을 쓰므로 팀 탓 패배로 부당하게 깎이지 않는다. */
+   성과(등급+KDA) 평균을 쓰므로 팀 탓 패배로 부당하게 깎이지 않는다. */
 function famComfort(id){
   const f=famMap[id]; if(!f||f.n<2)return 0;
   const prior=2;                                    // 평균 성과(0.5) 2판을 사전분포로
   const posterior=(f.p+prior*0.5)/(f.n+prior);
   const shrink=f.n/(f.n+4);                         // 표본이 적으면 50 쪽으로 축소
   return Math.round(clamp(50+(posterior-.5)*60*shrink,30,75));
+}
+/* 최종 숙련도 = 실제 성과가 주도, 수동 설정은 '처음 추정치'.
+   수동값을 절대값으로 두면 13판 38%인 챔이 계속 70으로 남아 손해 픽을 밀게 된다.
+   판이 쌓일수록 실측으로 수렴하고, 판이 없으면 수동값을 그대로 존중한다. */
+function effectiveComfort(id){
+  const manual=(pool[id]&&pool[id].comfort)||0;
+  const f=famMap[id];
+  const measured=famComfort(id);                    // 0이면 신호 없음
+  if(!measured)return {value:manual,manual,measured:0,games:f?f.n:0,adjusted:false};
+  if(!manual)return {value:measured,manual:0,measured,games:f.n,adjusted:false};
+  const shrink=f.n/(f.n+4);                         // 4판이면 절반, 12판이면 75%가 실측
+  const value=Math.round(manual*(1-shrink)+measured*shrink);
+  return {value,manual,measured,games:f.n,adjusted:Math.abs(value-manual)>=3};
 }
 // 이 챔으로 실제로 해본 판수 (첫 픽 위험 판정용)
 function playCount(id){const f=famMap[id];return f?f.n:0;}
@@ -1429,14 +1459,16 @@ function compProfile(ids){
 
 function score(cand){
   const W=weights;
-  const manualC = (pool[cand.id]&&pool[cand.id].comfort)||0;
-  const autoC = (W.autoFam!==false && !manualC) ? famComfort(cand.id) : 0;
-  const comfort = manualC || autoC;
+  /* 숙련은 필터가 아니라 가중 축이다. 안 해본 챔은 중립(50)이라 메타·상성이 좋으면
+     그대로 올라온다 — 새 챔을 시도할 여지를 막지 않는다.
+     반대로 여러 판 해봤는데 성과가 나쁘면 실측이 수동 설정을 끌어내린다. */
+  const cInfo = (W.autoFam!==false)
+    ? effectiveComfort(cand.id)
+    : (()=>{const m=(pool[cand.id]&&pool[cand.id].comfort)||0;
+            return {value:m,manual:m,measured:0,games:0,adjusted:false};})();
+  const comfort = cInfo.value;
   const hasComfort = comfort>0;
-  const comfortAuto = !manualC && autoC>0;
-  // comfort is a WEIGHTED axis, never a filter. Off-pool champs get a neutral
-  // baseline (50) so a strong meta/counter pick can still rank — just without
-  // the mastery bonus. Your mains (70~100) get a real edge, tunable by weight.
+  const comfortAuto = !cInfo.manual && cInfo.measured>0;
   const base = hasComfort ? comfort : 50;
   const roleStat=statOf(cand,state.lane);
   const metaKnown=!!roleStat;
@@ -1607,10 +1639,12 @@ function score(cand){
      엔진이 매판 새 챔을 추천해 이 손해를 사용자에게 그대로 떠넘긴다.
      메타가 여전히 주도하되(35%), 손에 익은 픽이 동점을 깨도록 한다. */
   const cw = (weights.recMode==='meta') ? W.comfort*0.35 : W.comfort;
-  // 첫 픽 위험: 한 번도 해본 적 없고 챔폭에도 없는 챔은 실전 리스크를 반영한다.
+  /* 첫 픽에는 점수를 깎지 않는다. 메타가 좋은 새 챔을 시도해봐야 내 주력이 늘고,
+     막는 순간 현재 챔폭에 갇힌다. 대신 `첫 픽` 배지로 사실만 알리고,
+     실제로 해본 뒤 성과가 나쁘면 그때 숙련 축이 자연히 끌어내린다. */
   const games=playCount(cand.id);
-  const firstPick = games===0 && !manualC;
-  const familiarity = firstPick ? -FIRST_PICK_PENALTY : 0;
+  const firstPick = games===0 && !cInfo.manual;
+  const familiarity = 0;
   const teamAxis=clamp(50+team,0,100);
   const counterAxis=clamp(50+counter,0,100);
   const tierW=W.tier;
@@ -1626,7 +1660,7 @@ function score(cand){
   if(state.laneMark!=null)confidence+=10; else if(laner)confidence+=4;
   if(dataAge>3)confidence-=Math.min(20,(dataAge-3)*2);
   confidence=Math.round(clamp(confidence,25,95));
-  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence,games,firstPick,familiarity};
+  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence,games,firstPick,familiarity,cInfo};
 }
 
 function anyOwned(){ return Object.values(pool).some(p=>p&&p.comfort>0); }
@@ -1800,6 +1834,11 @@ function render(){
       badge+=`<span class="bd-fam">★내챔 ${fm.n}판 ${fm.w}승${g}</span>`;
     }
     else if(s.firstPick) badge+=`<span class="bd-first">첫 픽</span>`;
+    // 등록 숙련도가 실제 성과로 조정된 경우 그 사실을 드러낸다.
+    if(s.cInfo&&s.cInfo.adjusted){
+      const down=s.cInfo.value<s.cInfo.manual;
+      badge+=`<span class="bd-adj ${down?'dn':'up'}" title="등록 ${s.cInfo.manual} → 실적 ${s.cInfo.games}판 반영">숙련 ${s.cInfo.manual}→${s.cInfo.value}</span>`;
+    }
     if(mode==='weighted'){
       if(pool[c.id]&&pool[c.id].comfort>0){ if(s.comfort>=70) badge+=`<span class="bd-main">주력</span>`; }
       else if(s.comfortAuto) badge+=`<span class="bd-main">자동숙련</span>`;
@@ -1911,8 +1950,13 @@ function renderCfg(){
   const champs=DB.filter(c=>lanesOf(c).includes(cfgLane)).sort((a,b)=>a.kr.localeCompare(b.kr,'ko'));
   const rows=champs.map(c=>{
     const cm=(pool[c.id]&&pool[c.id].comfort)||0;
+    const ci=effectiveComfort(c.id);
+    // 설정값이 실적으로 조정된 경우 실제 적용값을 함께 보여준다.
+    const adj=ci.adjusted&&cm
+      ? ` <span class="pc" style="color:${ci.value<cm?'#f0a0a0':'#8be0b0'}">→ 실적 ${ci.value} (${ci.games}판)</span>`
+      : (!cm&&ci.measured?` <span class="pc" style="color:#8be0b0">자동 ${ci.measured} (${ci.games}판)</span>`:'');
     return `<div class="poolrow ${cm===0?'off':''}">
-      <div class="pn">${c.kr} <span class="pc">${CLSKR[c.cls]} · ${hasMeta(c,cfgLane)?wrOf(c,cfgLane).toFixed(1)+'%':'통계 없음'}</span></div>
+      <div class="pn">${c.kr} <span class="pc">${CLSKR[c.cls]} · ${hasMeta(c,cfgLane)?wrOf(c,cfgLane).toFixed(1)+'%':'통계 없음'}</span>${adj}</div>
       <input aria-label="${c.kr} 숙련도" type="range" min="0" max="100" step="5" value="${cm}" oninput="setComfort(${c.id},+this.value)">
       <span class="pv ${cm===0?'zero':''}" id="pv${c.id}">${cm||'–'}</span>
     </div>`;
@@ -2341,22 +2385,33 @@ async function disableAutoBackup(){
   try{await window.storage.delete('wr_autobk_at');}catch(e){}
   toast('자동 백업을 껐습니다');renderLog();
 }
+/* 실패 원인을 구분해서 보관한다. 전부 '권한 끊김'으로 뭉뚱그리면
+   파일이 지워진 경우에도 같은 안내가 떠서 사용자가 빠져나올 수 없다. */
+let autoBackupError='';
 async function autoBackupWrite(silent){
   if(!autoBackupHandle)return false;
   try{
     const perm=await autoBackupHandle.queryPermission({mode:'readwrite'});
     if(perm!=='granted'){
-      // 권한은 사용자 제스처에서만 다시 받을 수 있다. 조용히 보류하고 상태만 표시.
-      if(silent){autoBackupState='denied';return false;}
+      // 권한 재요청은 사용자 제스처에서만 가능하다. 자동 저장 중이면 보류만 한다.
+      if(silent){autoBackupState='denied';autoBackupError='권한 만료';return false;}
       const req=await autoBackupHandle.requestPermission({mode:'readwrite'});
-      if(req!=='granted'){autoBackupState='denied';renderLog();return false;}
+      if(req!=='granted'){autoBackupState='denied';autoBackupError='권한 거부됨';return false;}
     }
     const w=await autoBackupHandle.createWritable();
     await w.write(backupPayload());await w.close();
-    autoBackupState='ready';
+    autoBackupState='ready';autoBackupError='';
     try{await window.storage.set('wr_autobk_at',new Date().toISOString());}catch(e){}
     return true;
-  }catch(e){autoBackupState='denied';return false;}
+  }catch(e){
+    autoBackupState='denied';
+    const n=(e&&e.name)||'';
+    autoBackupError = n==='NotFoundError' ? '파일을 찾을 수 없음(이동·삭제됨)'
+      : n==='NotAllowedError' ? '권한 거부됨'
+      : n==='NoModificationAllowedError' ? '파일이 다른 프로그램에 잠김'
+      : (e&&e.message)||'알 수 없는 오류';
+    return false;
+  }
 }
 async function restoreAutoBackup(){
   if(!autoBackupSupported()){autoBackupState='unsupported';return;}
@@ -2368,12 +2423,15 @@ async function restoreAutoBackup(){
     autoBackupState=(perm==='granted')?'ready':'denied';
   }catch(e){autoBackupState='off';}
 }
-// 권한이 보류된 경우 사용자 제스처로 다시 잡아준다.
+/* 권한이 보류된 경우 사용자 제스처로 다시 잡아준다.
+   재연결이 실패하면(파일 삭제·이동 등) 막다른 길이 되지 않게 새 파일 선택으로 넘긴다. */
 async function resumeAutoBackup(){
   if(!autoBackupHandle)return enableAutoBackup();
   const ok=await autoBackupWrite(false);
-  if(ok)toast('자동 백업을 다시 연결했습니다');
+  if(ok){toast('자동 백업을 다시 연결했습니다');renderLog();return;}
   renderLog();
+  if(confirm(`자동 백업 재연결에 실패했습니다.\n원인: ${autoBackupError||'알 수 없음'}\n\n새 파일을 지정할까요?`))
+    await enableAutoBackup();
 }
 function autoBackupBox(){
   const at=autoBackupAt?new Date(autoBackupAt):null;
@@ -2382,8 +2440,13 @@ function autoBackupBox(){
     return `<div class="abk on"><div><b>자동 백업 켜짐</b><br><span>판을 기록할 때마다 지정한 파일에 저장됩니다 · 최근 ${when}</span></div>
       <button onclick="disableAutoBackup()">끄기</button></div>`;
   if(autoBackupState==='denied')
-    return `<div class="abk warn"><div><b>자동 백업 권한이 끊겼습니다</b><br><span>브라우저를 다시 열면 파일 권한이 초기화됩니다. 아래를 눌러 다시 연결하세요.</span></div>
-      <button onclick="resumeAutoBackup()">다시 연결</button></div>`;
+    return `<div class="abk warn"><div><b>자동 백업이 끊겼습니다</b><br>
+      <span>원인: <b>${autoBackupError||'권한 만료'}</b><br>
+      브라우저를 다시 열면 파일 권한이 초기화됩니다. <b>다시 연결</b>이 안 되면 <b>새 파일</b>로 다시 지정하세요.</span></div>
+      <div style="display:flex;gap:6px;flex-shrink:0">
+        <button onclick="resumeAutoBackup()">다시 연결</button>
+        <button onclick="enableAutoBackup()">새 파일</button>
+      </div></div>`;
   if(autoBackupState==='unsupported')
     return `<div class="abk"><div><b>자동 백업 미지원 브라우저</b><br><span>PC용 Chrome·Edge에서 사용할 수 있습니다. 그 전까지는 아래 <b>복사</b>나 <b>백업</b>을 쓰세요.</span></div></div>`;
   return `<div class="abk"><div><b>자동 백업 꺼짐</b><br><span>파일을 한 번만 지정하면, 이후 매 판 자동으로 저장됩니다. 기기가 바뀌어도 그 파일로 복원할 수 있습니다.</span></div>
