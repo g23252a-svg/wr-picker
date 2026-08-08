@@ -84,13 +84,13 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='8.4.0'"));
+assert.ok(html.includes("const APP_VERSION='9.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
 assert.ok(html.includes("const DATA_ENDPOINT="),'data endpoint missing');
 assert.ok(html.includes('id="decisionSummary"'));
-assert.ok(html.includes('상대 칩 이름을 탭하면'),'laner-mark hint missing');
+assert.ok(html.includes('상대 칩 이름 탭'),'laner-mark hint missing');
 assert.ok(html.includes('function banSuggestions()'),'ban advice engine missing');
 assert.ok(html.includes('id="banAdvice"'),'ban advice container missing');
 assert.ok(html.includes('id="bracketSel"'),'bracket selector missing');
@@ -237,5 +237,86 @@ for(const [a,opps] of Object.entries(pair)){
   for(const b of Object.keys(opps))assert.ok(names.includes(b),`PAIR opponent not in roster: ${a}>${b}`);
 }
 assert.ok(html.includes('상대 기동성에 접근 무효'),'dive-vs-mobile gating missing');
+
+/* [v9] 적 라인 배정 엔진.
+   실사용 150판에서 적을 입력한 146판 중 42판은 라인 상대를 못 찾아 상성 축이
+   죽었고, 21판은 폴백이 엉뚱한 챔을 상대로 세웠다. 한 명씩 찾는 방식으로
+   되돌아가지 않도록 고정하고, 배정 자체를 실제로 실행해 검증한다. */
+assert.ok(html.includes('function assignEnemyLanes('),'enemy lane assignment missing');
+assert.ok(html.includes('function laneOpponent('),'lane opponent resolver missing');
+assert.ok(html.includes('function laneFitConfidence('),'assignment confidence missing');
+assert.ok(/const asg=currentAssign\(\)/.test(html),'score() must use the shared assignment');
+assert.ok(!/find\(c=>c && primeLaneOf\(c\)===state\.lane\)/.test(html),
+  'per-champion laner fallback must not come back');
+assert.ok(/counter\+=Math\.round\(laneSum\*lanerConf\)/.test(html),
+  'lane matchup must be damped by assignment confidence');
+assert.ok(/counter=clamp\(counter,-22,22\)/.test(html),'team-level counter must be capped');
+
+// 배정 엔진을 실제로 실행한다 (DOM 없이 필요한 것만 주입).
+{
+  const dbSrc=html.slice(html.indexOf("const T={S:'S'"),html.indexOf('const LANES=['));
+  const {byId,byEn}=Function(dbSrc+'\nreturn {byId,byEn};')();
+  const asgSrc=html.slice(html.indexOf('const ASSIGN_LANES='),html.indexOf('/* 배정은 드래프트가 바뀔 때만'));
+  assert.ok(asgSrc.includes('function assignEnemyLanes('),'assignment block not extractable');
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const statOf=(c,lane)=>(stats[c.en]&&stats[c.en][lane])||null;
+  const {assignEnemyLanes,laneOpponent,laneFit}=
+    Function('byId','clamp','statOf',asgSrc+'\nreturn {assignEnemyLanes,laneOpponent,laneFit};')(byId,clamp,statOf);
+  const ids=(...en)=>en.map(n=>byEn[n].id);
+
+  // 정석 조합 5명은 각자 제자리에 가야 한다.
+  const team=ids('Lee Sin','Ahri','Darius','Jinx','Thresh');
+  const full=assignEnemyLanes(team,'mid',null);
+  const at=l=>full.byLane[l]&&full.byLane[l].en;
+  assert.equal(at('jug'),'Lee Sin','jungler misassigned');
+  assert.equal(at('mid'),'Ahri','mid laner misassigned');
+  assert.equal(at('top'),'Darius','top laner misassigned');
+  assert.equal(at('adc'),'Jinx','adc misassigned');
+  assert.equal(at('sup'),'Thresh','support misassigned');
+  assert.equal(laneOpponent(full,'mid').conf,1,'a clean assignment must be fully trusted');
+
+  /* 다리우스는 탑·정글 둘 다 가능하다. 탑이 비어 있으면 탑으로 가야 하고,
+     그때 정글을 묻는다면 '겸업 추정'으로만 답해야 한다 — 예전 폴백은 이걸
+     구분하지 않고 정글 상대로 확정해버렸다. */
+  const two=assignEnemyLanes(ids('Corki','Darius'),'jug',null);
+  assert.equal(two.byLane.top&&two.byLane.top.en,'Darius','flex pick must take its main lane');
+  const jugOpp=laneOpponent(two,'jug');
+  assert.ok(jugOpp.alt&&jugOpp.conf>0&&jugOpp.conf<1,'off-lane guess must be flagged and discounted');
+
+  // 그 라인에 설 수 있는 적이 아예 없으면 상대를 지어내지 않는다.
+  const none=laneOpponent(assignEnemyLanes(ids('Malphite','Lee Sin'),'adc',null),'adc');
+  assert.equal(none.c,null,'must not invent a laner when no candidate exists');
+  assert.equal(none.conf,0,'unknown laner must carry zero confidence');
+
+  // 🎯 지정은 배정을 이긴다.
+  const pinned=assignEnemyLanes(team,'mid',byEn['Thresh'].id);
+  assert.equal(pinned.byLane.mid.en,'Thresh','explicit lane mark must win');
+  assert.equal(laneOpponent(pinned,'mid').conf,1,'explicit mark must be fully trusted');
+
+  // 적합도는 실제 역할 통계를 따라야 한다(추측 금지).
+  assert.ok(laneFit(byEn['Thresh'],'sup')>laneFit(byEn['Thresh'],'top'),'laneFit must follow role stats');
+  assert.equal(laneFit(byEn['Thresh'],'adc'),0,'laneFit must be zero for impossible lanes');
+}
+
+/* [v9] 숙련도는 판이 쌓이면 수동 사전값을 완전히 버린다.
+   실측: 15판 33%인 챔이 수동 70에 끌려 적용 53(중립 위)에 머물렀다. */
+assert.ok(/const shrink=clamp\(f\.n\/8,0,1\)/.test(html),'manual comfort must fully decay by 8 games');
+assert.ok(/const spread=60\+40\*Math\.min\(1,f\.n\/15\)/.test(html),'comfort spread must scale with sample size');
+assert.ok(/const outcome=m\.won\?0\.74:0\.26/.test(html),'win/loss spread must stay wide enough to learn from');
+
+/* [v9] 성과 입력은 기록 '이후'에 묻는다. 사전 선택 방식으로 되돌아가면
+   실사용에서 그랬듯 등급 입력률이 28%로 주저앉는다. */
+assert.ok(html.includes('function openPerfRow('),'post-log grading row missing');
+assert.ok(html.includes('function patchGraded('),'in-place record patching missing');
+assert.ok(/openPerfRow\(matches\.length-1\)/.test(html),'logMatch must open grading for the new record');
+assert.ok(!/let pendingPerf/.test(html),'pre-log pending grade must be gone');
+assert.ok(/id="perfRow"[^>]*hidden/.test(html),'grading row must start hidden');
+assert.ok(html.includes('.perfrow[hidden]{display:none}'),'hidden grading row must actually hide');
+
+// [v9] 엔진 자기 교정 리포트 — 점수가 승률과 어긋나면 숨기지 않고 말한다.
+assert.ok(html.includes('추천 점수 → 실제 승률'),'engine calibration card missing');
+assert.ok(html.includes('내 라인 상대를 알고 있었나'),'laner coverage card missing');
+assert.ok(html.includes('out.calib='),'calibration model missing');
+assert.ok(/out\.opp=oppB/.test(html),'laner coverage model missing');
 
 console.log(`WR Picker smoke tests passed: ${champions.length} champions, ${rows.length} role rows.`);
