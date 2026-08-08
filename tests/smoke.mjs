@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='9.1.0'"));
+assert.ok(html.includes("const APP_VERSION='9.2.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -124,9 +124,39 @@ assert.ok(/recMode==='meta'\)\s*\?\s*W\.comfort\*/.test(html),'meta mode comfort
 assert.ok(html.includes('function effectiveComfort('),'measured/manual comfort blend missing');
 assert.ok(html.includes('function kdaValue('),'KDA signal missing');
 assert.ok(/perfValue\(m\)\{[\s\S]{0,400}kdaValue/.test(html),'perfValue must use KDA');
-// 승리는 성과가 나빠도 깎이면 안 된다(하한 보장), 패배는 성과가 좋으면 올라가야 한다.
-assert.ok(/m\.won\?Math\.max\(outcome,blend\):blend/.test(html),
-  'a win must never score below its outcome value');
+/* 승리는 성과가 나빠도 깎이면 안 되고(하한 보장), 패배는 성과가 좋으면 올라가야 한다.
+   문자열 매칭 대신 perfValue를 실제로 실행해서 확인한다 — v9.1까지는 정규식이
+   통과하는데도 이긴 판의 '잘함'이 아무 효과가 없었다(하한이 상한 노릇을 했다). */
+{
+  const pvSrc=html.match(/function perfValue\(m\)\{[\s\S]*?\n\}/);
+  assert.ok(pvSrc,'perfValue block not extractable');
+  const perfSrc=html.match(/const PERF=\{[\s\S]*?\n\};/);
+  const kdaSrc=html.match(/function kdaValue\(k\)\{[\s\S]*?\n\}/);
+  const perfValue=Function('clamp',
+    `${perfSrc[0]}\n${kdaSrc[0]}\n${pvSrc[0]}\nreturn perfValue;`)((v,a,b)=>Math.max(a,Math.min(b,v)));
+  const plainWin=perfValue({won:true}), plainLoss=perfValue({won:false});
+  assert.ok(plainWin>plainLoss,'a win must outrank a loss');
+  for(const g of ['mvp','svp','good','ok','bad']){
+    assert.ok(perfValue({won:true,perf:g})>=plainWin-1e-9,
+      `grading a win as ${g} must never drop below a plain win`);
+    assert.ok(perfValue({won:false,perf:g})<=perfValue({won:false,perf:'mvp'})+1e-9,
+      `loss grade ${g} must not exceed the best grade`);
+  }
+  // 이긴 판에서도 '잘함' 이상은 반드시 점수를 올려야 한다 — 무효 입력 회귀 방지.
+  for(const g of ['good','svp','mvp'])
+    assert.ok(perfValue({won:true,perf:g})>plainWin+1e-6,
+      `grading a win as ${g} must actually raise the score (it was a no-op through v9.1)`);
+  // '보통'과 '부진'은 이긴 판을 깎지도 올리지도 않는다.
+  for(const g of ['ok','bad'])
+    assert.ok(Math.abs(perfValue({won:true,perf:g})-plainWin)<1e-9,
+      `grading a win as ${g} must leave it unchanged`);
+  // 진 판은 성과 등급이 단조롭게 반영돼야 한다.
+  const losses=['bad','ok','good','svp','mvp'].map(g=>perfValue({won:false,perf:g}));
+  for(let i=1;i<losses.length;i++)
+    assert.ok(losses[i]>losses[i-1],'loss grades must be strictly ordered');
+  assert.ok(losses[0]<plainLoss&&losses[2]>plainLoss,
+    'a graded loss must move above/below an ungraded one');
+}
 // [v8.1] 라인전 사거리 — 와일드리프트는 라인전 비중이 커서 같은 원거리끼리도 갈린다.
 assert.ok(html.includes('const REACH='),'reach table missing');
 assert.ok(html.includes('function reachOf('),'reachOf missing');

@@ -510,7 +510,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v9.1.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v9.2.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -874,8 +874,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='9.1.0';
-const MODEL_VERSION='9.1.0-evidence-weighted';
+const APP_VERSION='9.2.0';
+const MODEL_VERSION='9.2.0-perf-effective';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -948,8 +948,18 @@ function perfValue(m){
   else if(g!=null)p=g;
   else if(k!=null)p=k;
   if(p==null)return outcome;                    // 성과 정보 없으면 승패만
-  const blend=outcome*0.4+p*0.6;
-  return m.won?Math.max(outcome,blend):blend;
+  /* [v9.2] 이긴 판은 성과가 나빠도 깎지 않는다 — 이 원칙은 그대로다.
+     문제는 하한이 상한 노릇까지 하고 있었다는 것이다. 예전 식
+     `max(outcome, outcome*0.4+p*0.6)`에서 이긴 판이 하한을 넘으려면 p>0.74여야 했고,
+     그 조건을 만족하는 등급은 MVP뿐이었다. 그래서 이긴 판에 '잘함'·'SVP'를 눌러도
+     점수가 1도 움직이지 않았다 — 실사용 성과 입력 42판 중 26판(62%)이 무효였다.
+     이긴 판에서는 '보통'을 기준점으로 두고 그 위쪽만 가산한다. 하한은 lift>=0 이라
+     구조적으로 보장되고, MVP 값(0.896)은 예전과 같다. */
+  if(m.won){
+    const lift=Math.max(0,(p-0.5)/0.5);         // 보통=0 … MVP=1
+    return outcome+(1-outcome)*lift*0.6;
+  }
+  return outcome*0.4+p*0.6;
 }
 function computeFam(){
   famMap={};
