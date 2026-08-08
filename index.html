@@ -98,7 +98,8 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .perfrow .pfhint{font-size:10.5px;color:var(--dimmer);flex:1 1 100%;line-height:1.4}
 .perfrow .pfhint b{color:var(--gold-soft)}
 .bd-first{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:#f0b232;
-  border:1px solid #4a3a1e;background:#241c0e;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle}
+  border:1px solid #4a3a1e;background:#241c0e;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle;
+  display:inline-block;white-space:nowrap}
 /* 전술 브리핑 */
 .tacbtn{margin-top:6px;font-family:'Rajdhani';font-weight:700;font-size:11px;letter-spacing:.03em;
   color:var(--dim);border:1px solid var(--line);border-radius:6px;padding:3px 9px;background:var(--panel2)}
@@ -122,7 +123,8 @@ button:disabled{cursor:not-allowed;opacity:.38}
 [data-theme="light"] .tac p b.cw{color:#a62f3a}
 [data-theme="light"] .tac p b.sw{color:#1c5c3c}
 .bd-adj{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.03em;border-radius:4px;
-  padding:1px 6px;margin-left:6px;vertical-align:middle;border:1px solid}
+  padding:1px 6px;margin-left:6px;vertical-align:middle;border:1px solid;
+  display:inline-block;white-space:nowrap}
 .bd-adj.dn{color:#f0a0a0;border-color:#633438;background:#281317}
 .bd-adj.up{color:#8be0b0;border-color:#28513c;background:#10241b}
 [data-theme="light"] .bd-adj.dn{background:#fff0f1;color:#a62f3a}
@@ -308,7 +310,8 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .bd-main{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:var(--cyan-soft);
   border:1px solid #1c4a47;background:#0e2422;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle}
 .rec.offpool .rname{color:var(--gold-soft)}
-.bd-fam{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:#f0b232;background:rgba(240,178,50,.12);border:1px solid rgba(240,178,50,.3);border-radius:4px;padding:1px 5px;margin-left:5px}
+.bd-fam{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:#f0b232;background:rgba(240,178,50,.12);border:1px solid rgba(240,178,50,.3);border-radius:4px;padding:1px 5px;margin-left:5px;
+  display:inline-block;white-space:nowrap}
 .bd-role{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:var(--dim);
   border:1px solid var(--line);background:#141d2a;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle}
 .scopetog{display:flex;gap:7px}
@@ -347,6 +350,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .lnbadge.guess{border-style:dashed}
 .compread .hintmark{color:var(--gold-soft)}
 .compread .lackmark{color:#f0b232}
+.inlinelink{font:inherit;color:inherit;text-decoration:underline;font-weight:700}
 [data-theme="light"] .chip.marked{background:#fff6df}
 #banBox{margin-top:8px}
 .sidetog{display:flex;align-items:center;gap:7px}
@@ -506,7 +510,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 <header class="top">
   <div>
     <h1>WR <span>Picker</span></h1>
-    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v9.0.0</b></div>
+    <div class="sub"><span id="patchLabel">Patch 7.2a</span> draft intelligence · <b id="appVersion" style="color:var(--gold-soft)">v9.1.0</b></div>
   </div>
   <div class="topbtns">
     <button class="gear install" id="installBtn" onclick="installApp()" aria-label="앱 설치">＋ <span class="btnlabel">설치</span></button>
@@ -870,8 +874,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='9.0.0';
-const MODEL_VERSION='9.0.0-lane-assign';
+const APP_VERSION='9.1.0';
+const MODEL_VERSION='9.1.0-evidence-weighted';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -892,10 +896,12 @@ function buildMeta(m){
 }
 let META_SNAPSHOT=buildMeta(window.WR_STATS_META);
 const MAX_PICKS={ally:4,enemy:5,ban:10};
-/* v8: 첫 픽에 점수 감점을 두지 않는다(값 0 = 정보성 배지만 표시).
-   메타가 좋은 새 챔을 시도해야 주력이 늘어나고, 막으면 현재 챔폭에 갇힌다.
-   손해는 '해봤는데 성과가 나빴다'는 실측으로만 반영한다. */
-const FIRST_PICK_PENALTY=0;
+/* [v9.1] 첫 픽 감점의 상한. 감점 자체는 고정값이 아니라 '지금 새 챔을 몇 개나
+   동시에 벌이고 있는가'(explorationLoad)로 정해진다 — 아무것도 안 벌였으면 0이다.
+   v8은 이 값을 0으로 고정했는데, 한 번도 안 해본 챔은 정의상 실측이 없어서
+   처음 잡는 챔의 실제 손해(42% vs 66%)가 영영 값매김되지 않았다.
+   상한을 낮게 두는 이유는 그대로다 — 정말 좋은 신규 픽은 여전히 올라와야 한다. */
+const FIRST_PICK_MAX_PENALTY=6;
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let undoStack=[],redoStack=[];
@@ -949,45 +955,83 @@ function computeFam(){
   famMap={};
   matches.forEach(m=>{
     if(m.pick==null||!byId[m.pick])return;
-    const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0,p:0,graded:0,skipped:0});
+    const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0,p:0,graded:0,skipped:0,lane:{}});
     f.n++; if(m.won)f.w++;
     if(PERF[m.perf])f.graded++;
     /* 팀 문제로 표시된 패배는 챔피언 평가에서 중립 처리한다.
        (이긴 판은 그대로 반영 — 승리는 어떻게 얻었든 성과다) */
-    if(isUncontrolled(m)&&!m.won){f.p+=0.5;f.skipped++;}
-    else f.p+=perfValue(m);
+    const v=(isUncontrolled(m)&&!m.won)?0.5:perfValue(m);
+    f.p+=v; if(isUncontrolled(m)&&!m.won)f.skipped++;
+    /* [v9.1] 같은 챔이라도 라인이 다르면 다른 챔이다. 실사용에서 케넨은 미드 8판
+       25% / 탑 7판 43%, 아무무는 정글 8판 75% / 서폿 2판으로 갈렸다. 라인을
+       뭉뚱그리면 어느 쪽이 문제인지 영영 알 수 없다. */
+    const L=f.lane[m.lane]||(f.lane[m.lane]={n:0,w:0,p:0});
+    L.n++; if(m.won)L.w++; L.p+=v;
   });
+  computeExplorationLoad();
+}
+/* [v9.1] 탐색 부하 = 최근 10판에서 '새로 시작한' 챔이 몇 종인가.
+   실사용에서 처음 잡는 챔 42%(38판) vs 2~3판째 66%(44판) — 24%p 차이다.
+   분석 탭은 이미 "새 챔은 한 번에 하나씩만"이라 조언하고 있었는데 엔진은
+   그 조언을 따르지 않았다. 이 값이 추천에서 신규 픽의 속도를 조절한다. */
+let explorationLoad=0;
+function computeExplorationLoad(){
+  const seen={}, window=Math.max(0,matches.length-10), started=new Set();
+  matches.forEach((m,i)=>{
+    const before=seen[m.pick]||0;
+    if(i>=window&&before<=1)started.add(m.pick);     // 최근 10판 중 사실상 첫 시도
+    seen[m.pick]=before+1;
+  });
+  explorationLoad=started.size;
+  return explorationLoad;
 }
 /* 숙련도 = "이 챔으로 내가 실제로 얼마나 잘하는가".
    판수는 보너스가 아니라 추정의 확신도로만 쓴다. 판수를 가산점으로 주면
    많이 졌는데도 숙련이 높게 나와(예: 13판 38%가 54점) 손해 보는 픽을 계속 밀게 된다.
    성과(등급+KDA) 평균을 쓰므로 팀 탓 패배로 부당하게 깎이지 않는다. */
-function famComfort(id){
-  const f=famMap[id]; if(!f||f.n<2)return 0;
+function famComfort(id,lane){
+  const f=famMap[id]; if(!f||f.n<1)return 0;
   const prior=2;                                    // 평균 성과(0.5) 2판을 사전분포로
-  const posterior=(f.p+prior*0.5)/(f.n+prior);
-  const shrink=f.n/(f.n+3);                         // 표본이 적으면 50 쪽으로 축소
+  let posterior=(f.p+prior*0.5)/(f.n+prior);
+  /* [v9.1] 이 라인에서의 성적이 쌓였으면 그쪽을 본다. 표본이 6판에 이르면
+     전적으로 라인 성적만 쓰고, 그 전에는 전체 성적과 섞는다.
+     확신도(아래 shrink·spread)는 라인이 아니라 그 챔 전체 판수로 잡는다 —
+     케넨을 15판 해봤다는 사실은 라인과 무관하게 '이 챔을 안다'는 뜻이다. */
+  const L=lane&&f.lane[lane];
+  if(L&&L.n>=2){
+    const lw=Math.min(1,L.n/6);
+    posterior=((L.p+prior*0.5)/(L.n+prior))*lw+posterior*(1-lw);
+  }
   /* [v9] 스프레드를 표본 크기의 함수로 만든다. 고정 60을 쓰면 아무리 판이 쌓여도
      신호가 좁은 띠 안에 갇혀, 15판 33%인 챔조차 48(중립 근처)로 나왔다.
-     3판짜리 인상은 여전히 조심하되 15판이면 실적을 그대로 믿는다. */
+     3판짜리 인상은 여전히 조심하되 15판이면 실적을 그대로 믿는다.
+
+     [v9.1] 여기서 추가로 곱하던 shrink(f.n/(f.n+3))는 뺐다. 불확실성을 두 번
+     반영하고 있었기 때문이다 — 위의 사전분포가 이미 표본이 적을수록 posterior를
+     0.5로 당기는데, 거기에 또 곱하니 값이 50 근처 좁은 띠에 갇혔다. 그래서
+     숙련 축은 실질 43~63(폭 20)만 움직이는데 메타 축은 28~84(폭 56)를 움직였고,
+     가중치를 아무리 올려도 메타가 이겼다(0승 5패 스몰더가 원딜 1순위).
+     표본이 적다는 사실은 이제 점수 계산 쪽에서 '숙련 축 가중치'로 반영한다. */
   const spread=60+40*Math.min(1,f.n/15);
-  return Math.round(clamp(50+(posterior-.5)*spread*shrink,25,78));
+  return Math.round(clamp(50+(posterior-.5)*spread,25,78));
 }
 /* 최종 숙련도 = 실제 성과가 주도, 수동 설정은 '처음 추정치'.
    수동값을 절대값으로 두면 13판 38%인 챔이 계속 70으로 남아 손해 픽을 밀게 된다.
    판이 쌓일수록 실측으로 수렴하고, 판이 없으면 수동값을 그대로 존중한다. */
-function effectiveComfort(id){
+function effectiveComfort(id,lane){
   const manual=(pool[id]&&pool[id].comfort)||0;
   const f=famMap[id];
-  const measured=famComfort(id);                    // 0이면 신호 없음
-  if(!measured)return {value:manual,manual,measured:0,games:f?f.n:0,adjusted:false};
-  if(!manual)return {value:measured,manual:0,measured,games:f.n,adjusted:false};
-  /* [v9] 8판이면 수동 사전값을 완전히 버린다. 기존 n/(n+4)는 꼬리가 길어
-     15판 33%인 챔이 수동 70에 계속 끌려 올라가 적용값 53(중립 위)에 머물렀다.
-     사전값은 판이 없을 때 쓰라고 두는 것이지, 실적을 이길 근거가 아니다. */
-  const shrink=clamp(f.n/8,0,1);                    // 4판이면 절반, 8판이면 전부 실측
+  const measured=famComfort(id,lane);               // 0이면 신호 없음
+  const laneN=(lane&&f&&f.lane[lane]&&f.lane[lane].n)||0;
+  if(!measured)return {value:manual,manual,measured:0,games:f?f.n:0,laneN,adjusted:false};
+  if(!manual)return {value:measured,manual:0,measured,games:f.n,laneN,adjusted:false};
+  /* [v9.1] 4판이면 수동 사전값을 완전히 버린다(v9는 8판이었다).
+     famComfort는 이미 표본이 적을수록 50 쪽으로 스스로 줄어든다 — 그 위에
+     수동값을 또 섞으면 같은 불확실성을 두 번 세는 셈이고, 그 결과 0승 5패인
+     스몰더가 등록 70에 끌려 적용 53(중립 위)으로 남아 원딜 1순위였다. */
+  const shrink=clamp(f.n/4,0,1);                    // 2판이면 절반, 4판이면 전부 실측
   const value=Math.round(manual*(1-shrink)+measured*shrink);
-  return {value,manual,measured,games:f.n,adjusted:Math.abs(value-manual)>=3};
+  return {value,manual,measured,games:f.n,laneN,adjusted:Math.abs(value-manual)>=3};
 }
 // 이 챔으로 실제로 해본 판수 (첫 픽 위험 판정용)
 function playCount(id){const f=famMap[id];return f?f.n:0;}
@@ -1701,9 +1745,9 @@ function score(cand){
      그대로 올라온다 — 새 챔을 시도할 여지를 막지 않는다.
      반대로 여러 판 해봤는데 성과가 나쁘면 실측이 수동 설정을 끌어내린다. */
   const cInfo = (W.autoFam!==false)
-    ? effectiveComfort(cand.id)
+    ? effectiveComfort(cand.id,state.lane)
     : (()=>{const m=(pool[cand.id]&&pool[cand.id].comfort)||0;
-            return {value:m,manual:m,measured:0,games:0,adjusted:false};})();
+            return {value:m,manual:m,measured:0,games:0,laneN:0,adjusted:false};})();
   const comfort = cInfo.value;
   const hasComfort = comfort>0;
   const comfortAuto = !cInfo.manual && cInfo.measured>0;
@@ -1920,13 +1964,23 @@ function score(cand){
      실측: 처음 잡는 챔은 2~3판째보다 승률이 크게 낮다. 숙련을 0으로 두면
      엔진이 매판 새 챔을 추천해 이 손해를 사용자에게 그대로 떠넘긴다.
      메타가 여전히 주도하되(35%), 손에 익은 픽이 동점을 깨도록 한다. */
-  const cw = (weights.recMode==='meta') ? W.comfort*0.35 : W.comfort;
-  /* 첫 픽에는 점수를 깎지 않는다. 메타가 좋은 새 챔을 시도해봐야 내 주력이 늘고,
-     막는 순간 현재 챔폭에 갇힌다. 대신 `첫 픽` 배지로 사실만 알리고,
-     실제로 해본 뒤 성과가 나쁘면 그때 숙련 축이 자연히 끌어내린다. */
+  /* [v9.1] 숙련 축의 발언권을 '근거의 양'에 비례시킨다. 예전에는 15판을 해본 챔과
+     한 번도 안 해본 챔이 똑같은 35% 가중치를 받았다. 그래서 메타가 좋은 챔은
+     내 실적이 아무리 나빠도 밀려나지 않았고, 실사용에서 0승 5패인 스몰더가
+     원딜 1순위, 7판 71%인 제리가 9위였다.
+     0판이면 여전히 35%(탐색을 막지 않는다) → 10판 이상이면 85%. */
+  const evidence=Math.min(1,(cInfo.games||0)/10);
+  const cw = (weights.recMode==='meta') ? W.comfort*(0.35+0.5*evidence) : W.comfort;
+  /* [v9.1] 첫 픽을 막지는 않되, 한 번에 여러 개를 벌이지는 않게 한다.
+     실측: 처음 잡는 챔 42%(38판) vs 2~3판째 66%(44판) — 24%p 손해다.
+     v8은 "실패가 쌓인 것만 깎는다"고 했지만, 한 번도 안 해본 챔은 정의상 실측이
+     없으므로 이 손해는 영원히 값매김되지 않는다. 그렇다고 감점을 고정하면
+     새 챔을 못 늘린다. 그래서 '지금 몇 개를 동시에 벌이고 있는가'로 조절한다 —
+     벌여놓은 게 없으면 감점 0, 이미 두세 개면 소폭 감점. 상한을 둬서 정말 좋은
+     신규 픽은 여전히 올라온다. */
   const games=playCount(cand.id);
   const firstPick = games===0 && !cInfo.manual;
-  const familiarity = 0;
+  const familiarity = firstPick ? -Math.min(FIRST_PICK_MAX_PENALTY,Math.max(0,explorationLoad-1)*3) : 0;
   const teamAxis=clamp(50+team,0,100);
   const counterAxis=clamp(50+counter,0,100);
   const tierW=W.tier;
@@ -2098,7 +2152,7 @@ function compReadout(){
     else if(opp.c)
       parts.push(`<span class="lackmark">${meKR} 상대 <b>${opp.c.kr}</b>? 확실하지 않음 — 맞는 챔 이름을 탭해 지정</span>`);
     else
-      parts.push(`<span class="lackmark">${meKR} 상대가 아직 없음 — 넣으면 상성 계산이 켜집니다</span>`);
+      parts.push(`<span class="lackmark">${meKR} 상대가 아직 없음 — <button class="inlinelink" onclick="focusEnemyAdd()">지금 추가</button>하면 상성 계산이 켜집니다</span>`);
   }
   /* 적 입력이 적으면 상성 축이 약해진다. 실사용에서 적 4명 이상 입력한 판은
      승률 59%, 3명 이하는 49%였다(그만큼 상성 정보가 결과를 바꾼다). */
@@ -2192,10 +2246,20 @@ function render(){
     if(s.offRole) badge+=`<span class="bd-role">통계 없음</span>`;
     const fm=famMap[c.id];
     if(fm){
+      /* [v9.1] 이 라인에서의 성적이 전체와 다르면 라인 기준으로 보여준다.
+         케넨은 미드 8판 25% / 탑 7판 43%로 갈리는데, 뭉뚱그린 '15판 5승'은
+         어느 라인이 문제인지 감추고 숙련 점수와도 어긋나 보인다. */
+      const lf=fm.lane&&fm.lane[state.lane];
       const g=fm.graded?` · 성과 ${Math.round(fm.p/fm.n*100)}`:'';
-      badge+=`<span class="bd-fam">★내챔 ${fm.n}판 ${fm.w}승${g}</span>`;
+      badge+=(lf&&lf.n>=3&&lf.n<fm.n)
+        ? `<span class="bd-fam">★${LANEKR[state.lane]} ${lf.n}판 ${lf.w}승 <span style="opacity:.6">(전체 ${fm.n}판)</span></span>`
+        : `<span class="bd-fam">★내챔 ${fm.n}판 ${fm.w}승${g}</span>`;
     }
-    else if(s.firstPick) badge+=`<span class="bd-first">첫 픽</span>`;
+    /* [v9.1] 첫 픽 배지에 '왜 지금은 미루는 게 나은지'를 붙인다. 감점이 붙는데
+       이유가 안 보이면 사용자는 엔진이 고장났다고 느낀다. */
+    else if(s.firstPick) badge+=s.familiarity<0
+      ? `<span class="bd-first" title="새로 시작한 챔이 이미 ${explorationLoad}종 — 한 번에 하나씩 늘리는 편이 유리합니다">첫 픽 · 탐색 ${explorationLoad}종 진행중</span>`
+      : `<span class="bd-first">첫 픽</span>`;
     // 등록 숙련도가 실제 성과로 조정된 경우 그 사실을 드러낸다.
     if(s.cInfo&&s.cInfo.adjusted){
       const down=s.cInfo.value<s.cInfo.manual;
@@ -2229,6 +2293,15 @@ function render(){
 /* ============ INLINE SEARCH ============ */
 let addSide='enemy';
 function setAddSide(s){addSide=s;paintAddSide();renderDD();document.getElementById('mainSrch').focus();}
+/* [v9.1] 내 라인 상대가 비었을 때 한 번에 입력으로 데려간다. 실사용 146판 중
+   42판(29%)이 맞라인을 안 넣은 채 추천을 받았는데, 안내 문구만으로는 그 판들이
+   줄지 않았다. 안내가 곧 버튼이어야 한다. */
+function focusEnemyAdd(){
+  setAddSide('enemy');
+  const s=document.getElementById('mainSrch');
+  if(s){s.scrollIntoView({block:'center',behavior:'smooth'});s.focus();}
+  announce(LANEKR[state.lane]+' 상대를 검색해 추가하세요');
+}
 function paintAddSide(){
   document.getElementById('sbEnemy').className=addSide==='enemy'?'on enemy':'';
   document.getElementById('sbAlly').className=addSide==='ally'?'on ally':'';
@@ -2313,11 +2386,14 @@ function renderCfg(){
   const champs=DB.filter(c=>lanesOf(c).includes(cfgLane)).sort((a,b)=>a.kr.localeCompare(b.kr,'ko'));
   const rows=champs.map(c=>{
     const cm=(pool[c.id]&&pool[c.id].comfort)||0;
-    const ci=effectiveComfort(c.id);
+    /* [v9.1] 실적은 라인별로 갈리므로(케넨 미드 25% / 탑 43%) 지금 보고 있는
+       라인 기준으로 보여준다. 그 라인 표본이 따로 있으면 판수도 라인 기준으로 적는다. */
+    const ci=effectiveComfort(c.id,cfgLane);
+    const gTxt=ci.laneN>=2?`${LANEKR[cfgLane]} ${ci.laneN}판`:`${ci.games}판`;
     // 설정값이 실적으로 조정된 경우 실제 적용값을 함께 보여준다.
     const adj=ci.adjusted&&cm
-      ? ` <span class="pc" style="color:${ci.value<cm?'#f0a0a0':'#8be0b0'}">→ 실적 ${ci.value} (${ci.games}판)</span>`
-      : (!cm&&ci.measured?` <span class="pc" style="color:#8be0b0">자동 ${ci.measured} (${ci.games}판)</span>`:'');
+      ? ` <span class="pc" style="color:${ci.value<cm?'#f0a0a0':'#8be0b0'}">→ 실적 ${ci.value} (${gTxt})</span>`
+      : (!cm&&ci.measured?` <span class="pc" style="color:#8be0b0">자동 ${ci.measured} (${gTxt})</span>`:'');
     return `<div class="poolrow ${cm===0?'off':''}">
       <div class="pn">${c.kr} <span class="pc">${CLSKR[c.cls]} · ${hasMeta(c,cfgLane)?wrOf(c,cfgLane).toFixed(1)+'%':'통계 없음'}</span>${adj}</div>
       <input aria-label="${c.kr} 숙련도" type="range" min="0" max="100" step="5" value="${cm}" oninput="setComfort(${c.id},+this.value)">
@@ -2684,6 +2760,15 @@ function analysisModel(){
     d:stale.map(c=>{const e=effectiveComfort(c.id);
       return `<b>${champName(c.id)}</b> ${c.n}판 ${Math.round(c.w/c.n*100)}% (등록 ${e.manual} → 적용 <b>${e.value}</b>)`;}).join(', ')
       +' — 실적이 이미 점수를 끌어내리고 있습니다. 설정에서 등록값도 낮추면 추천에서 더 확실히 빠집니다.'});
+  /* [v9.1] 등록만 해두고 거의 안 쓴 챔. 판이 없으면 실적이 사전값을 이길 수 없어
+     이런 항목은 추천을 계속 위로 끌어올린다(실사용에서 1판 0%인 챔이 탑 4위였다).
+     엔진이 몰래 무시하는 대신, 등록값을 손보라고 말하는 쪽이 맞다. */
+  const idle=Object.keys(pool).map(Number)
+    .filter(id=>byId[id]&&pool[id].comfort>=60&&playCount(id)<=1);
+  if(idle.length>=3)ins.push({t:'등록만 해두고 안 쓰는 챔이 있습니다',
+    d:idle.slice(0,6).map(id=>`<b>${champName(id)}</b>(${playCount(id)}판)`).join(', ')
+      +(idle.length>6?` 외 ${idle.length-6}종`:'')
+      +` — 판이 없으면 실적이 등록값을 이길 수 없어 계속 추천 위쪽에 올라옵니다. 실제로 안 쓸 챔은 설정에서 0으로 내리세요.`});
   /* [v9] 상대를 모른 채 계산한 판이 많으면 상성 축이 그만큼 꺼져 있었다는 뜻이다. */
   if(out.opp.none.n>=MIN_BUCKET&&out.opp.sure.n>=MIN_BUCKET){
     const share=out.opp.none.n/(out.opp.none.n+out.opp.sure.n+out.opp.guess.n);

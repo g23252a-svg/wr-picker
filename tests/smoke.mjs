@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='9.0.0'"));
+assert.ok(html.includes("const APP_VERSION='9.1.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -180,10 +180,15 @@ assert.ok(total>=200,`too few counter relations: ${total}`);
 assert.ok(resolvable/total>=0.9,`counter slugs mostly unresolvable: ${resolvable}/${total}`);
 // 수동 comfort가 실측을 덮어쓰는 옛 구조로 되돌아가면 안 된다.
 assert.ok(!/const comfort = manualC \|\| autoC/.test(html),'manual comfort must not override measured');
-assert.ok(/effectiveComfort\(cand\.id\)/.test(html),'score() must use effectiveComfort');
-// 탐색을 막지 않는다: 첫 픽에 점수 감점 없음(배지는 유지).
-assert.ok(/const FIRST_PICK_PENALTY=0/.test(html),'first pick must not be penalized (exploration)');
-assert.ok(html.includes('const familiarity = 0'),'familiarity penalty must be neutral');
+assert.ok(/effectiveComfort\(cand\.id,state\.lane\)/.test(html),'score() must use lane-aware effectiveComfort');
+/* 탐색은 여전히 막지 않는다. 다만 v9.1부터 감점이 고정 0이 아니라
+   '지금 새 챔을 몇 개나 동시에 벌이고 있는가'로 정해진다 — 아무것도 안 벌였으면 0.
+   실측(처음 잡는 챔 42% vs 2~3판째 66%)을 값매김하되 상한을 낮게 둬서
+   좋은 신규 픽이 여전히 올라오게 한다. */
+assert.ok(/const FIRST_PICK_MAX_PENALTY=[1-9]/.test(html),'first-pick penalty cap missing');
+assert.ok(/FIRST_PICK_MAX_PENALTY,Math\.max\(0,explorationLoad-1\)\*3/.test(html),
+  'first-pick penalty must scale with open explorations, not be a flat charge');
+assert.ok(html.includes('function computeExplorationLoad('),'exploration pacing missing');
 assert.ok(html.includes('bd-first'),'first-pick badge should remain informational');
 // 자동 백업 실패 원인을 구분해야 사용자가 빠져나올 수 있다.
 assert.ok(html.includes('autoBackupError'),'auto-backup error cause missing');
@@ -300,7 +305,6 @@ assert.ok(/counter=clamp\(counter,-22,22\)/.test(html),'team-level counter must 
 
 /* [v9] 숙련도는 판이 쌓이면 수동 사전값을 완전히 버린다.
    실측: 15판 33%인 챔이 수동 70에 끌려 적용 53(중립 위)에 머물렀다. */
-assert.ok(/const shrink=clamp\(f\.n\/8,0,1\)/.test(html),'manual comfort must fully decay by 8 games');
 assert.ok(/const spread=60\+40\*Math\.min\(1,f\.n\/15\)/.test(html),'comfort spread must scale with sample size');
 assert.ok(/const outcome=m\.won\?0\.74:0\.26/.test(html),'win/loss spread must stay wide enough to learn from');
 
@@ -312,6 +316,19 @@ assert.ok(/openPerfRow\(matches\.length-1\)/.test(html),'logMatch must open grad
 assert.ok(!/let pendingPerf/.test(html),'pre-log pending grade must be gone');
 assert.ok(/id="perfRow"[^>]*hidden/.test(html),'grading row must start hidden');
 assert.ok(html.includes('.perfrow[hidden]{display:none}'),'hidden grading row must actually hide');
+
+/* [v9.1] 개인 실적이 메타를 이길 수 있어야 한다.
+   v9까지는 숙련 값에 불확실성이 두 번 걸려(사전분포 + shrink) 실질 폭이 43~63인데
+   메타 축은 28~84였고, 그래서 0승 5패인 챔이 원딜 1순위였다. */
+assert.ok(!/\(posterior-\.5\)\*spread\*shrink/.test(html),'comfort must not double-shrink');
+assert.ok(/\(posterior-\.5\)\*spread,25,78/.test(html),'comfort spread must reach the axis edges');
+assert.ok(/const evidence=Math\.min\(1,\(cInfo\.games\|\|0\)\/10\)/.test(html),'comfort weight must scale with evidence');
+assert.ok(/W\.comfort\*\(0\.35\+0\.5\*evidence\)/.test(html),'meta mode must widen comfort weight as evidence accrues');
+assert.ok(/const shrink=clamp\(f\.n\/4,0,1\)/.test(html),'manual prior must hand over by 4 games');
+// 라인별 실적 분리 — 케넨 미드 25% / 탑 43%처럼 갈리는 걸 뭉뚱그리면 안 된다.
+assert.ok(/function famComfort\(id,lane\)/.test(html),'comfort must be lane-aware');
+assert.ok(/const L=lane&&f\.lane\[lane\]/.test(html),'lane-specific record lookup missing');
+assert.ok(/f\.lane\[m\.lane\]/.test(html),'computeFam must accumulate per-lane records');
 
 // [v9] 엔진 자기 교정 리포트 — 점수가 승률과 어긋나면 숨기지 않고 말한다.
 assert.ok(html.includes('추천 점수 → 실제 승률'),'engine calibration card missing');
