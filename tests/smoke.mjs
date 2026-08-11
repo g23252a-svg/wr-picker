@@ -483,4 +483,33 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.equal(relWeight(lux,'not-a-champ','sup'),0,'unrelated champions must score zero');
 }
 
+/* 시드 전적은 새 기기에서 1회 적재되는 실사용 기록이고, README의 검증 수치가
+   전부 이 데이터로 계산된다. 조용히 깨지면 두 곳이 동시에 거짓말을 하게 된다. */
+{
+  const seed=JSON.parse(fs.readFileSync(new URL('../data/seed-history.json',import.meta.url),'utf8'));
+  const M=seed.matches;
+  assert.ok(Array.isArray(M)&&M.length>=190,`seed history too small: ${M&&M.length}`);
+  assert.equal(new Set(M.map(m=>m.t)).size,M.length,'duplicate match timestamp in seed');
+  assert.ok(M.every((m,i)=>i===0||m.t>M[i-1].t),'seed history must be sorted by time');
+  const GRADES=['mvp','svp','good','ok','bad'];
+  const idOf=new Set(names.map(stableId));
+  for(const m of M){
+    assert.ok(ROLES.includes(m.lane),`seed: bad lane ${m.lane}`);
+    assert.equal(typeof m.won,'boolean',`seed: won must be boolean at ${m.t}`);
+    assert.ok(idOf.has(m.pick),`seed: unknown pick id ${m.pick} at ${m.t}`);
+    // 픽·아군·상대·top3가 전부 실제 챔피언이어야 한다(전사 오타 방지).
+    for(const id of [m.top,m.laneMark,m.lanerAuto,...(m.ally||[]),...(m.enemy||[]),...(m.top3||[])])
+      if(id!=null)assert.ok(idOf.has(id),`seed: unknown champion id ${id} at ${m.t}`);
+    assert.ok((m.ally||[]).length<=4&&(m.enemy||[]).length<=5,`seed: roster overflow at ${m.t}`);
+    if(m.perf!=null)assert.ok(GRADES.includes(m.perf),`seed: bad perf grade ${m.perf} at ${m.t}`);
+    // top3는 있으면 3개이고 첫 항목이 top이어야 한다.
+    if(Array.isArray(m.top3)&&m.top3.length)
+      assert.equal(m.top3[0],m.top,`seed: top3[0] must equal top at ${m.t}`);
+    if(m.scoreSnapshot)for(const k of ['total','meta','team','counter','comfort','confidence'])
+      assert.ok(Number.isFinite(m.scoreSnapshot[k]),`seed: bad scoreSnapshot.${k} at ${m.t}`);
+  }
+  // 챔폭(pool)도 실제 챔피언만 가리켜야 한다.
+  for(const id of Object.keys(seed.pool||{}))assert.ok(idOf.has(+id),`seed pool: unknown id ${id}`);
+}
+
 console.log(`WR Picker smoke tests passed: ${champions.length} champions, ${rows.length} role rows.`);
