@@ -147,12 +147,19 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .bar{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px}
 .bar .bl{flex:0 0 92px;color:var(--dim);font-size:11.5px}
 .bar .bt{flex:1;height:16px;background:var(--panel);border-radius:4px;overflow:hidden;position:relative;min-width:40px}
-.bar .bf{height:100%;background:linear-gradient(90deg,var(--cyan),var(--cyan-soft));border-radius:4px}
+/* [v10] display:block이 없으면 인라인 span이라 width·height가 통째로 무시된다.
+   분석 탭이 생긴 v7.1부터 막대가 한 번도 그려지지 않았고, 눈금 없는 숫자만
+   남아 있었다(트랙만 보이니 "0%"처럼 읽혔다). */
+.bar .bf{display:block;height:100%;min-width:3px;background:linear-gradient(90deg,var(--cyan),var(--cyan-soft));border-radius:4px}
 .bar .bf.lo{background:linear-gradient(90deg,#a4444b,#d65a5a)}
 .bar .bf.mid{background:linear-gradient(90deg,#8a7330,var(--gold))}
 .bar .bv{flex:0 0 76px;text-align:right;font-family:'Rajdhani';font-weight:700;font-size:12.5px}
 .bar .bv small{color:var(--dimmer);font-weight:600;font-size:10px;margin-left:3px}
 .bar.weak .bl,.bar.weak .bv{opacity:.5}
+/* 축별 성적표는 값 칸에 '발언권 83%'까지 들어간다. 기본 76px에 밀어 넣으면
+   `발 / 언권 83%`처럼 쪼개져 읽힌다(v9.1에서 배지에 같은 문제가 있었다). */
+.bar.axis .bv{flex:0 0 116px}
+.bar.axis .bv small{display:block;margin-left:0}
 .spark{display:flex;align-items:flex-end;gap:3px;height:52px;margin:8px 0 4px}
 .spark div{flex:1;background:var(--cyan);border-radius:2px 2px 0 0;min-height:3px;position:relative}
 .spark div.lo{background:var(--red)}
@@ -874,8 +881,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='9.2.0';
-const MODEL_VERSION='9.2.0-perf-effective';
+const APP_VERSION='10.0.0';
+const MODEL_VERSION='10.0.0-axis-selfcheck';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -902,11 +909,20 @@ const MAX_PICKS={ally:4,enemy:5,ban:10};
    처음 잡는 챔의 실제 손해(42% vs 66%)가 영영 값매김되지 않았다.
    상한을 낮게 두는 이유는 그대로다 — 정말 좋은 신규 픽은 여전히 올라와야 한다. */
 const FIRST_PICK_MAX_PENALTY=6;
+/* [v10] 라인 상성 기여분의 상한. 팀 단위 상성은 v9에서 ±22로 잘렸는데 라인
+   상성은 상한이 없어 실사용에서 +36까지 나왔다(자세한 근거는 score() 안 주석). */
+const LANE_MATCHUP_CAP=16;
+/* [v10] 봇 듀오는 1v1 라인이 아니다. 정글이 이미 `*0.5` 감쇠를 받는 이유("지속
+   라인전이 없다")와 같은 이유가 봇에도 있다 — 원딜·서폿의 라인전 결과는 상대
+   서폿 한 명과의 상성이 아니라 2v2 조합으로 갈린다. 실사용에서 파이크(서폿)가
+   럭스 상대로 라인 상성 +27을 받았지만 그런 판들의 승률은 2/8이었다. */
+const BOT_DUO_DAMP=0.6;
+function laneMatchupScale(lane){return (lane==='adc'||lane==='sup')?BOT_DUO_DAMP:1;}
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let undoStack=[],redoStack=[];
 let pool={};   // stable champion id -> {comfort:0-100}
-let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:3};
+let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:3, goal:'allround', autoAxis:true};
 let matches=[];
 let lastCands=[];
 let famMap={};
@@ -961,24 +977,29 @@ function perfValue(m){
   }
   return outcome*0.4+p*0.6;
 }
+/* 한 판을 숙련 누적표에 접는다. [v10] computeFam에서 떼어냈다 —
+   자기 채점(replayPass)이 "그 판 직전까지의 전적"으로 같은 표를 단계별로
+   다시 쌓아야 하는데, 두 곳이 각자 계산하면 채점과 추천이 어긋난다. */
+function foldMatch(map,m){
+  if(m.pick==null||!byId[m.pick])return;
+  const f=map[m.pick]||(map[m.pick]={n:0,w:0,p:0,graded:0,skipped:0,lane:{}});
+  f.n++; if(m.won)f.w++;
+  if(PERF[m.perf])f.graded++;
+  /* 팀 문제로 표시된 패배는 챔피언 평가에서 중립 처리한다.
+     (이긴 판은 그대로 반영 — 승리는 어떻게 얻었든 성과다) */
+  const v=(isUncontrolled(m)&&!m.won)?0.5:perfValue(m);
+  f.p+=v; if(isUncontrolled(m)&&!m.won)f.skipped++;
+  /* [v9.1] 같은 챔이라도 라인이 다르면 다른 챔이다. 실사용에서 케넨은 미드 8판
+     25% / 탑 7판 43%, 아무무는 정글 8판 75% / 서폿 2판으로 갈렸다. 라인을
+     뭉뚱그리면 어느 쪽이 문제인지 영영 알 수 없다. */
+  const L=f.lane[m.lane]||(f.lane[m.lane]={n:0,w:0,p:0});
+  L.n++; if(m.won)L.w++; L.p+=v;
+}
 function computeFam(){
   famMap={};
-  matches.forEach(m=>{
-    if(m.pick==null||!byId[m.pick])return;
-    const f=famMap[m.pick]||(famMap[m.pick]={n:0,w:0,p:0,graded:0,skipped:0,lane:{}});
-    f.n++; if(m.won)f.w++;
-    if(PERF[m.perf])f.graded++;
-    /* 팀 문제로 표시된 패배는 챔피언 평가에서 중립 처리한다.
-       (이긴 판은 그대로 반영 — 승리는 어떻게 얻었든 성과다) */
-    const v=(isUncontrolled(m)&&!m.won)?0.5:perfValue(m);
-    f.p+=v; if(isUncontrolled(m)&&!m.won)f.skipped++;
-    /* [v9.1] 같은 챔이라도 라인이 다르면 다른 챔이다. 실사용에서 케넨은 미드 8판
-       25% / 탑 7판 43%, 아무무는 정글 8판 75% / 서폿 2판으로 갈렸다. 라인을
-       뭉뚱그리면 어느 쪽이 문제인지 영영 알 수 없다. */
-    const L=f.lane[m.lane]||(f.lane[m.lane]={n:0,w:0,p:0});
-    L.n++; if(m.won)L.w++; L.p+=v;
-  });
+  matches.forEach(m=>foldMatch(famMap,m));
   computeExplorationLoad();
+  invalidateSelfCheck();
 }
 /* [v9.1] 탐색 부하 = 최근 10판에서 '새로 시작한' 챔이 몇 종인가.
    실사용에서 처음 잡는 챔 42%(38판) vs 2~3판째 66%(44판) — 24%p 차이다.
@@ -1134,6 +1155,9 @@ function sanitizeWeights(raw){
   if(!['winrate','allround'].includes(next.goal))next.goal='allround';
   next.wv=3;
   next.autoFam=next.autoFam!==false;
+  /* [v10] 축별 자동 보정. 기본 켜짐 — 못 맞히는 축이 크게 말하는 것을 막는다.
+     끄면 아래 슬라이더 값이 그대로 쓰인다(엔진 동작을 눈으로 비교할 수 있게). */
+  next.autoAxis=next.autoAxis!==false;
   return next;
 }
 async function loadStore(){
@@ -1592,6 +1616,7 @@ function adoptStatsPayload(raw,origin){
   if(!applyStatsPayload(payload,origin))return false;
   lastStatsPayload=payload;lastStatsOrigin=origin;
   if(payload.slugs)guideSlugs=payload.slugs;      // 가이드 링크용 (업스트림 제공 slug)
+  bumpEngineData();                               // [v10] 통계가 바뀌면 자기 채점도 다시
   return true;
 }
 /* ============ 챔피언 가이드 (운영·상성 원문 요약) ============
@@ -1604,7 +1629,7 @@ const GUIDE_BASE='https://www.wildriftfire.com/guide/';
 async function loadGuides(){
   try{
     const cached=await window.storage.get('wr_guides');
-    if(cached&&cached.value){const g=JSON.parse(cached.value);if(g&&g.champions)GUIDES=g.champions;}
+    if(cached&&cached.value){const g=JSON.parse(cached.value);if(g&&g.champions){GUIDES=g.champions;bumpEngineData();}}
   }catch(e){}
   try{
     const res=await fetch('./data/guides.json',{cache:'no-cache'});
@@ -1612,6 +1637,7 @@ async function loadGuides(){
     const g=await res.json();
     if(g&&g.champions&&Object.keys(g.champions).length){
       GUIDES=g.champions;
+      bumpEngineData();                           // [v10] 가이드 상성이 점수를 바꾼다
       try{await window.storage.set('wr_guides',JSON.stringify(g));}catch(e){}
       if(document.getElementById('results'))render();
     }
@@ -1623,17 +1649,30 @@ function guideUrl(c){
   const slug=(g&&g.slug)||guideSlugs[c.en];
   return slug?GUIDE_BASE+slug:null;
 }
+/* [v10] 가이드 카운터 관계에는 라인 태그가 붙어 있다(solo/jungle/mid/duo/support).
+   414건 전부에 붙어 있는데 엔진은 그동안 그걸 버리고 있었다 — 서폿 럭스의 카운터
+   목록(파이크·나미·카르마)이 미드 럭스를 상대할 때도 그대로 적용됐다는 뜻이다.
+   같은 라인 자료면 원래대로 ±14, 다른 라인 자료면 ±5로 낮춘다. 버리지는 않는다 —
+   그 챔에 대한 정보이긴 하고, 라인이 달라도 방향이 유지되는 상성이 많다. */
+const GUIDE_LANE={solo:'top',jungle:'jug',mid:'mid',duo:'adc',support:'sup'};
+function guideRelWeight(g,slug,lane){
+  const hits=(g.counteredBy||[]).filter(x=>x.slug===slug);
+  if(!hits.length)return 0;
+  return hits.some(x=>!x.lane||GUIDE_LANE[x.lane]===lane)?14:5;
+}
 /* 가이드가 명시한 상성. 우리가 추정한 클래스 매트릭스보다 신뢰도가 높으므로
    같은 크기(±14 = 매트릭스 최대치)로 얹어 사실상 덮어쓰게 한다.
    양쪽이 서로를 카운터로 지목하면 상쇄되어 0이 된다 — 그게 맞는 처리다. */
-function guideMatchup(cand,laner){
+function guideMatchup(cand,laner,lane){
   if(!GUIDES)return {v:0,note:''};
   const gc=guideOf(cand), gl=guideOf(laner);
   if(!gc||!gl)return {v:0,note:''};
-  const beats=(g,slug)=>(g.counteredBy||[]).some(x=>x.slug===slug);
+  const L=lane||state.lane;
   let v=0; const notes=[];
-  if(beats(gl,gc.slug)){v+=14;notes.push('가이드 상성: '+laner.kr+' 카운터');}
-  if(beats(gc,gl.slug)){v-=14;notes.push('가이드 상성: '+laner.kr+'에게 불리');}
+  const up=guideRelWeight(gl,gc.slug,L), dn=guideRelWeight(gc,gl.slug,L);
+  const off=w=>w<14?'(다른 라인 자료)':'';
+  if(up){v+=up;notes.push('가이드 상성: '+laner.kr+' 카운터'+off(up));}
+  if(dn){v-=dn;notes.push('가이드 상성: '+laner.kr+'에게 불리'+off(dn));}
   return {v,note:notes.join(', ')};
 }
 // 가이드가 slug로 가리키는 상대를 한글 이름으로 바꾼다(로스터에 있을 때만).
@@ -1965,9 +2004,17 @@ function score(cand){
        96까지 올라갔는데, 실사용 118판에서 상성 65점 이상 구간의 승률은 54%로
        상성이 죽은 구간(62%)보다도 낮았다. 방향은 남기고 확신만 깎는다. */
     counter=clamp(counter,-22,22);
+    /* [v10] 라인 상성에도 같은 상한이 필요했다. v9는 팀 단위 항목만 잘랐는데,
+       정작 더 심하게 겹쳐 쌓이는 쪽은 라인 상성이었다 — 클래스 매트릭스(±14)와
+       가이드 상성(±14), 기동 보정(±12), 사거리(±12), 원거리 우위(±5),
+       유명 상성(±8), 특성 매치업(±12)이 전부 "이 매치업이 유리한가"를 다른
+       각도에서 세는 항목인데 그대로 합산됐다. 실사용 111판에서 최대 +36까지
+       나왔고, 그 하나만으로 상성 축(50±50)을 포화시킬 수 있었다.
+       실측 |laneSum| 중앙값은 8, 90분위는 17이라 ±16이면 신호는 남고 꼬리만 잘린다. */
+    laneSum=clamp(laneSum,-LANE_MATCHUP_CAP,LANE_MATCHUP_CAP);
     /* 라인 상성은 배정 신뢰도만큼만 반영한다. 억지 배정에서 나온 '상성 우위'가
        실제 우위와 같은 무게를 갖지 않도록. */
-    counter+=Math.round(laneSum*lanerConf);
+    counter+=Math.round(laneSum*lanerConf*laneMatchupScale(state.lane));
   }
 
   /* 메타 중심 모드에서도 숙련을 완전히 0으로 두지 않는다.
@@ -1980,7 +2027,16 @@ function score(cand){
      원딜 1순위, 7판 71%인 제리가 9위였다.
      0판이면 여전히 35%(탐색을 막지 않는다) → 10판 이상이면 85%. */
   const evidence=Math.min(1,(cInfo.games||0)/10);
-  const cw = (weights.recMode==='meta') ? W.comfort*(0.35+0.5*evidence) : W.comfort;
+  /* [v10] 축의 발언권을 '그 축이 실제로 맞혀 왔는가'에 비례시킨다.
+     v9.1은 숙련 축의 발언권을 근거의 '양'에 비례시켰다. 그런데 양이 많아도
+     방향이 틀린 축은 그대로 크게 말한다. 실사용 111판을 다시 채점해 보니 상성 축의
+     순위 일치도는 0.38이었다 — 동전던지기보다 나빴다(라인 상성 상한을 씌운 뒤에도
+     0.41이라, 이 축은 아직 제 몫을 못 하고 있다).
+     그래서 축마다 성적표를 내고, 못 맞히는 축의 가중치를 최대 절반까지 깎는다
+     (반대로 올리는 쪽은 15%까지만 — 자세한 근거는 axisReport 주석).
+     30판 미만이면 아무것도 하지 않고, 설정에서 끌 수 있다. */
+  const TR=axisTrust();
+  const cw = ((weights.recMode==='meta') ? W.comfort*(0.35+0.5*evidence) : W.comfort)*TR.comfort;
   /* [v9.1] 첫 픽을 막지는 않되, 한 번에 여러 개를 벌이지는 않게 한다.
      실측: 처음 잡는 챔 42%(38판) vs 2~3판째 66%(44판) — 24%p 손해다.
      v8은 "실패가 쌓인 것만 깎는다"고 했지만, 한 번도 안 해본 챔은 정의상 실측이
@@ -1993,9 +2049,9 @@ function score(cand){
   const familiarity = firstPick ? -Math.min(FIRST_PICK_MAX_PENALTY,Math.max(0,explorationLoad-1)*3) : 0;
   const teamAxis=clamp(50+team,0,100);
   const counterAxis=clamp(50+counter,0,100);
-  const tierW=W.tier;
-  const teamW=state.ally.length?W.team:0;
-  const counterW=state.enemy.length?W.counter:0;
+  const tierW=W.tier*TR.tier;
+  const teamW=state.ally.length?W.team*TR.team:0;
+  const counterW=state.enemy.length?W.counter*TR.counter:0;
   const denom=cw+tierW+teamW+counterW;
   const weighted=denom?((base*cw)+(cTier*tierW)+(teamAxis*teamW)+(counterAxis*counterW))/denom:50;
   // 첫 픽 감점은 가중평균 밖에서 적용한다(축이 아니라 실행 리스크이므로).
@@ -2009,10 +2065,114 @@ function score(cand){
   if(state.laneMark!=null&&laner)confidence+=10; else confidence+=Math.round(lanerConf*7);
   if(dataAge>3)confidence-=Math.min(20,(dataAge-3)*2);
   confidence=Math.round(clamp(confidence,25,95));
-  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence,games,firstPick,familiarity,cInfo,laner,lanerFit,lanerConf};
+  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence,games,firstPick,familiarity,cInfo,laner,lanerFit,lanerConf,axisTrust:TR};
 }
 
 function anyOwned(){ return Object.values(pool).some(p=>p&&p.comfort>0); }
+
+/* ============ 엔진 자기 검증 (v10) ============
+ * v9는 "엔진이 자기 성적표를 낸다"며 추천 점수와 실제 승률을 나란히 보여줬다.
+ * 그런데 그 성적표는 판마다 저장해둔 `scoreSnapshot.total`을 썼다 — 그 값은
+ * 그 판을 기록할 당시 살아 있던 엔진이 남긴 것이다. 실사용 111판의 스냅샷에는
+ * 3.0.0부터 7.1.0까지 아홉 개 엔진 버전이 섞여 있었고 32판은 아예 값이 없었다.
+ * "지금 점수를 믿어도 되나"를 묻는 표가 실은 박물관을 채점하고 있었던 셈이다.
+ *
+ * 그래서 과거 판을 전부 '지금 엔진'으로 다시 채점한다. 두 가지를 지킨다.
+ *  1) 그 판 직전까지의 전적만 쓴다(prequential). 전체 전적으로 채점하면 이긴 판의
+ *     챔이 숙련 점수를 더 받아 점수가 저절로 맞아 보인다 — 결과를 미리 아는 채점이다.
+ *  2) 축 보정을 끈 채로 한 번, 켠 채로 한 번 돌린다. 보정값 자체가 채점 결과에서
+ *     나오므로, 같은 패스 안에서 서로를 참조하면 순환이 된다.
+ */
+const AXES=[
+  {k:'comfort',v:'base',   kr:'숙련',    need:r=>true},
+  {k:'tier',   v:'tier',   kr:'메타',    need:r=>true},
+  {k:'team',   v:'team',   kr:'팀 조합', need:r=>r.hasAlly},
+  {k:'counter',v:'counter',kr:'상성',    need:r=>r.hasEnemy},
+];
+const AXIS_MIN_GAMES=30;      // 이 미만이면 보정하지 않는다(표본 부족)
+const AXIS_FULL_GAMES=80;     // 이 이상이면 측정값을 그대로 믿는다
+const AXIS_NEUTRAL={comfort:1,tier:1,team:1,counter:1};
+let _axisNeutral=false;                       // 채점 중 축 보정을 끄는 플래그(순환 방지)
+let _replayCache={}, _trustKey=null, _trustVal=AXIS_NEUTRAL, _engineDataVersion=0;
+/* 통계·가이드가 새로 들어오면 같은 전적이라도 점수가 달라진다. 캐시 키에 넣는다. */
+function bumpEngineData(){_engineDataVersion++;invalidateSelfCheck();}
+function invalidateSelfCheck(){_replayCache={};_trustKey=null;_trustVal=AXIS_NEUTRAL;}
+function selfCheckKey(){
+  const last=matches.length?matches[matches.length-1].t:0;
+  return matches.length+'|'+last+'|'+_engineDataVersion+'|'+weights.recMode+'|'
+    +[weights.comfort,weights.tier,weights.team,weights.counter].join(',');
+}
+/* 과거 전 판을 지금 엔진으로 다시 채점한다. useTrust=false면 축 보정을 끈 원본 축이다. */
+function replayPass(useTrust){
+  const key=(useTrust?'T':'N')+selfCheckKey();
+  if(_replayCache[key])return _replayCache[key];
+  const M=matches.slice().sort((a,b)=>a.t-b.t);
+  const savedFam=famMap, savedLoad=explorationLoad, savedState=state, savedNeutral=_axisNeutral;
+  const acc={}, out=[], flags=[];
+  _axisNeutral=!useTrust;
+  try{
+    M.forEach(m=>{
+      const c=byId[m.pick];
+      if(c){
+        famMap=acc;
+        // 그 시점의 탐색 부하 = 최근 10판 중 사실상 첫 시도였던 챔 종수
+        explorationLoad=new Set(flags.slice(-10).filter(f=>f.started).map(f=>f.id)).size;
+        state={lane:m.lane,ally:(m.ally||[]).slice(),enemy:(m.enemy||[]).slice(),
+               bans:[],laneMark:m.laneMark!=null?m.laneMark:null};
+        const s=score(c);
+        out.push({m,won:!!m.won,total:s.total,base:s.base,tier:s.cTier,
+          team:s.teamAxis,counter:s.counterAxis,
+          hasAlly:state.ally.length>0,hasEnemy:state.enemy.length>0});
+      }
+      flags.push({id:m.pick,started:((acc[m.pick]&&acc[m.pick].n)||0)<=1});
+      foldMatch(acc,m);
+    });
+  }finally{
+    famMap=savedFam; explorationLoad=savedLoad; state=savedState; _axisNeutral=savedNeutral;
+  }
+  _replayCache[key]=out;
+  return out;
+}
+/* 순위 일치도(AUC). 이긴 판의 값이 진 판의 값보다 높을 확률이다.
+   0.5 = 동전던지기, 1.0 = 완벽, 0.5 미만 = 방향이 뒤집혀 있다. */
+function rankAgreement(rows,key){
+  const pos=[],neg=[];
+  rows.forEach(r=>{(r.won?pos:neg).push(r[key]);});
+  if(!pos.length||!neg.length)return null;
+  let s=0;
+  for(const a of pos)for(const b of neg)s+=a>b?1:(a===b?0.5:0);
+  return s/(pos.length*neg.length);
+}
+/* 축별 성적표. 총점만 검증하면 어느 축이 틀렸는지 영영 알 수 없다.
+   실사용 111판 측정: 숙련 0.55 / 팀 0.55 / 메타 0.52 / 상성 0.41. */
+function axisReport(){
+  const rows=replayPass(false);
+  return AXES.map(A=>{
+    const rel=rows.filter(A.need);
+    const auc=rel.length>=8?rankAgreement(rel,A.v):null;
+    const conf=Math.min(1,rel.length/AXIS_FULL_GAMES);
+    /* 보정은 '깎는 쪽'으로 크게, '올리는 쪽'으로 조금만 연다. 축이 잘 맞힌다는
+       증거보다 못 맞힌다는 증거가 훨씬 값싸게 얻어지기 때문이다(잘 맞히는 축은
+       이미 제 몫을 하고 있다). 표본이 적으면 conf가 작아 자동으로 1에 붙는다. */
+    const trust=(auc!=null&&rel.length>=AXIS_MIN_GAMES)
+      ? clamp(1+(auc-0.5)*2*conf,0.5,1.15) : 1;
+    return {k:A.k,kr:A.kr,n:rel.length,auc,trust:Math.round(trust*100)/100,
+      active:auc!=null&&rel.length>=AXIS_MIN_GAMES};
+  });
+}
+/* score()가 쓰는 축별 발언권 배수. */
+function axisTrust(){
+  if(_axisNeutral||weights.autoAxis===false||!matches.length)return AXIS_NEUTRAL;
+  const key=selfCheckKey();
+  if(key!==_trustKey){
+    const o={comfort:1,tier:1,team:1,counter:1};
+    axisReport().forEach(a=>{o[a.k]=a.trust;});
+    _trustKey=key; _trustVal=o;
+  }
+  return _trustVal;
+}
+/* 채점용 리플레이 — 지금 설정(축 보정 포함) 그대로. 보정값을 먼저 확정해 둔다. */
+function engineReplay(){ axisTrust(); return replayPass(true); }
 
 /* ============ 전술 브리핑 ============
  * 두 종류를 명확히 구분해서 보여준다.
@@ -2429,6 +2589,20 @@ function renderCfg(){
     </div>
     <div class="grp"><div class="gl">가중치 ${m==='meta'?'<span style="color:var(--dimmer);font-weight:500">(숙련도는 메타 중심 모드에서 제외)</span>':''}</div>
       ${wRow('comfort','숙련도')}${wRow('tier','승률(참조)')}${wRow('team','팀 시너지')}${wRow('counter','상성/스킬')}
+      ${(()=>{
+        /* [v10] 축별 자동 보정 — 못 맞히는 축의 발언권을 깎는다.
+           실제로 지금 몇 %가 적용 중인지 숫자로 보여준다. 안 보이면 없는 기능이다. */
+        const on=weights.autoAxis!==false;
+        const ax=axisReport().filter(x=>x.auc!=null);
+        const live=ax.filter(x=>x.trust!==1);
+        return `<div class="scopetog" style="margin-top:9px">
+          <button aria-pressed="${on}" class="${on?'on':''}" onclick="setAutoAxis(true)">자동 축 보정</button>
+          <button aria-pressed="${!on}" class="${!on?'on':''}" onclick="setAutoAxis(false)">슬라이더 그대로</button>
+        </div>
+        <div class="poolnote" style="margin-top:7px">엔진이 <b>내 전적으로 축마다 성적을 매겨</b>, 실제로 못 맞히는 축의 발언권을 자동으로 깎습니다(최대 −50%). ${AXIS_MIN_GAMES}판 이상 쌓인 축에만 적용되며, 분석 탭의 <b>축별 성적표</b>에서 근거를 볼 수 있습니다.${
+          on&&live.length?`<br><span style="color:var(--cyan)">지금 적용 중: ${live.map(x=>`${x.kr} ${Math.round(x.trust*100)}%`).join(' · ')}</span>`
+          :on?'<br><span style="color:var(--dimmer)">아직 보정 중인 축이 없습니다.</span>':''}</div>`;
+      })()}
     </div>
     <div class="grp"><div class="gl">내 챔폭 (라인별 숙련도)</div>
       <div class="poolnote"><b>메타 중심 모드에서는 사용하지 않습니다.</b> 손에 익은 챔피언만 올려두세요(50=평균, 70+=주력). 숙련도는 승률이 아니라 조작 자신감입니다.</div>
@@ -2446,6 +2620,11 @@ function renderCfg(){
     <div class="savebar"><button onclick="saveCfg()">저장하고 닫기</button></div>`;
 }
 function setMode(m){weights.recMode=m;renderCfg();render();}
+function setAutoAxis(on){
+  weights.autoAxis=!!on; invalidateSelfCheck(); saveStore(); renderCfg(); render();
+  if(logTab==='ana'&&document.getElementById('logScrim').classList.contains('on'))renderAnalysis();
+  toast(on?'축별 자동 보정 켬':'슬라이더 값 그대로 사용');
+}
 function setGoal(g){weights.goal=g;saveStore();renderCfg();if(logTab==='ana')renderAnalysis();
   toast(g==='allround'?'전 포지션 숙련 목표':'승률 우선 목표');}
 function setComfort(id,v){
@@ -2456,7 +2635,12 @@ function setComfort(id,v){
 }
 function quickPool(id){setComfort(id,70);renderCfg();toast(champName(id)+' 숙련 70 등록');}
 function clearPool(){if(confirm('등록한 챔폭 숙련도를 전부 0으로 초기화한다. 계속?')){pool={};renderCfg();render();}}
-function resetWeights(){const rm=weights.recMode;weights=sanitizeWeights({comfort:80,tier:45,team:100,counter:100,recMode:rm,wv:3});renderCfg();render();}
+/* 가중치만 되돌린다 — 추천 모드·목표·자동 보정은 가중치가 아니므로 건드리지 않는다. */
+function resetWeights(){
+  const {recMode,goal,autoAxis}=weights;
+  weights=sanitizeWeights({comfort:80,tier:45,team:100,counter:100,recMode,goal,autoAxis,wv:3});
+  invalidateSelfCheck();renderCfg();render();
+}
 async function saveCfg(){await saveStore();closeCfg();render();toast('저장 완료');}
 
 function toast(m){const t=document.getElementById('toast');t.textContent=m;t.classList.add('on');setTimeout(()=>t.classList.remove('on'),1400);}
@@ -2668,18 +2852,37 @@ function analysisModel(){
     carried:graded.filter(m=>!m.won&&(m.perf==='svp'||m.perf==='mvp')).length,
     threw:graded.filter(m=>m.won&&m.perf==='bad').length};
 
-  /* [v9] 엔진 자기 교정 — 추천 점수가 실제 승률과 같은 방향으로 움직이는가.
-     실사용 118판에서 61~63점 구간이 72%인데 64점 이상은 53%로 역전이 있었다.
-     "점수를 얼마나 믿어도 되는가"는 인상이 아니라 이 표로 답해야 한다. */
-  const scored=M.filter(m=>m.scoreSnapshot&&Number.isFinite(m.scoreSnapshot.total));
-  out.calib={n:scored.length,bands:[[0,58,'57점 이하'],[58,61,'58–60점'],[61,64,'61–63점'],[64,101,'64점 이상']]
-    .map(([lo,hi,label])=>{const g=scored.filter(m=>m.scoreSnapshot.total>=lo&&m.scoreSnapshot.total<hi);
-      return {label,n:g.length,w:g.filter(m=>m.won).length};})};
-  if(scored.length>=20){
-    const s=scored.slice().sort((a,b)=>a.scoreSnapshot.total-b.scoreSnapshot.total), h=Math.floor(s.length/2);
-    out.calib.low={n:h,w:s.slice(0,h).filter(m=>m.won).length};
-    out.calib.high={n:h,w:s.slice(-h).filter(m=>m.won).length};
+  /* 엔진 자기 교정 — 추천 점수가 실제 승률과 같은 방향으로 움직이는가.
+     [v10] 채점 대상을 저장된 `scoreSnapshot`에서 '지금 엔진으로 다시 계산한
+     점수'로 바꿨다. 스냅샷은 그 판을 기록할 당시 엔진이 남긴 값이라, 실사용
+     111판에는 3.0.0~7.1.0 아홉 개 버전이 섞여 있었고 32판은 값 자체가 없었다.
+     지금 점수를 믿어도 되는지 묻는 표가 옛 엔진들을 채점하고 있었던 셈이다.
+     이제 엔진을 고칠 때마다 이 표가 곧바로 따라 움직인다. */
+  const rep=engineReplay();
+  out.calib={n:rep.length,replayed:true,bands:[]};
+  if(rep.length>=12){
+    /* 구간은 고정 점수가 아니라 이 사람의 점수 분포(사분위)로 자른다.
+       엔진을 고치면 점수 분포가 통째로 옮겨가므로 고정 경계는 금세 한쪽으로 쏠린다. */
+    const ts=rep.map(r=>r.total).sort((x,y)=>x-y);
+    const q=p=>ts[clamp(Math.floor(ts.length*p),0,ts.length-1)];
+    const cuts=[...new Set([q(0.25),q(0.5),q(0.75)].map(v=>Math.round(v)))];
+    const edges=[-Infinity,...cuts,Infinity];
+    for(let i=0;i<edges.length-1;i++){
+      const lo=edges[i],hi=edges[i+1];
+      const g=rep.filter(r=>Math.round(r.total)>=lo&&Math.round(r.total)<hi);
+      if(!g.length)continue;
+      const label=lo===-Infinity?`${hi}점 미만`:hi===Infinity?`${lo}점 이상`:(hi-lo===1?`${lo}점`:`${lo}–${hi-1}점`);
+      out.calib.bands.push({label,n:g.length,w:g.filter(r=>r.won).length});
+    }
   }
+  if(rep.length>=20){
+    const s=rep.slice().sort((a,b)=>a.total-b.total), h=Math.floor(s.length/2);
+    out.calib.low={n:h,w:s.slice(0,h).filter(r=>r.won).length};
+    out.calib.high={n:h,w:s.slice(-h).filter(r=>r.won).length};
+  }
+  /* [v10] 축별 성적표. 총점만 검증하면 어느 축이 틀렸는지 알 수 없다. */
+  out.axes=axisReport();
+  out.autoAxis=weights.autoAxis!==false;
 
   /* [v9] 라인 상대를 실제로 알고 있었나. 저장된 값이 아니라 지금 엔진으로 다시
      배정해서 센다 — 그래야 옛 기록에도 적용되고, 엔진을 고칠 때마다 이 숫자가
@@ -2845,7 +3048,7 @@ function renderAnalysis(){
   /* [v9] 엔진이 자기 성적표를 낸다. 추천 점수가 실제 승률과 같은 방향으로
      움직이지 않으면 그 사실을 숨기지 않고 그대로 보여준다. */
   const calibCard=(a.calib.n>=12)?`<div class="dx">
-    <div class="dxh"><span class="dxt">추천 점수 → 실제 승률 <span class="dxn">(엔진 성적표)</span></span><span class="dxn">${a.calib.n}판 기록</span></div>
+    <div class="dxh"><span class="dxt">추천 점수 → 실제 승률 <span class="dxn">(엔진 성적표)</span></span><span class="dxn">${a.calib.n}판 재채점</span></div>
     ${a.calib.bands.map(b=>barRow(b.label,b.w,b.n)).join('')}
     <div class="dxs">${(()=>{
       if(!a.calib.high)return '점수 구간별로 승률이 올라가야 정상입니다. 20판 이상 쌓이면 상·하위 비교도 표시됩니다.';
@@ -2854,17 +3057,47 @@ function renderAnalysis(){
         ? '점수가 높을수록 실제로 이기고 있습니다 — 추천 순서를 믿어도 됩니다.'
         : hi-lo<=-5
         ? '방향이 뒤집혀 있습니다. 지금은 점수를 절대 기준이 아니라 <b>후보를 좁히는 용도</b>로만 쓰세요.'
-        : '아직 점수와 승패가 뚜렷한 관계를 보이지 않습니다. 승패는 팀 단위 노이즈가 커서 이 정도는 흔합니다.');})()}</div></div>`:'';
+        : '아직 점수와 승패가 뚜렷한 관계를 보이지 않습니다. 승패는 팀 단위 노이즈가 커서 이 정도는 흔합니다.');})()}
+      <br><span style="color:var(--dimmer)">기록 당시 점수가 아니라 <b>지금 엔진으로 전 판을 다시 채점</b>한 값입니다.
+      각 판은 그 판 직전까지의 전적만 보고 채점하므로 결과를 미리 알지 못합니다.</span></div></div>`:'';
+
+  /* [v10] 축별 성적표 — 총점만 보면 어느 축이 틀렸는지 알 수 없다.
+     순위 일치도(AUC)는 "이긴 판의 축 값이 진 판보다 높을 확률"이다. */
+  const axisCard=(()=>{
+    const ax=(a.axes||[]).filter(x=>x.auc!=null);
+    if(!ax.length)return '';
+    const fmt=v=>v.toFixed(2);
+    const worst=ax.slice().sort((x,y)=>x.auc-y.auc)[0];
+    const anyCut=ax.some(x=>x.trust<1), anyActive=ax.some(x=>x.active);
+    return `<div class="dx">
+      <div class="dxh"><span class="dxt">축별 성적표 <span class="dxn">(순위 일치도)</span></span>
+        <span class="dxn">${a.autoAxis?'자동 보정 켜짐':'자동 보정 꺼짐'}</span></div>
+      ${ax.map(x=>{
+        const good=x.auc>=0.55, bad=x.auc<=0.45;
+        return `<div class="bar axis${x.n<AXIS_MIN_GAMES?' weak':''}">
+          <span class="bl">${x.kr}</span>
+          <span class="bt"><span class="bf ${good?'':bad?'lo':'mid'}" style="width:${Math.max(2,Math.round(x.auc*100))}%"></span></span>
+          <span class="bv">${fmt(x.auc)}<small>${x.n}판${x.trust!==1?` · 발언권 ${Math.round(x.trust*100)}%`:''}</small></span></div>`;
+      }).join('')}
+      <div class="dxs">0.50이 동전던지기입니다. <b>0.50 미만이면 그 축은 방향이 뒤집혀</b> 있다는 뜻입니다 —
+        추천을 올려야 할 때 내리고 있었습니다.
+        ${anyActive
+          ? (anyCut
+             ? `지금은 <b>${worst.kr} 축</b>(${fmt(worst.auc)})처럼 못 맞히는 축의 발언권을 자동으로 깎고 있습니다. 설정에서 끌 수 있습니다.`
+             : '모든 축이 제 몫을 하고 있어 가중치를 건드리지 않습니다.')
+          : `축마다 ${AXIS_MIN_GAMES}판이 모여야 자동 보정이 시작됩니다. 그전까지는 설정한 가중치를 그대로 씁니다.`}
+        <br><span style="color:var(--dimmer)">승패는 팀 단위 노이즈가 크므로 한두 판으로 뒤집히지 않게 표본이 적을수록 보정 폭을 줄입니다(최대 −50%, +15%).</span></div></div>`;
+  })();
 
   /* [v9] 상성 축이 실제로 켜져 있었던 판의 비율. 저장값이 아니라 지금 엔진으로
      다시 배정해서 세므로, 엔진을 고칠 때마다 이 숫자가 따라 움직인다. */
   const oppTotal=a.opp.sure.n+a.opp.guess.n+a.opp.none.n;
   const oppCard=oppTotal>=8?`<div class="dx">
     <div class="dxh"><span class="dxt">내 라인 상대를 알고 있었나</span><span class="dxn">적을 입력한 ${oppTotal}판</span></div>
-    ${barRow('상대 확정 (지정 또는 확실한 배정)',a.opp.sure.w,a.opp.sure.n)}
-    ${barRow('겸업 추정 (불확실)',a.opp.guess.w,a.opp.guess.n)}
-    ${barRow('상대 모름 → 상성 계산 꺼짐',a.opp.none.w,a.opp.none.n)}
-    <div class="dxs">엔진은 적 픽 전체를 5라인에 배정해 내 맞라인을 찾습니다. <b>상대 모름</b>인 판은 그 라인에 설 만한 적이 아예 입력되지 않은 판이며, 상성 축이 중립으로 고정됩니다.</div></div>`:'';
+    ${barRow('상대 확정',a.opp.sure.w,a.opp.sure.n)}
+    ${barRow('겸업 추정',a.opp.guess.w,a.opp.guess.n)}
+    ${barRow('상대 모름',a.opp.none.w,a.opp.none.n)}
+    <div class="dxs">엔진은 적 픽 전체를 5라인에 배정해 내 맞라인을 찾습니다. <b>상대 확정</b>은 🎯로 지정했거나 배정이 확실한 판, <b>겸업 추정</b>은 본업이 다른 챔을 맞라인으로 본 판입니다. <b>상대 모름</b>은 그 라인에 설 만한 적이 아예 입력되지 않아 라인 상성이 꺼진 판입니다.</div></div>`:'';
 
   const expCard=`<div class="dx">
     <div class="dxh"><span class="dxt">챔피언 경험도별 승률</span><span class="dxn">그 시점 기준</span></div>
@@ -2951,7 +3184,7 @@ function renderAnalysis(){
     ${a.oneOff.length?`<div class="dxs">그 외 <b>${a.oneOff.length}종</b>을 한 판씩만 사용했습니다 (합계 ${Math.round(a.oneOff.filter(c=>c.w).length/a.oneOff.length*100)}%).</div>`:''}
     </div>`:'';
 
-  body.innerHTML=verdict+insights+spark+growCard+calibCard+oppCard+inputCard+expCard+laneCard+duoCard+tiCard+dailyCard+perfCard+champCard;
+  body.innerHTML=verdict+insights+spark+growCard+calibCard+axisCard+oppCard+inputCard+expCard+laneCard+duoCard+tiCard+dailyCard+perfCard+champCard;
 }
 let logTab='rec';
 function setLogTab(t){

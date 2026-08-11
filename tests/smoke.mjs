@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='9.2.0'"));
+assert.ok(html.includes("const APP_VERSION='10.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -283,8 +283,8 @@ assert.ok(html.includes('function laneFitConfidence('),'assignment confidence mi
 assert.ok(/const asg=currentAssign\(\)/.test(html),'score() must use the shared assignment');
 assert.ok(!/find\(c=>c && primeLaneOf\(c\)===state\.lane\)/.test(html),
   'per-champion laner fallback must not come back');
-assert.ok(/counter\+=Math\.round\(laneSum\*lanerConf\)/.test(html),
-  'lane matchup must be damped by assignment confidence');
+assert.ok(/counter\+=Math\.round\(laneSum\*lanerConf\*laneMatchupScale\(state\.lane\)\)/.test(html),
+  'lane matchup must be damped by assignment confidence and lane type');
 assert.ok(/counter=clamp\(counter,-22,22\)/.test(html),'team-level counter must be capped');
 
 // 배정 엔진을 실제로 실행한다 (DOM 없이 필요한 것만 주입).
@@ -365,5 +365,122 @@ assert.ok(html.includes('추천 점수 → 실제 승률'),'engine calibration c
 assert.ok(html.includes('내 라인 상대를 알고 있었나'),'laner coverage card missing');
 assert.ok(html.includes('out.calib='),'calibration model missing');
 assert.ok(/out\.opp=oppB/.test(html),'laner coverage model missing');
+
+/* ============ [v10] 엔진 자기 검증 ============
+   v9의 성적표는 판마다 저장해둔 scoreSnapshot을 채점했다 — 그 값은 그 판을
+   기록할 당시 엔진이 남긴 것이라, 실사용 111판에 일곱 개 엔진 버전이 섞여 있었다.
+   저장값으로 되돌아가면 성적표가 다시 박물관을 채점하게 되므로 고정한다. */
+assert.ok(html.includes('function replayPass('),'engine replay missing');
+assert.ok(html.includes('function engineReplay('),'trusted replay entry missing');
+assert.ok(/const rep=engineReplay\(\)/.test(html),'calibration must score the current engine');
+assert.ok(!/const scored=M\.filter\(m=>m\.scoreSnapshot/.test(html),
+  'calibration must not grade stored snapshots from older engines');
+assert.ok(html.includes('function foldMatch('),'shared fam accumulator missing');
+assert.ok(/matches\.forEach\(m=>foldMatch\(famMap,m\)\)/.test(html),
+  'computeFam and the replay must share one accumulator');
+// 채점은 그 판 직전까지의 전적만 봐야 한다. 전체 전적으로 채점하면 결과를 미리 아는 셈이다.
+assert.ok(/famMap=acc;/.test(html)&&/foldMatch\(acc,m\)/.test(html),'replay must be prequential');
+assert.ok(html.includes('function rankAgreement('),'axis rank agreement missing');
+assert.ok(html.includes('function axisReport('),'axis report missing');
+assert.ok(html.includes('function axisTrust('),'axis trust missing');
+assert.ok(html.includes('축별 성적표'),'axis report card missing');
+assert.ok(html.includes('function setAutoAxis('),'auto-axis toggle missing');
+assert.ok(/next\.autoAxis=next\.autoAxis!==false/.test(html),'auto-axis must default on');
+// 축 보정은 반드시 세 가중치 전부에 걸려야 한다(하나라도 빠지면 축끼리 눈금이 어긋난다).
+for(const [k,re] of [['comfort',/\*TR\.comfort/],['tier',/const tierW=W\.tier\*TR\.tier/],
+  ['team',/W\.team\*TR\.team/],['counter',/W\.counter\*TR\.counter/]])
+  assert.ok(re.test(html),`axis trust not applied to ${k}`);
+
+/* 축 보정 산식을 실제로 실행해서 경계를 확인한다. 문자열 매칭만으로는
+   "보정이 걸려 있으나 언제나 1"인 상태를 잡을 수 없다(v9.2의 교훈). */
+{
+  // replayPass는 주입한다(전적·DOM 없이 돌려야 하므로). 나머지 산식만 떼어 온다.
+  const src=html.slice(html.indexOf('const AXES=['),html.indexOf('let _axisNeutral='))
+    +html.slice(html.indexOf('/* 순위 일치도(AUC)'),html.indexOf('/* score()가 쓰는 축별 발언권 배수'));
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  /* 가짜 리플레이 결과: counter 축은 뒤집혀 있고(진 판이 더 높다), comfort·team 축은
+     잘 맞히며, tier 축은 승패와 무관하다. n을 바꿔 표본 게이트도 확인한다. */
+  const mkRows=n=>Array.from({length:n},(_,i)=>{
+    const won=i%2===0;
+    return {won,base:won?60:45,tier:50,team:won?60:45,counter:won?40:60,hasAlly:true,hasEnemy:true};
+  });
+  const load=rows=>Function('clamp','replayPass',
+    src+'\nreturn {rankAgreement,axisReport,AXIS_MIN_GAMES,AXIS_FULL_GAMES};')(clamp,()=>rows);
+  const {rankAgreement,AXIS_MIN_GAMES,AXIS_FULL_GAMES}=load(mkRows(60));
+  assert.ok(AXIS_FULL_GAMES>AXIS_MIN_GAMES,'full-confidence threshold must exceed the minimum');
+  assert.equal(rankAgreement(mkRows(60).map(r=>({won:r.won,v:r.won?1:0})),'v'),1,
+    'rankAgreement must be 1 for a perfect axis');
+  assert.equal(rankAgreement(mkRows(60).map(r=>({won:r.won,v:r.won?0:1})),'v'),0,
+    'rankAgreement must be 0 for a fully inverted axis');
+  assert.equal(rankAgreement([],'v'),null,'rankAgreement must abstain without both outcomes');
+
+  const big=Object.fromEntries(load(mkRows(AXIS_FULL_GAMES)).axisReport().map(a=>[a.k,a]));
+  assert.ok(big.counter.trust<1,'an inverted axis must lose weight');
+  assert.ok(big.counter.trust>=0.5,'axis trust must never fall below half');
+  assert.ok(big.comfort.trust>1&&big.comfort.trust<=1.15,
+    'a well-calibrated axis may gain weight, but only a little');
+  assert.equal(big.tier.trust,1,'an axis that tracks nothing must keep its configured weight');
+
+  // 표본이 모자라면 아무리 뒤집혀 있어도 손대지 않는다.
+  const small=Object.fromEntries(load(mkRows(AXIS_MIN_GAMES-2)).axisReport().map(a=>[a.k,a]));
+  assert.equal(small.counter.trust,1,`axes under ${AXIS_MIN_GAMES} games must not be adjusted`);
+  assert.equal(small.counter.active,false,'small samples must be reported as inactive');
+  // 표본이 늘수록 보정이 세져야 한다(확신도가 표본에 비례).
+  const mid=Object.fromEntries(load(mkRows(AXIS_MIN_GAMES+2)).axisReport().map(a=>[a.k,a]));
+  assert.ok(mid.counter.trust>big.counter.trust,'confidence in the adjustment must grow with sample size');
+}
+
+/* [v10] 분석 탭 막대가 실제로 그려져야 한다.
+   `.bf`는 span이라 display:block이 없으면 인라인이 되어 width·height가 통째로
+   무시된다 — 분석 탭이 생긴 v7.1 이후 모든 막대가 트랙만 남은 채 비어 있었다. */
+assert.ok(/\.bar \.bf\{display:block;/.test(html),
+  'bar fill must be a block box or its width is ignored');
+assert.ok(/\.bar\.axis \.bv\{flex:0 0 \d+px\}/.test(html),
+  'axis rows need a wider value column or the numbers wrap mid-word');
+
+/* [v10] 라인 상성 축의 과대주장 교정.
+   라인 상성은 상한이 없어 실사용에서 +36까지 나왔고, 그 하나로 상성 축을
+   포화시킬 수 있었다(팀 단위 항목은 v9에서 이미 ±22로 잘려 있었다). */
+assert.ok(/const LANE_MATCHUP_CAP=\d+/.test(html),'lane matchup cap missing');
+assert.ok(/laneSum=clamp\(laneSum,-LANE_MATCHUP_CAP,LANE_MATCHUP_CAP\)/.test(html),
+  'lane matchup must be capped before it reaches the counter axis');
+const laneCap=+html.match(/const LANE_MATCHUP_CAP=(\d+)/)[1];
+assert.ok(laneCap>0&&laneCap<=22,'lane matchup cap must not exceed the team-level cap');
+// 봇 듀오는 1v1 라인이 아니다 — 정글과 같은 이유로 감쇠한다.
+assert.ok(/const BOT_DUO_DAMP=0\.\d+/.test(html),'bot-lane damping missing');
+{
+  const scale=Function(html.match(/function laneMatchupScale\(lane\)\{[^}]*\}/)[0]
+    +'\n'+html.match(/const BOT_DUO_DAMP=0\.\d+;/)[0].replace('const','var')
+    +'\nreturn laneMatchupScale;')();
+  assert.ok(scale('adc')<1&&scale('sup')<1,'bot duo lanes must be damped');
+  assert.equal(scale('top'),1,'solo lanes must keep full lane matchup weight');
+  assert.equal(scale('mid'),1,'solo lanes must keep full lane matchup weight');
+}
+
+/* [v10] 가이드 카운터 관계의 라인 태그를 쓴다.
+   414건 전부에 태그가 달려 있는데 엔진은 그걸 버리고 있었다 — 서폿 럭스의
+   카운터 목록이 미드 럭스 상대에도 그대로 적용됐다. */
+assert.ok(html.includes('const GUIDE_LANE='),'guide lane map missing');
+assert.ok(html.includes('function guideRelWeight('),'lane-aware guide relation missing');
+assert.ok(/guideMatchup\(cand,laner,lane\)/.test(html),'guideMatchup must take a lane');
+for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.counteredBy||[],g.synergy||[])))
+  assert.ok(rel.lane,'every guide relation must carry a lane tag');
+{
+  const laneMap=Function(`return ${html.match(/const GUIDE_LANE=\{[^}]*\}/)[0].replace('const GUIDE_LANE=','')}`)();
+  const seen=new Set(Object.values(guides.champions)
+    .flatMap(g=>[].concat(g.counteredBy||[],g.synergy||[])).map(r=>r.lane));
+  for(const l of seen)assert.ok(laneMap[l],`guide lane "${l}" has no mapping`);
+  const relWeight=Function('GUIDE_LANE',
+    html.match(/function guideRelWeight\(g,slug,lane\)\{[\s\S]*?\n\}/)[0]+'\nreturn guideRelWeight;')(laneMap);
+  // 럭스의 가이드는 서폿 기준이다 — 미드 럭스를 상대할 때 그대로 쓰면 안 된다.
+  const lux=guides.champions['Lux'], pyke=guides.champions['Pyke'];
+  assert.ok(lux&&pyke,'Lux/Pyke guides needed for this check');
+  assert.ok((lux.counteredBy||[]).some(r=>r.slug===pyke.slug&&r.lane==='support'),
+    'expected Lux to list Pyke as a support-lane counter');
+  assert.equal(relWeight(lux,pyke.slug,'sup'),14,'same-lane guide counter must keep full weight');
+  assert.equal(relWeight(lux,pyke.slug,'mid'),5,'off-lane guide counter must be damped');
+  assert.ok(relWeight(lux,pyke.slug,'mid')>0,'off-lane guide counter must not be discarded');
+  assert.equal(relWeight(lux,'not-a-champ','sup'),0,'unrelated champions must score zero');
+}
 
 console.log(`WR Picker smoke tests passed: ${champions.length} champions, ${rows.length} role rows.`);
