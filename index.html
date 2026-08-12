@@ -147,19 +147,51 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .bar{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px}
 .bar .bl{flex:0 0 92px;color:var(--dim);font-size:11.5px}
 .bar .bt{flex:1;height:16px;background:var(--panel);border-radius:4px;overflow:hidden;position:relative;min-width:40px}
+.bar.axis .bt{overflow:visible}   /* 오차막대 캡이 트랙 밖으로 조금 나온다 */
 /* [v10] display:block이 없으면 인라인 span이라 width·height가 통째로 무시된다.
    분석 탭이 생긴 v7.1부터 막대가 한 번도 그려지지 않았고, 눈금 없는 숫자만
    남아 있었다(트랙만 보이니 "0%"처럼 읽혔다). */
 .bar .bf{display:block;height:100%;min-width:3px;background:linear-gradient(90deg,var(--cyan),var(--cyan-soft));border-radius:4px}
 .bar .bf.lo{background:linear-gradient(90deg,#a4444b,#d65a5a)}
 .bar .bf.mid{background:linear-gradient(90deg,#8a7330,var(--gold))}
+.bar .bf.na{background:linear-gradient(90deg,#3a4250,#4d5666)}   /* 표본 부족 — 평가 보류 */
 .bar .bv{flex:0 0 76px;text-align:right;font-family:'Rajdhani';font-weight:700;font-size:12.5px}
 .bar .bv small{color:var(--dimmer);font-weight:600;font-size:10px;margin-left:3px}
 .bar.weak .bl,.bar.weak .bv{opacity:.5}
-/* 축별 성적표는 값 칸에 '발언권 83%'까지 들어간다. 기본 76px에 밀어 넣으면
-   `발 / 언권 83%`처럼 쪼개져 읽힌다(v9.1에서 배지에 같은 문제가 있었다). */
-.bar.axis .bv{flex:0 0 116px}
+/* 축별 성적표는 값 칸에 '±0.04 · 199판 · 발언권 94%'까지 들어간다. 기본 76px에
+   밀어 넣으면 `발 / 언권 94%`처럼 쪼개져 읽힌다(v9.1에서 배지에 같은 문제가 있었다). */
+.bar.axis .bv{flex:0 0 132px}
 .bar.axis .bv small{display:block;margin-left:0}
+/* [v11] 95% 구간과 0.50 기준선. 점 추정만 보여주면 소표본 노이즈가 결론처럼 읽힌다. */
+/* 오차막대: 가운데 가로선 + 양끝 캡. 점 추정만 보면 소표본 노이즈가 결론처럼 읽힌다. */
+.bar.axis .ci{position:absolute;top:50%;transform:translateY(-50%);height:2px;background:rgba(255,255,255,.6)}
+.bar.axis .ci::before,.bar.axis .ci::after{content:'';position:absolute;top:-4px;width:2px;height:10px;background:rgba(255,255,255,.85)}
+.bar.axis .ci::before{left:0}
+.bar.axis .ci::after{right:0}
+.bar.axis .mid50{position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;z-index:2;
+  background:var(--fg);opacity:.9;box-shadow:0 0 0 1px var(--card)}
+/* 아직 판단할 수 없는 관찰 — 단정형 조언과 시각적으로 구분한다. */
+.dx.tent{opacity:.72;border-style:dashed}
+/* [v11] 적 5라인 배정 격자. 빈 칸이 곧 '아직 모르는 라인'이다. */
+.lanegrid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:7px}
+.lanegrid .lslot{display:flex;flex-direction:column;align-items:center;gap:1px;
+  padding:4px 2px;border:1px solid var(--line);border-radius:6px;background:var(--panel);
+  font-family:inherit;text-align:center;min-width:0}
+.lanegrid .lslot .ll{font-size:9.5px;color:var(--dimmer);letter-spacing:.02em}
+.lanegrid .lslot .lc{font-size:11px;font-weight:600;color:var(--fg);
+  max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lanegrid .lslot.mine{border-color:var(--cyan)}
+.lanegrid .lslot.mine .ll{color:var(--cyan)}
+.lanegrid .lslot.guess .lc{color:var(--dim);font-style:italic}
+.lanegrid button.lslot{cursor:pointer;border-style:dashed}
+.lanegrid button.lslot .lc{color:var(--dim);font-weight:500}
+.lanegrid button.lslot.mine{border-color:var(--gold);background:rgba(200,160,40,.10)}
+.lanegrid button.lslot.mine .lc{color:var(--gold);font-weight:700}
+.lanegrid button.lslot:hover{border-color:var(--cyan)}
+.lanegrid button.lslot:focus-visible{outline:2px solid var(--cyan);outline-offset:1px}
+.ddhead{padding:6px 10px;font-size:10.5px;color:var(--dimmer);border-bottom:1px solid var(--line)}
+[data-theme="light"] .bar.axis .ci{background:rgba(0,0,0,.5)}
+[data-theme="light"] .bar.axis .ci::before,[data-theme="light"] .bar.axis .ci::after{background:rgba(0,0,0,.65)}
 .spark{display:flex;align-items:flex-end;gap:3px;height:52px;margin:8px 0 4px}
 .spark div{flex:1;background:var(--cyan);border-radius:2px 2px 0 0;min-height:3px;position:relative}
 .spark div.lo{background:var(--red)}
@@ -573,6 +605,8 @@ button:disabled{cursor:not-allowed;opacity:.38}
     <div class="team enemy">
       <div class="lbl"><span>상대팀</span><span id="enemyCount">0 / 5</span></div>
       <div class="chips" id="enemyChips"></div>
+      <!-- [v11] 적 5라인 배정 격자. 빈 칸이 곧 "아직 모르는 라인"이라 눈에 띈다. -->
+      <div class="lanegrid" id="enemyLaneGrid" hidden></div>
     </div>
   </div>
 
@@ -881,8 +915,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='10.0.0';
-const MODEL_VERSION='10.0.0-axis-selfcheck';
+const APP_VERSION='11.0.0';
+const MODEL_VERSION='11.0.0-uncertainty';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -918,7 +952,12 @@ const LANE_MATCHUP_CAP=16;
    럭스 상대로 라인 상성 +27을 받았지만 그런 판들의 승률은 2/8이었고, 라인 상성의
    순위 일치도도 원딜 0.18 / 서폿 0.34로 다섯 라인 중 최하위다. */
 const BOT_DUO_DAMP=0.6;
-function laneMatchupScale(lane){return (lane==='adc'||lane==='sup')?BOT_DUO_DAMP:1;}
+/* [v11] 라인 상성 감쇠를 한 곳에 모은다. v10까지 정글의 `*0.5`는 클래스 매트릭스
+   성분(a)에만 걸려 있었고, 그 뒤에 더해지는 유명 상성(PAIR)과 특성 매치업(nz)은
+   그대로 통과했다 — 실효 감쇠가 0.5가 아니라 0.68이어서, "지속 라인전이 없다"는
+   이유가 더 약한 봇 듀오(0.6)보다도 덜 깎이는 역전이 있었다. */
+const LANE_MATCHUP_SCALE={jug:0.5,adc:BOT_DUO_DAMP,sup:BOT_DUO_DAMP};
+function laneMatchupScale(lane){return LANE_MATCHUP_SCALE[lane]||1;}
 const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let undoStack=[],redoStack=[];
@@ -1093,15 +1132,34 @@ function normalizeIdList(xs,max=10){
   (Array.isArray(xs)?xs:[]).forEach(x=>{const id=toStableId(x);if(id!=null&&!out.includes(id)&&out.length<max)out.push(id);});
   return out;
 }
+/* [v11] ID를 못 읽는 챔의 숙련도를 조용히 버리지 않는다.
+   migrateMatch 는 pickRaw 로 같은 문제를 이미 막아뒀는데 형제 함수에는 빠져 있었다 —
+   챔 이름이 바뀌거나 DB에서 빠지면 등록값이 사라지고, 부팅 직후 saveStore 가
+   그 손실을 확정했다. 해석 못 한 항목은 따로 보관해 두었다가 나중에 되살린다. */
+let poolOrphans={};
 function migratePool(raw){
   const next={};
   if(!raw||typeof raw!=='object'||Array.isArray(raw))return next;
   Object.entries(raw).forEach(([oldId,val])=>{
-    const id=toStableId(oldId); if(id==null)return;
     const comfort=clamp(Number(val&&val.comfort)||0,0,100);
+    const id=toStableId(oldId);
+    if(id==null){ if(comfort>0)poolOrphans[oldId]={comfort}; return; }
     next[id]={comfort};
   });
   return next;
+}
+/* [v11] t 는 판의 신원이다 — mergeMatches 가 이걸로 중복을 가른다.
+   예전 폴백 `Number(m.t)||Date.now()` 는 ISO 문자열 t 를 전부 NaN 으로 읽어
+   같은 밀리초를 박았고, 그런 백업을 복원하면 199판이 한두 판으로 붕괴하면서
+   화면에는 "중복 건너뜀"으로 보고됐다. 숫자·ISO 문자열을 모두 받고,
+   정말 알 수 없을 때만 서로 겹치지 않는 값을 준다. */
+let _tSeq=0;
+function matchTime(raw){
+  const n=Number(raw);
+  if(Number.isFinite(n)&&n>0)return n;
+  const p=Date.parse(raw);
+  if(Number.isFinite(p))return p;
+  return Date.now()+(_tSeq++);
 }
 function migrateMatch(m){
   if(!m||typeof m!=='object')return null;
@@ -1112,7 +1170,7 @@ function migrateMatch(m){
   const pick=toStableId(m.pick);
   const top=toStableId(m.top);
   const laneMark=toStableId(m.laneMark);
-  const t=Number(m.t)||Date.now();
+  const t=matchTime(m.t);
   const kda=(m.kda&&['k','d','a'].every(x=>Number.isFinite(Number(m.kda[x]))))
     ? {k:clamp(Number(m.kda.k),0,99),d:clamp(Number(m.kda.d),0,99),a:clamp(Number(m.kda.a),0,99)} : null;
   const out=Object.assign({},m,{
@@ -1168,6 +1226,9 @@ async function loadStore(){
 }
 async function saveStore(){
   try{await window.storage.set('wr_pool',JSON.stringify(pool));}catch(e){}
+  if(Object.keys(poolOrphans).length){
+    try{await window.storage.set('wr_pool_orphans',JSON.stringify(poolOrphans));}catch(e){}
+  }
   try{await window.storage.set('wr_weights',JSON.stringify(weights));}catch(e){}
   try{await window.storage.set('wr_schema',String(SCHEMA_VERSION));}catch(e){}
 }
@@ -1175,6 +1236,7 @@ async function saveStore(){
    기존 기록이 있으면 절대 건드리지 않는다(덮어쓰기 사고 방지). */
 async function seedHistoryIfEmpty(){
   if(matches.length)return false;                 // 기록이 있으면 절대 건드리지 않는다
+  if(loadFailed)return false;                     // [v11] 못 읽은 것과 없는 것은 다르다
   try{const flag=await window.storage.get('wr_seeded');if(flag&&flag.value)return false;}catch(e){}
   try{
     const res=await fetch('./data/seed-history.json',{cache:'no-cache'});
@@ -1191,10 +1253,52 @@ async function seedHistoryIfEmpty(){
     return true;
   }catch(e){return false;}
 }
+/* [v11] 저장된 전적이 깨졌을 때 '기록 없음'으로 오해하면 안 된다.
+   실측(브라우저 재현): 저장값 끝 40바이트가 잘린 상태로 앱을 열면 200판이 0판이 됐고,
+   부팅 루틴의 무조건 저장이 손상된 원본까지 []로 덮어써 되돌릴 수 없었다.
+   자동 백업이 켜져 있으면 그 파일까지 같은 값으로 비워진다.
+   v7.3이 '전적이 조용히 사라지는 경로를 모두 막았다'고 했지만 이 경로가 남아 있었다.
+
+   원칙: 읽기에 실패했으면 (1) 원본을 먼저 격리 보관하고 (2) 살릴 수 있는 만큼 살리고
+   (3) 사용자에게 알리기 전에는 백업 파일을 건드리지 않는다. */
+function salvageMatches(raw){
+  // 잘린 JSON 배열이면 마지막으로 온전한 레코드까지만 되살린다.
+  for(let i=raw.lastIndexOf('},');i>0;i=raw.lastIndexOf('},',i-1)){
+    try{const a=JSON.parse(raw.slice(0,i+1)+']');if(Array.isArray(a)&&a.length)return a;}catch(e){}
+  }
+  return null;
+}
+let loadFailed=null;      // {reason, rawLen, salvaged, lost} — 저장값이 있는데 못 읽은 상태
 async function loadMatches(){
-  try{const m=await window.storage.get('wr_matches');if(m&&m.value)matches=(JSON.parse(m.value)||[]).map(migrateMatch).filter(Boolean);}catch(e){matches=[];}
+  let rec=null;
+  try{rec=await window.storage.get('wr_matches');}
+  catch(e){loadFailed={reason:'storage',rawLen:0,salvaged:0,lost:0};computeFam();return;}
+  if(!rec||!rec.value){computeFam();return;}      // 진짜로 기록이 없는 새 기기
+  try{
+    matches=(JSON.parse(rec.value)||[]).map(migrateMatch).filter(Boolean);
+  }catch(e){
+    /* 덮어쓰기 전에 원본을 반드시 격리한다. 이게 있으면 이후 어떤 저장도 파괴적이지 않다. */
+    try{await window.storage.set('wr_matches_corrupt',rec.value);}catch(e2){}
+    const salv=salvageMatches(rec.value);
+    matches=salv?salv.map(migrateMatch).filter(Boolean):[];
+    loadFailed={reason:'parse',rawLen:rec.value.length,salvaged:matches.length,
+      lost:Math.max(0,(rec.value.match(/"t":\d/g)||[]).length-matches.length)};
+  }
   computeFam();
 }
+/* 격리해둔 원본을 파일로 내려준다 — 앱이 못 읽어도 사용자는 손에 쥘 수 있어야 한다. */
+async function downloadCorrupt(){
+  try{
+    const r=await window.storage.get('wr_matches_corrupt');
+    if(!r||!r.value){toast('보관된 원본이 없습니다');return;}
+    const blob=new Blob([r.value],{type:'application/json'});
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(blob);
+    a.download=`wr-picker-손상원본-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000);
+  }catch(e){toast('원본을 읽지 못했습니다');}
+}
+function ackLoadFailure(){loadFailed=null;renderStorageWarn();saveMatches();toast('확인했습니다 — 이제 정상 저장합니다');}
 let autoBackupAt=null, saveFailed=false;
 async function saveMatches(){
   /* 저장 실패를 삼키면 사용자는 기록이 남은 줄 알고 계속 플레이한다.
@@ -1207,6 +1311,10 @@ async function saveMatches(){
     saveFailed=true;renderStorageWarn();
     toast('저장 실패 — 백업으로 내보내세요');
   }
+  /* [v11] 저장값을 못 읽은 상태에서는 백업 파일을 건드리지 않는다.
+     지금 메모리에 든 기록이 손상 후 살려낸 일부일 수 있어, 그대로 쓰면
+     멀쩡하던 백업까지 줄어든다. 사용자가 확인(ackLoadFailure)한 뒤에 재개한다. */
+  if(loadFailed)return;
   // 기록이 늘 때마다 지정한 파일에도 동기화한다(설정돼 있을 때만).
   if(typeof autoBackupWrite==='function'&&autoBackupHandle){
     if(await autoBackupWrite(true))autoBackupAt=new Date().toISOString();
@@ -1214,7 +1322,17 @@ async function saveMatches(){
 }
 function renderStorageWarn(){
   const el=document.getElementById('storageWarn'); if(!el)return;
-  el.hidden=!saveFailed;
+  el.hidden=!saveFailed&&!loadFailed;
+  if(loadFailed){
+    el.innerHTML=`⚠ <b>저장된 전적을 읽지 못했습니다.</b> `
+      +(loadFailed.reason==='storage'
+        ? '브라우저 저장소에 접근할 수 없습니다. 이 상태에서는 덮어쓰지 않으니, 창을 닫지 말고 저장소 권한을 확인하세요.'
+        : `읽을 수 있는 <b>${loadFailed.salvaged}판</b>은 되살렸습니다${loadFailed.lost?` (약 ${loadFailed.lost}판은 복구 못 함)`:''}. `
+          +'<b>손상된 원본은 그대로 보관했고</b>, 확인하기 전까지는 백업 파일도 건드리지 않습니다.')
+      +` <button onclick="downloadCorrupt()">원본 내려받기</button>`
+      +(loadFailed.reason==='parse'?` <button onclick="ackLoadFailure()">확인하고 계속</button>`:'');
+    return;
+  }
   el.innerHTML=saveFailed
     ? `⚠ <b>전적이 저장되지 않고 있습니다.</b> 브라우저 저장 공간이 가득 찼거나 시크릿 모드일 수 있습니다.
        지금 바로 <button onclick="exportData()">백업 내보내기</button>를 눌러 파일로 보관하세요.` : '';
@@ -1510,10 +1628,16 @@ function laneOpponent(asg,lane){
   const a=asg.alt&&asg.alt[lane];
   return a?{c:a.c,conf:a.conf,alt:true}:{c:null,conf:0,alt:false};
 }
-/* 배정은 드래프트가 바뀔 때만 다시 계산한다 — score()는 후보 챔마다 호출된다. */
+/* 배정은 드래프트가 바뀔 때만 다시 계산한다 — score()는 후보 챔마다 호출된다.
+   [v11] 캐시 키에 통계 세대를 넣는다. laneFit()은 전적으로 ROLE_STATS에 의존하는데
+   예전 키는 드래프트만 봤다 — 랭크 구간을 바꾸거나 최신 통계를 받아도 드래프트가
+   그대로면 옛 통계로 계산한 배정을 계속 썼고, 칩 배지와 상성 축이 함께 어긋났다. */
+/* 통계·가이드가 바뀔 때마다 오르는 세대 번호. 배정 캐시와 자기 채점 캐시가 함께 쓴다.
+   currentAssign()이 이 값을 읽으므로 선언이 그보다 앞에 있어야 한다. */
+let _engineDataVersion=0;
 let _asgKey=null,_asgVal={byLane:{},fit:{}};
 function currentAssign(){
-  const key=state.lane+'|'+state.laneMark+'|'+state.enemy.join(',');
+  const key=state.lane+'|'+state.laneMark+'|'+state.enemy.join(',')+'|'+_engineDataVersion;
   if(key!==_asgKey){_asgKey=key;_asgVal=assignEnemyLanes(state.enemy,state.lane,state.laneMark);}
   return _asgVal;
 }
@@ -1544,6 +1668,10 @@ function applyStatsPayload(payload,origin){
     prevCapturedAt:prev?payload.prev.updated:null,
     origin
   });
+  /* [v11] ROLE_STATS 자체가 바뀌는 지점은 여기다. 세대 번호를 여기서 올려야
+     랭크 구간 전환(setBracket → applyStatsPayload)에서도 배정·자기채점 캐시가
+     함께 무효화된다. adoptStatsPayload 에만 걸어 두면 구간 전환이 새 나갔다. */
+  bumpEngineData();
   return true;
 }
 /* 원격/캐시 payload는 신뢰 경계 밖이다(업스트림 사이트 → 무검토 일일 커밋 → CDN).
@@ -1617,8 +1745,7 @@ function adoptStatsPayload(raw,origin){
   if(!applyStatsPayload(payload,origin))return false;
   lastStatsPayload=payload;lastStatsOrigin=origin;
   if(payload.slugs)guideSlugs=payload.slugs;      // 가이드 링크용 (업스트림 제공 slug)
-  bumpEngineData();                               // [v10] 통계가 바뀌면 자기 채점도 다시
-  return true;
+  return true;                                    // 세대 번호는 applyStatsPayload 가 올린다
 }
 /* ============ 챔피언 가이드 (운영·상성 원문 요약) ============
  * data/guides.json은 WildRiftFire 챔피언 가이드에서 뽑은 요약이다.
@@ -1910,7 +2037,8 @@ function score(cand){
           if(gap<0)lReach='사거리 열세로 견제 손해';
           else lReach='사거리 우위로 안전 견제';
         }
-      } else a=Math.round(a*0.5);                       // 정글 매치업 프록시 절반
+      }                                                 // 정글은 사거리·원거리 항목 자체가 없다
+                                                        // (감쇠는 laneMatchupScale 이 일괄 적용)
       laneSum+=a;
       const lPos=[...lGuidePos], lNeg=[...lGuideNeg];
       const pd=((PAIR[cand.en]||{})[laner.en]!=null)?PAIR[cand.en][laner.en]:-(((PAIR[laner.en]||{})[cand.en])||0);
@@ -2096,10 +2224,13 @@ const AXES=[
   {k:'counter',v:'counter',kr:'상성',    need:r=>r.hasEnemy},
 ];
 const AXIS_MIN_GAMES=30;      // 이 미만이면 보정하지 않는다(표본 부족)
-const AXIS_FULL_GAMES=80;     // 이 이상이면 측정값을 그대로 믿는다
+/* [v11] 축의 '진짜' 순위 일치도가 0.5에서 벗어나 있을 법한 폭.
+   정말 잘 맞히는 축이라도 0.55~0.60 정도이지 0.8 같은 값은 나오지 않는다.
+   이 사전 폭과 측정 오차(SE)를 견줘 관측값을 0.5 쪽으로 얼마나 당길지 정한다. */
+const AXIS_PRIOR_SD=0.05;
 const AXIS_NEUTRAL={comfort:1,tier:1,team:1,counter:1};
 let _axisNeutral=false;                       // 채점 중 축 보정을 끄는 플래그(순환 방지)
-let _replayCache={}, _trustKey=null, _trustVal=AXIS_NEUTRAL, _engineDataVersion=0;
+let _replayCache={}, _trustKey=null, _trustVal=AXIS_NEUTRAL;
 /* 통계·가이드가 새로 들어오면 같은 전적이라도 점수가 달라진다. 캐시 키에 넣는다. */
 function bumpEngineData(){_engineDataVersion++;invalidateSelfCheck();}
 function invalidateSelfCheck(){_replayCache={};_trustKey=null;_trustVal=AXIS_NEUTRAL;}
@@ -2149,23 +2280,50 @@ function rankAgreement(rows,key){
   for(const a of pos)for(const b of neg)s+=a>b?1:(a===b?0.5:0);
   return s/(pos.length*neg.length);
 }
+/* [v11] 순위 일치도의 표준오차 (Hanley–McNeil).
+   v10은 축별 성적표를 점 추정만으로 보여주고 그 값으로 가중치까지 건드렸다.
+   그런데 199판에서 SE는 약 0.04다 — 0.47과 0.55가 사실상 구분되지 않는다는 뜻이고,
+   실제로 네 축의 95% 구간이 전부 0.50을 포함하고 있었다. 즉 "상성 축이 뒤집혔다"는
+   판정에는 근거가 없었다. 이 프로젝트가 분석 탭에서는 지키던 원칙(소표본으로
+   단정하지 않는다)을 정작 엔진 자기 검증에서는 어기고 있었다. */
+function rankAgreementSE(a,np,nn){
+  if(!(np>0&&nn>0)||a==null)return null;
+  const q1=a/(2-a), q2=2*a*a/(1+a);
+  const v=(a*(1-a)+(np-1)*(q1-a*a)+(nn-1)*(q2-a*a))/(np*nn);
+  return Math.sqrt(Math.max(0,v));
+}
+/* 관측된 일치도를 0.5 쪽으로 당긴다(경험적 베이즈).
+   측정 오차가 사전 폭보다 크면 거의 전부 0.5로 당겨지고, 표본이 쌓여 오차가
+   줄면 관측값을 그대로 믿는다. 임의의 절단선 없이 근거의 양에 따라 연속적으로 움직인다. */
+function shrinkAgreement(auc,se){
+  if(auc==null)return null;
+  if(se==null||!isFinite(se))return 0.5;
+  const t2=AXIS_PRIOR_SD*AXIS_PRIOR_SD;
+  return 0.5+(auc-0.5)*(t2/(t2+se*se));
+}
 /* 축별 성적표. 총점만 검증하면 어느 축이 틀렸는지 영영 알 수 없다.
-   실사용 193판 측정: 팀 0.56 / 숙련 0.54 / 메타 0.54 / 상성 0.46.
-   상성 축만 동전던지기 아래이고, 라인별로는 원딜 0.18 / 탑 0.32 / 서폿 0.34이
-   미드 0.55 · 정글 0.52와 갈린다. 다만 0.46은 표준오차(약 0.04) 안이라
-   "뒤집혔다"가 아니라 "제 몫을 한다는 증거가 없다"까지만 말할 수 있다. */
+   실사용 199판 측정: 팀 0.55 / 메타 0.54 / 숙련 0.54 / 상성 0.47.
+   [v11] 네 축 모두 95% 구간이 0.50을 포함한다 — 지금 전적으로는 어느 축도
+   동전던지기와 구분되지 않는다. 그래서 관측값을 그대로 쓰지 않고 오차만큼
+   0.5로 당긴 뒤(shrinkAgreement) 가중치에 반영한다. 표본이 쌓이면 저절로 살아난다. */
 function axisReport(){
   const rows=replayPass(false);
   return AXES.map(A=>{
     const rel=rows.filter(A.need);
+    const np=rel.filter(r=>r.won).length, nn=rel.length-np;
     const auc=rel.length>=8?rankAgreement(rel,A.v):null;
-    const conf=Math.min(1,rel.length/AXIS_FULL_GAMES);
+    const se=rankAgreementSE(auc,np,nn);
+    const adj=shrinkAgreement(auc,se);
     /* 보정은 '깎는 쪽'으로 크게, '올리는 쪽'으로 조금만 연다. 축이 잘 맞힌다는
        증거보다 못 맞힌다는 증거가 훨씬 값싸게 얻어지기 때문이다(잘 맞히는 축은
-       이미 제 몫을 하고 있다). 표본이 적으면 conf가 작아 자동으로 1에 붙는다. */
-    const trust=(auc!=null&&rel.length>=AXIS_MIN_GAMES)
-      ? clamp(1+(auc-0.5)*2*conf,0.5,1.15) : 1;
-    return {k:A.k,kr:A.kr,n:rel.length,auc,trust:Math.round(trust*100)/100,
+       이미 제 몫을 하고 있다). */
+    const trust=(adj!=null&&rel.length>=AXIS_MIN_GAMES)
+      ? clamp(1+(adj-0.5)*2,0.5,1.15) : 1;
+    // 95% 구간이 0.50을 넘지 않을 때만 "방향을 말할 수 있다"고 표시한다.
+    const lo=(auc!=null&&se!=null)?auc-1.96*se:null, hi=(auc!=null&&se!=null)?auc+1.96*se:null;
+    return {k:A.k,kr:A.kr,n:rel.length,auc,se,lo,hi,
+      conclusive:lo!=null&&(lo>0.5||hi<0.5),
+      trust:Math.round(trust*100)/100,
       active:auc!=null&&rel.length>=AXIS_MIN_GAMES};
   });
 }
@@ -2269,11 +2427,39 @@ function chips(){
   document.getElementById('enemyChips').innerHTML=mk(state.enemy,'enemy');
   const bb=document.getElementById('banBox');
   if(bb){bb.hidden=!state.bans.length;document.getElementById('banChips').innerHTML=mk(state.bans,'bans');}
+  renderLaneGrid(asg);
   document.getElementById('allyCount').textContent=`${state.ally.length} / ${MAX_PICKS.ally}`;
   document.getElementById('enemyCount').textContent=`${state.enemy.length} / ${MAX_PICKS.enemy}`;
   document.getElementById('banCount').textContent=`${state.bans.length} / ${MAX_PICKS.ban}`;
   const has=state.ally.length||state.enemy.length||state.bans.length;
   document.getElementById('clearAll').style.visibility=has?'visible':'hidden';
+}
+/* [v11] 적 5라인 배정을 격자로 보여준다.
+   실사용 199판에서 적을 입력한 195판 중 56판(29%)은 내 라인 상대가 아예 안 들어와
+   상성 계산이 꺼진 채로 추천을 받았다. 원인은 알고리즘이 아니라 입력이다 —
+   적 5명을 다 넣은 판은 97%에서 상대를 찾았고, 1~2명만 넣은 판은 절반 이상 못 찾았다.
+   v9.1이 안내 문구를, v10이 칩 배지를 넣었지만 29%는 그대로였다. 문장이 아니라
+   '빈 칸'으로 보여줘야 한다 — 어느 라인이 비었는지가 한눈에 보이고, 그 칸을 누르면
+   바로 그 라인 챔만 걸러서 검색이 열린다. */
+function renderLaneGrid(asg){
+  const box=document.getElementById('enemyLaneGrid'); if(!box)return;
+  box.hidden=!state.enemy.length;
+  if(box.hidden){box.innerHTML='';return;}
+  const opp=laneOpponent(asg,state.lane);
+  box.innerHTML=ASSIGN_LANES.map(l=>{
+    const c=(asg.byLane&&asg.byLane[l])||null;
+    const mine=l===state.lane;
+    const alt=mine&&!c&&opp.c?opp.c:null;          // 내 라인은 겸업 추정까지 보여준다
+    const shown=c||alt;
+    const cls='lslot'+(mine?' mine':'')+(shown?'':' empty')+(alt?' guess':'');
+    const label=shown?shown.kr:(state.enemy.length>=MAX_PICKS.enemy?'—':'+ 추가');
+    const title=shown?(alt?`${LANEKR[l]} 상대 추정(본업은 다른 라인)`:`${LANEKR[l]} 상대`)
+      :`${LANEKR[l]} 상대가 아직 없습니다`;
+    return shown
+      ? `<div class="${cls}" title="${title}"><span class="ll">${LANEKR[l]}</span><span class="lc">${shown.kr}${alt?'?':''}</span></div>`
+      : `<button class="${cls}" title="${title}" onclick="focusEnemyAdd('${l}')"
+           aria-label="${LANEKR[l]} 상대 추가"><span class="ll">${LANEKR[l]}</span><span class="lc">${label}</span></button>`;
+  }).join('');
 }
 function markLaner(id){commitDraft(()=>state.laneMark=(state.laneMark===id?null:id),'상대 라이너 지정을 변경했습니다');}
 function rmChamp(side,id){const c=byId[id];commitDraft(()=>{state[side]=state[side].filter(x=>x!==id);if(state.laneMark===id)state.laneMark=null;},(c?c.kr:'챔피언')+' 제거');}
@@ -2471,15 +2657,20 @@ function render(){
 
 /* ============ INLINE SEARCH ============ */
 let addSide='enemy';
-function setAddSide(s){addSide=s;paintAddSide();renderDD();document.getElementById('mainSrch').focus();}
+function setAddSide(s){if(s!=='enemy')addLaneHint=null;addSide=s;paintAddSide();renderDD();document.getElementById('mainSrch').focus();}
 /* [v9.1] 내 라인 상대가 비었을 때 한 번에 입력으로 데려간다. 실사용 146판 중
    42판(29%)이 맞라인을 안 넣은 채 추천을 받았는데, 안내 문구만으로는 그 판들이
    줄지 않았다. 안내가 곧 버튼이어야 한다. */
-function focusEnemyAdd(){
+/* [v11] 어느 라인을 채우려는지 기억한다. 빈 칸을 눌렀는데 빈 검색창만 뜨면
+   결국 사용자가 그 라인 챔을 스스로 떠올려야 한다 — 그게 29%가 안 줄던 이유다. */
+let addLaneHint=null;
+function focusEnemyAdd(lane){
+  addLaneHint=(lane&&LANEKR[lane])?lane:state.lane;
   setAddSide('enemy');
   const s=document.getElementById('mainSrch');
-  if(s){s.scrollIntoView({block:'center',behavior:'smooth'});s.focus();}
-  announce(LANEKR[state.lane]+' 상대를 검색해 추가하세요');
+  if(s){s.value='';s.scrollIntoView({block:'center',behavior:'smooth'});s.focus();}
+  ddActive=0; renderDD();
+  announce(LANEKR[addLaneHint]+' 상대를 검색해 추가하세요');
 }
 function paintAddSide(){
   document.getElementById('sbEnemy').className=addSide==='enemy'?'on enemy':'';
@@ -2498,6 +2689,11 @@ function searchList(raw){
     ? (c.cho.startsWith(cq)||c.aliasCho.some(a=>a.startsWith(cq)))
     : (c.kr.startsWith(raw)||c.en.toLowerCase().startsWith(ql)||c.cho.startsWith(cq)
        ||c.aliases.some(a=>a.startsWith(raw))||c.aliasCho.some(a=>a.startsWith(cq)));
+  /* 검색어가 없어도 라인 힌트가 있으면 그 라인 챔을 픽률순으로 미리 보여준다. */
+  if(!raw&&addLaneHint)
+    return DB.filter(c=>!picked.has(c.id)&&lanesOf(c).includes(addLaneHint))
+      .sort((a,b)=>{const sa=statOf(a,addLaneHint),sb=statOf(b,addLaneHint);
+        return ((sb?sb.pick:0)-(sa?sa.pick:0))||a.kr.localeCompare(b.kr,'ko');}).slice(0,12);
   return DB.filter(c=>!picked.has(c.id)).filter(match)
     .sort((a,b)=>{const pa=prefix(a),pb=prefix(b);if(pa!==pb)return pa?-1:1;
       const ar=lanesOf(a).includes(state.lane),br=lanesOf(b).includes(state.lane);if(ar!==br)return ar?-1:1;
@@ -2509,7 +2705,9 @@ function renderDD(){
   const dd=document.getElementById('dd');
   const input=document.getElementById('mainSrch');
   document.getElementById('sbClear').style.display=raw?'flex':'none';
-  if(!raw.trim()){ddList=[];ddActive=0;dd.classList.remove('on');dd.innerHTML='';input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');return;}
+  /* [v11] 라인 격자의 빈 칸을 눌렀을 때는 검색어가 없어도 그 라인 후보를 띄운다.
+     빈 검색창만 뜨면 결국 사용자가 그 라인 챔을 스스로 떠올려야 한다. */
+  if(!raw.trim()&&!addLaneHint){ddList=[];ddActive=0;dd.classList.remove('on');dd.innerHTML='';input.setAttribute('aria-expanded','false');input.removeAttribute('aria-activedescendant');return;}
   ddList=searchList(raw).slice(0,8);
   ddActive=clamp(ddActive,0,Math.max(0,ddList.length-1));
   input.setAttribute('aria-expanded','true');
@@ -2517,7 +2715,9 @@ function renderDD(){
   const lm={top:'탑',jug:'정',mid:'미',adc:'원',sup:'서'};
   dd.classList.add('on');
   input.setAttribute('aria-activedescendant','ddopt'+ddActive);
-  dd.innerHTML=ddList.map((c,i)=>
+  const hintHead=(!raw.trim()&&addLaneHint)
+    ? `<div class="ddhead">${LANEKR[addLaneHint]}에서 자주 나오는 챔 — 이름을 입력해 좁힐 수 있습니다</div>`:'';
+  dd.innerHTML=hintHead+ddList.map((c,i)=>
     `<button id="ddopt${i}" role="option" aria-selected="${i===ddActive}" class="ddrow ${i===0?'first':''} ${i===ddActive?'active':''}" onclick="quickAdd(${c.id})" onmousemove="setDDActive(${i})">
       <span class="ddn">${c.kr}${c.aliases.length?`<span class="ddalias">${c.aliases[0]}</span>`:''}</span>
       <span class="ddm">${CLSKR[c.cls]} · ${lanesOf(c).map(l=>lm[l]).join('/')} · ${hasMeta(c)?wrOf(c).toFixed(1)+'%'+(t=>t==null?'':t>=1?' ▲':t<=-1?' ▼':'')(trendOf(c)):'통계 없음'}</span>
@@ -2531,6 +2731,7 @@ function quickAdd(id){
   if(target.length>=max){toast(addSide==='ally'?'우리팀은 내 픽 제외 최대 4명':'최대 입력 수에 도달');return;}
   const c=byId[id];
   commitDraft(()=>target.push(id),`${c?c.kr:'챔피언'}을 ${addSide==='enemy'?'상대팀':addSide==='ally'?'우리팀':'밴'}에 추가했습니다`);
+  addLaneHint=null;
   const s=document.getElementById('mainSrch');s.value='';renderDD();
   ddActive=0;s.focus();
 }
@@ -2675,26 +2876,34 @@ function renderLogBar(){
    예전에는 승/패를 누르기 전에 미리 골라야 했는데, 판이 끝난 직후의 자연스러운
    행동은 승/패 한 번 누르는 것이다. 그 결과 실사용 150판에서 등급은 28%,
    KDA는 0%만 남았다 — 즉 숙련도 학습의 절반이 입력 마찰로 죽어 있었다.
-   gradingIdx는 지금 편집 중인 matches 인덱스다(null이면 성과 줄이 닫힌 상태). */
-let gradingIdx=null;
-function gradingMatch(){return gradingIdx!=null?matches[gradingIdx]:null;}
+   gradingT는 지금 편집 중인 판의 시각이다(null이면 성과 줄이 닫힌 상태). */
+/* [v11] 편집 대상을 배열 인덱스가 아니라 판 시각(t)으로 잡는다.
+   인덱스는 matches 가 바뀌면 다른 판을 가리킨다 — 성과 줄을 열어둔 채 되돌리기·
+   복원(병합)·전적 삭제를 하면 배열이 재정렬되어 엉뚱한 판에 등급이 박히고
+   그대로 저장됐다. t 는 그 판의 신원이라 재정렬에도 흔들리지 않는다. */
+let gradingT=null;
+function gradingMatch(){return gradingT==null?null:(matches.find(m=>m.t===gradingT)||null);}
 function openPerfRow(i){
-  gradingIdx=i;
+  const m=matches[i];
+  if(!m){closePerfRow();return;}
+  gradingT=m.t;
   const row=document.getElementById('perfRow'); if(row)row.hidden=false;
-  const m=matches[i], lab=document.getElementById('perfRowLabel');
-  if(lab&&m)lab.textContent=`${champName(m.pick)} ${m.won?'승':'패'} — 내 성과는?`;
+  const lab=document.getElementById('perfRowLabel');
+  if(lab)lab.textContent=`${champName(m.pick)} ${m.won?'승':'패'} — 내 성과는?`;
   const kin=document.getElementById('kdaInput');
   if(kin)kin.value=m&&m.kda?`${m.kda.k}/${m.kda.d}/${m.kda.a}`:'';
   paintPerf();
 }
 function closePerfRow(){
-  gradingIdx=null;
+  gradingT=null;
   const row=document.getElementById('perfRow'); if(row)row.hidden=true;
   announce('성과 입력을 닫았습니다');
 }
 /* 방금 기록한 판을 제자리에서 고친다. 저장·학습·화면을 즉시 다시 돌린다. */
 function patchGraded(fn){
-  const m=gradingMatch(); if(!m)return;
+  /* 대상 판이 사라졌으면(삭제·복원) 조용히 다른 판을 고치지 말고 줄을 닫는다. */
+  const m=gradingMatch();
+  if(!m){if(gradingT!=null){closePerfRow();toast('그 판이 목록에서 사라져 성과 입력을 닫았습니다');}return;}
   fn(m);
   saveMatches(); computeFam(); paintPerf(); render();
   const sc=document.getElementById('logScrim');           // 전적 창이 열려 있으면 같이 갱신
@@ -2767,9 +2976,33 @@ function binomAtMost(k,n,p){              // P(X ≤ k), 이항분포
   for(let i=0;i<=k;i++){ if(i>0)c=c*(n-i+1)/i; s+=c*Math.pow(p,i)*Math.pow(1-p,n-i); }
   return Math.min(1,s);
 }
+// 표준정규 누적분포 (Abramowitz–Stegun 26.2.17)
+function normCdf(z){
+  const t=1/(1+0.2316419*Math.abs(z)), d=0.3989422804014327*Math.exp(-z*z/2);
+  const p=d*t*(0.319381530+t*(-0.356563782+t*(1.781477937+t*(-1.821255978+t*1.330274429))));
+  return z>0?1-p:p;
+}
+/* [v11] 두 승률이 정말 다른가 — 2표본 z 검정, 양측 p.
+   분석 탭은 그동안 '차이가 12%p 이상'처럼 **효과 크기만** 보고 조언을 확정했다.
+   그런데 30판 규모에서 12%p 차이는 흔한 우연이다. 실제로 199판 시점에
+   "상대 픽을 끝까지 입력하세요"(p=0.55)와 "3판째부터 승률이 떨어집니다"(p=0.11)가
+   단정형으로 떠 있었다. 표본 크기 게이팅(n>=8)만으로는 이걸 막지 못한다. */
+function propDiffP(w1,n1,w2,n2){
+  if(!n1||!n2)return 1;
+  const p=(w1+w2)/(n1+n2), se=Math.sqrt(p*(1-p)*(1/n1+1/n2));
+  if(!(se>0))return 1;
+  return clamp(2*(1-normCdf(Math.abs(w1/n1-w2/n2)/se)),0,1);
+}
+const SIG_P=0.05;                         // 이 이하일 때만 단정형 조언으로 올린다
+/* 여러 후보 중 '가장 나쁜 것'을 골라 놓고 그 하나만 검정하면 우연히 걸릴 확률이
+   후보 수만큼 커진다(다중 비교). 5개 라인을 뒤져 최악을 집었다면 p를 5배로 본다.
+   보수적이지만, 이 앱이 하는 말은 사용자의 행동을 바꾸는 조언이라 이쪽이 맞다. */
+const selP=(p,candidates)=>Math.min(1,p*Math.max(1,candidates));
 function barRow(label,w,n,{weak=false,note=''}={}){
   const r=n?w/n:0, p=Math.round(r*100);
-  const cls=n<MIN_BUCKET?'':(r>=0.55?'':r<0.45?'lo':'mid');
+  /* [v11] 표본 부족 구간을 성공색(청록)으로 칠하면 7판 43%가 10판 80%와 같은 색이 된다.
+     막대는 흐려지지 않으므로 색만으로 좋아 보이는 착시가 생긴다 — 회색으로 뺀다. */
+  const cls=n<MIN_BUCKET?'na':(r>=0.55?'':r<0.45?'lo':'mid');
   return `<div class="bar ${n<MIN_BUCKET||weak?'weak':''}">
     <span class="bl">${label}</span>
     <span class="bt"><span class="bf ${cls}" style="width:${Math.max(2,p)}%"></span></span>
@@ -2854,6 +3087,21 @@ function analysisModel(){
   const withSup=adcG.filter(hasSup), noSup=adcG.filter(m=>!hasSup(m));
   out.duo={with:{n:withSup.length,w:withSup.filter(m=>m.won).length},
            without:{n:noSup.length,w:noSup.filter(m=>m.won).length}};
+  out.duo.p=propDiffP(out.duo.with.w,out.duo.with.n,out.duo.without.w,out.duo.without.n);
+  /* [v11] 이 카드는 '자기 신고가 아닌 객관 지표'라고 말해 왔지만, 실은 교란돼 있다.
+     '서폿류 없음'은 대개 아군을 적게 입력한 판이다 — 실사용에서 아군을 2명만 넣은
+     원딜 판은 0승 7패, 4명 다 넣은 판은 5승 4패였다. 즉 서폿 유무가 아니라
+     입력 완성도를 보고 있었을 수 있다. 그래서 아군 입력 수를 함께 보여준다. */
+  out.duo.byAllyCount=[2,3,4].map(k=>{
+    const g=adcG.filter(m=>(m.ally||[]).length===(k===4?4:k)||(k===2&&(m.ally||[]).length<=2));
+    return {k,n:g.length,w:g.filter(m=>m.won).length,
+      sup:g.filter(hasSup).length};
+  }).filter(x=>x.n);
+  // 입력 수를 3명 이상으로 맞춘 뒤에도 차이가 남는지 (교란을 부분적으로 제거)
+  const deep=adcG.filter(m=>(m.ally||[]).length>=3);
+  const dW=deep.filter(hasSup), dN=deep.filter(m=>!hasSup(m));
+  out.duo.deep={with:{n:dW.length,w:dW.filter(m=>m.won).length},
+                without:{n:dN.length,w:dN.filter(m=>m.won).length}};
 
   // 성과(MVP/SVP) 기록분
   const graded=M.filter(m=>PERF[m.perf]);
@@ -2917,13 +3165,17 @@ function analysisModel(){
   const inp4=out.input.find(x=>x.k==='상대 4-5명'), inpLow=out.input.find(x=>x.k==='상대 0-1명');
   if(inp4&&inpLow&&inp4.n>=MIN_BUCKET&&inpLow.n>=5){
     const gap=(inp4.w/inp4.n-inpLow.w/inpLow.n)*100;
-    if(gap>=12)ins.push({t:'상대 픽을 끝까지 입력하세요',
-      d:`상대를 4명 이상 넣은 판 <b>${Math.round(inp4.w/inp4.n*100)}%</b> vs 거의 안 넣은 판 <b>${Math.round(inpLow.w/inpLow.n*100)}%</b>. 정보를 넣을수록 추천 정확도가 올라갑니다.`});
+    if(gap>=12)ins.push({t:'상대 픽을 끝까지 입력하세요',obs:'상대 입력이 많은 판의 승률이 높습니다',
+      p:propDiffP(inp4.w,inp4.n,inpLow.w,inpLow.n),
+      d:`상대를 4명 이상 넣은 판 <b>${Math.round(inp4.w/inp4.n*100)}%</b>(${inp4.n}판) vs 거의 안 넣은 판 <b>${Math.round(inpLow.w/inpLow.n*100)}%</b>(${inpLow.n}판).`,
+      act:'정보를 넣을수록 추천 정확도가 올라갑니다.'});
   }
   if(exp.first.n>=MIN_BUCKET&&exp.early.n>=MIN_BUCKET){
     const gap=(exp.early.w/exp.early.n-exp.first.w/exp.first.n)*100;
-    if(gap>=10)ins.push({t:'처음 잡는 챔을 줄이세요',
-      d:`처음 잡는 챔 <b>${Math.round(exp.first.w/exp.first.n*100)}%</b> vs 2~3판째 <b>${Math.round(exp.early.w/exp.early.n*100)}%</b>. 새 챔은 한 번에 하나씩만 늘리는 편이 유리합니다.`});
+    if(gap>=10)ins.push({t:'처음 잡는 챔을 줄이세요',obs:'처음 잡는 챔의 승률이 낮습니다',
+      p:propDiffP(exp.first.w,exp.first.n,exp.early.w,exp.early.n),
+      d:`처음 잡는 챔 <b>${Math.round(exp.first.w/exp.first.n*100)}%</b>(${exp.first.n}판) vs 2~3판째 <b>${Math.round(exp.early.w/exp.early.n*100)}%</b>(${exp.early.n}판).`,
+      act:'새 챔은 한 번에 하나씩만 늘리는 편이 유리합니다.'});
   }
   const big=out.lanes.filter(l=>l.n>=MIN_BUCKET);
   const goal=(weights.goal==='winrate')?'winrate':'allround';
@@ -2934,7 +3186,10 @@ function analysisModel(){
     if(gap>=15){
       if(goal==='winrate'){
         ins.push({t:`${LANEKR[best.k]}에 집중하고 ${objP(LANEKR[worst.k])} 줄이세요`,
-          d:`${LANEKR[best.k]} <b>${Math.round(best.w/best.n*100)}%</b>(${best.n}판) vs ${LANEKR[worst.k]} <b>${Math.round(worst.w/worst.n*100)}%</b>(${worst.n}판).`});
+          obs:`${LANEKR[best.k]}와 ${LANEKR[worst.k]}의 승률 차이가 큽니다`,
+          p:selP(propDiffP(best.w,best.n,worst.w,worst.n),big.length),
+          d:`${LANEKR[best.k]} <b>${Math.round(best.w/best.n*100)}%</b>(${best.n}판) vs ${LANEKR[worst.k]} <b>${Math.round(worst.w/worst.n*100)}%</b>(${worst.n}판).`,
+          act:'잘 되는 라인에 시간을 몰아주세요.'});
       }else{
         /* 전 포지션 숙련이 목표면 라인을 버리라고 하지 않는다.
            대신 그 라인 안에서 되는 챔과 안 되는 챔을 갈라준다. */
@@ -2942,10 +3197,12 @@ function analysisModel(){
         const keep=w.keep.map(c=>`<b>${champName(c.id)}</b> ${Math.round(c.w/c.n*100)}%`).join(', ');
         const drop=w.drop.map(c=>`<b>${champName(c.id)}</b> ${Math.round(c.w/c.n*100)}%`).join(', ');
         ins.push({t:`${topP(LANEKR[w.k])} 라인이 아니라 챔 문제입니다`,
-          d:`${LANEKR[w.k]} 전체 <b>${Math.round(w.w/w.n*100)}%</b>(${w.n}판)인데`
+          obs:`${topP(LANEKR[w.k])} 다른 라인보다 낮습니다`,
+          p:selP(propDiffP(best.w,best.n,worst.w,worst.n),big.length),
+          d:`${LANEKR[w.k]} 전체 <b>${Math.round(w.w/w.n*100)}%</b>(${w.n}판) vs 가장 높은 ${LANEKR[best.k]} <b>${Math.round(best.w/best.n*100)}%</b>(${best.n}판).`
             +(keep?` 잘 되는 픽은 ${keep}`:' 아직 자리잡은 픽이 없고')
-            +(drop?`, 발목 잡는 픽은 ${drop}입니다.`:'.')
-            +` 라인을 줄이는 대신 <b>이 라인 주력을 2~3개로 좁히면</b> 승률과 숙련을 같이 올릴 수 있습니다.`});
+            +(drop?`, 발목 잡는 픽은 ${drop}입니다.`:'.'),
+          act:'라인을 줄이는 대신 <b>이 라인 주력을 2~3개로 좁히면</b> 승률과 숙련을 같이 올릴 수 있습니다.'});
       }
     }
   }
@@ -2953,14 +3210,18 @@ function analysisModel(){
   if(goal==='allround'){
     const scattered=out.lanes.filter(l=>l.n>=MIN_BUCKET&&l.n/l.ch<2.4)
       .sort((a,b)=>a.n/a.ch-b.n/b.ch)[0];
-    if(scattered)ins.push({t:`${LANEKR[scattered.k]} 주력을 좁히세요`,
+    if(scattered)ins.push({t:`${LANEKR[scattered.k]} 주력을 좁히세요`,kind:'fact',
       d:`${scattered.n}판에 <b>${scattered.ch}종</b>을 썼습니다(판당 ${(scattered.n/scattered.ch).toFixed(1)}판).`
         +` 포지션을 넓히려면 라인 수가 아니라 <b>라인마다의 주력 수</b>를 줄여야 숙련이 쌓입니다.`});
     const growing=out.lanes.filter(l=>l.early.n>=4&&l.late.n>=4)
       .map(l=>({l,d:(l.late.w/l.late.n-l.early.w/l.early.n)*100}))
       .filter(x=>x.d>=20).sort((a,b)=>b.d-a.d)[0];
     if(growing)ins.push({t:`${subP(LANEKR[growing.l.k])} 확실히 늘고 있습니다`,
-      d:`전반 <b>${Math.round(growing.l.early.w/growing.l.early.n*100)}%</b> → 후반 <b>${Math.round(growing.l.late.w/growing.l.late.n*100)}%</b>. 지금 방식을 유지하세요.`});
+      obs:`${subP(LANEKR[growing.l.k])} 후반에 더 좋습니다`,
+      p:selP(propDiffP(growing.l.late.w,growing.l.late.n,growing.l.early.w,growing.l.early.n),
+        out.lanes.filter(l=>l.early.n>=4&&l.late.n>=4).length),
+      d:`전반 <b>${Math.round(growing.l.early.w/growing.l.early.n*100)}%</b>(${growing.l.early.n}판) → 후반 <b>${Math.round(growing.l.late.w/growing.l.late.n*100)}%</b>(${growing.l.late.n}판).`,
+      act:'지금 방식을 유지하세요.'});
   }
   /* [v9] 피로 구간을 '7판째 이후'로 못 박지 않고, 승률이 처음 무너지는 지점을 찾는다.
      실사용 데이터에서 하락은 4~5판째에 시작했는데(1판째 62% → 5판째 38%)
@@ -2974,27 +3235,39 @@ function analysisModel(){
       .filter(x=>x.b.n>=MIN_BUCKET&&(baseR-x.b.w/x.b.n)*100>=12)[0];
     // 구간의 '시작' 판수로 말한다: '5–6판째' → 5판째, '7판째 이후' → 7판째
     if(drop)ins.push({t:`한 세션 ${drop.k.replace(/–\d+/,'').replace(/\s*이후/,'')}부터 승률이 떨어집니다`,
-      d:`세션 1–2판째 <b>${Math.round(baseR*100)}%</b> → ${drop.k} <b>${Math.round(drop.b.w/drop.b.n*100)}%</b>.`
-        +` 무너지는 지점은 사람마다 다른데, 당신은 여기입니다 — 그 전에 끊는 게 이득입니다.`});
+      obs:`한 세션에서 뒤로 갈수록 승률이 낮습니다`,
+      p:selP(propDiffP(firstBlk.w,firstBlk.n,drop.b.w,drop.b.n),dayOrder.length-1),
+      d:`세션 1–2판째 <b>${Math.round(baseR*100)}%</b>(${firstBlk.n}판) → ${drop.k} <b>${Math.round(drop.b.w/drop.b.n*100)}%</b>(${drop.b.n}판).`,
+      act:'무너지는 지점은 사람마다 다른데, 당신은 여기입니다 — 그 전에 끊는 게 이득입니다.'});
   }
-  const stale=out.champs.filter(c=>c.n>=4&&c.w/c.n<0.42&&pool[c.id]&&pool[c.id].comfort>0);
-  if(stale.length)ins.push({t:'챔폭에서 내릴 챔이 있습니다',
-    d:stale.map(c=>{const e=effectiveComfort(c.id);
-      return `<b>${champName(c.id)}</b> ${c.n}판 ${Math.round(c.w/c.n*100)}% (등록 ${e.manual} → 적용 <b>${e.value}</b>)`;}).join(', ')
-      +' — 실적이 이미 점수를 끌어내리고 있습니다. 설정에서 등록값도 낮추면 추천에서 더 확실히 빠집니다.'});
+  /* [v11] '내릴 챔' 판정은 승률 추론이다 — 사실 나열이 아니므로 유의성을 붙인다.
+     예전 규칙(4판 이상 + 42% 미만)은 다중비교 무보정이라, 챔이 30종쯤 되면
+     아무 실력 차이가 없어도 서너 종은 그냥 걸린다(199판에서 실제로 3종이 걸렸는데
+     노이즈 기댓값이 3.4종이었다). 각 챔을 전체 승률과 견주고 검사한 챔 수로 보정한다. */
+  const staleCand=out.champs.filter(c=>c.n>=4&&pool[c.id]&&pool[c.id].comfort>0);
+  const stale=staleCand.filter(c=>c.w/c.n<0.42);
+  if(stale.length){
+    const best=Math.min(...stale.map(c=>propDiffP(c.w,c.n,out.w-c.w,out.n-c.n)));
+    ins.push({t:'챔폭에서 내릴 챔이 있습니다',obs:'등록해둔 챔 중 성적이 낮은 것들이 있습니다',
+      p:selP(best,staleCand.length),
+      d:stale.map(c=>{const e=effectiveComfort(c.id);
+        return `<b>${champName(c.id)}</b> ${c.n}판 ${Math.round(c.w/c.n*100)}% (등록 ${e.manual} → 적용 <b>${e.value}</b>)`;}).join(', ')
+        +` <span style="color:var(--dimmer)">(${staleCand.length}종 중)</span>`,
+      act:'실적이 이미 점수를 끌어내리고 있습니다. 설정에서 등록값도 낮추면 추천에서 더 확실히 빠집니다.'});
+  }
   /* [v9.1] 등록만 해두고 거의 안 쓴 챔. 판이 없으면 실적이 사전값을 이길 수 없어
      이런 항목은 추천을 계속 위로 끌어올린다(실사용에서 1판 0%인 챔이 탑 4위였다).
      엔진이 몰래 무시하는 대신, 등록값을 손보라고 말하는 쪽이 맞다. */
   const idle=Object.keys(pool).map(Number)
     .filter(id=>byId[id]&&pool[id].comfort>=60&&playCount(id)<=1);
-  if(idle.length>=3)ins.push({t:'등록만 해두고 안 쓰는 챔이 있습니다',
+  if(idle.length>=3)ins.push({t:'등록만 해두고 안 쓰는 챔이 있습니다',kind:'fact',
     d:idle.slice(0,6).map(id=>`<b>${champName(id)}</b>(${playCount(id)}판)`).join(', ')
       +(idle.length>6?` 외 ${idle.length-6}종`:'')
       +` — 판이 없으면 실적이 등록값을 이길 수 없어 계속 추천 위쪽에 올라옵니다. 실제로 안 쓸 챔은 설정에서 0으로 내리세요.`});
   /* [v9] 상대를 모른 채 계산한 판이 많으면 상성 축이 그만큼 꺼져 있었다는 뜻이다. */
   if(out.opp.none.n>=MIN_BUCKET&&out.opp.sure.n>=MIN_BUCKET){
     const share=out.opp.none.n/(out.opp.none.n+out.opp.sure.n+out.opp.guess.n);
-    if(share>=0.2)ins.push({t:'내 라인 상대를 입력하지 않은 판이 많습니다',
+    if(share>=0.2)ins.push({t:'내 라인 상대를 입력하지 않은 판이 많습니다',kind:'fact',
       d:`상대를 넣은 판 중 <b>${Math.round(share*100)}%</b>에서 내 라인 상대가 빠져 있어 상성 계산이 꺼진 채로 추천됐습니다.`
         +` 다른 라인 픽보다 <b>맞라인 한 명</b>을 먼저 넣는 편이 추천을 가장 많이 바꿉니다.`});
   }
@@ -3003,12 +3276,14 @@ function analysisModel(){
   if(out.calib.high&&out.calib.low&&out.calib.high.n>=15){
     const hi=out.calib.high.w/out.calib.high.n, lo=out.calib.low.w/out.calib.low.n;
     if(hi-lo<=-0.05)ins.push({t:'지금은 추천 점수를 절대 기준으로 믿지 마세요',
-      d:`점수 상위 절반 <b>${Math.round(hi*100)}%</b> vs 하위 절반 <b>${Math.round(lo*100)}%</b>로 방향이 뒤집혀 있습니다.`
-        +` 점수는 후보를 좁히는 용도로만 쓰고, 같은 라인 안에서 손에 익은 픽을 고르세요.`});
+      obs:'점수가 높은 판이 더 이기고 있지는 않습니다',
+      p:propDiffP(out.calib.high.w,out.calib.high.n,out.calib.low.w,out.calib.low.n),
+      d:`점수 상위 절반 <b>${Math.round(hi*100)}%</b>(${out.calib.high.n}판) vs 하위 절반 <b>${Math.round(lo*100)}%</b>(${out.calib.low.n}판)로 방향이 뒤집혀 있습니다.`,
+      act:'점수는 후보를 좁히는 용도로만 쓰고, 같은 라인 안에서 손에 익은 픽을 고르세요.'});
   }
   if(out.oneOff.length>=8){
     const ow=out.oneOff.filter(c=>c.w).length;
-    ins.push({t:'한 번만 잡고 버린 챔이 많습니다',
+    ins.push({t:'한 번만 잡고 버린 챔이 많습니다',kind:'fact',
       d:`${out.oneOff.length}종 · 합계 <b>${Math.round(ow/out.oneOff.length*100)}%</b>. 챔을 3~4개로 좁히면 숙련이 쌓입니다.`});
   }
   return out;
@@ -3036,10 +3311,26 @@ function renderAnalysis(){
       +`</div>`;
   }
 
-  const insights=a.insights.length
-    ? `<div class="logsec">이렇게 하면 오릅니다</div>`+a.insights.map((x,i)=>
-        `<div class="dx"><div class="dxh"><span class="dxt">${i+1}. ${x.t}</span></div><div class="dxs">${x.d}</div></div>`).join('')
-    : `<div class="dx"><div class="dxs">뚜렷한 패턴을 찾을 만큼 표본이 모이지 않았습니다. 30판 이상 쌓이면 더 정확해집니다.</div></div>`;
+  /* [v11] 조언을 '통계적으로 뒷받침되는 것'과 '아직 판단할 수 없는 관찰'로 가른다.
+     그동안은 효과 크기(예: 12%p 차이)만 보고 전부 단정형으로 올렸다. 199판 시점에
+     "상대 픽을 끝까지 입력하세요"는 p=0.55, "3판째부터 떨어집니다"는 p=0.11이었다 —
+     둘 다 우연으로 흔히 나오는 차이다. 관찰 자체는 버리지 않고, 말투만 사실에 맞춘다. */
+  /* fail-closed: 승률 추론인데 p 가 없으면 단정형으로 올리지 않는다.
+     kind:'fact' 는 사용자의 입력을 센 것(라인 상대 미입력 비율 등)이라 검정 대상이 아니다. */
+  const solid=a.insights.filter(x=>x.kind==='fact'||(x.p!=null&&x.p<=SIG_P));
+  const tentative=a.insights.filter(x=>!(x.kind==='fact'||(x.p!=null&&x.p<=SIG_P)));
+  const insights=(solid.length
+    ? `<div class="logsec">이렇게 하면 오릅니다</div>`+solid.map((x,i)=>
+        `<div class="dx"><div class="dxh"><span class="dxt">${i+1}. ${x.t}</span>${
+          x.p!=null?`<span class="dxn">우연일 확률 ${x.p<0.01?'1% 미만':Math.round(x.p*100)+'%'}</span>`:''
+        }</div><div class="dxs">${x.d}${x.act?' '+x.act:''}</div></div>`).join('')
+    : `<div class="dx"><div class="dxs">지금 전적에서 <b>통계적으로 뒷받침되는 조언은 없습니다.</b> 아래 관찰들은 방향이 있어 보이지만 우연으로도 흔히 나오는 크기입니다 — 판이 더 쌓여야 갈립니다.</div></div>`)
+    +(tentative.length
+    ? `<div class="logsec">아직 판단할 수 없는 관찰 <span class="dxn">(우연일 수 있음)</span></div>`
+      +tentative.map(x=>
+        `<div class="dx tent"><div class="dxh"><span class="dxt">${x.obs||x.t}</span><span class="dxn">우연일 확률 ${Math.round(x.p*100)}%</span></div>`
+        +`<div class="dxs">${x.d} <span style="color:var(--dimmer)">이 정도 차이는 실력 변화 없이도 자주 나옵니다. 지금 행동을 바꿀 근거로는 약합니다.</span></div></div>`).join('')
+    : '');
 
   const maxBlock=Math.max(...a.blocks.map(b=>b.w/b.n),0.01);
   const spark=a.blocks.length>=2?`<div class="dx">
@@ -3070,32 +3361,43 @@ function renderAnalysis(){
       <br><span style="color:var(--dimmer)">기록 당시 점수가 아니라 <b>지금 엔진으로 전 판을 다시 채점</b>한 값입니다.
       각 판은 그 판 직전까지의 전적만 보고 채점하므로 결과를 미리 알지 못합니다.</span></div></div>`:'';
 
-  /* [v10] 축별 성적표 — 총점만 보면 어느 축이 틀렸는지 알 수 없다.
-     순위 일치도(AUC)는 "이긴 판의 축 값이 진 판보다 높을 확률"이다. */
+  /* 축별 성적표 — 총점만 보면 어느 축이 틀렸는지 알 수 없다.
+     순위 일치도(AUC)는 "이긴 판의 축 값이 진 판보다 높을 확률"이다.
+     [v11] 점 추정만 보여주던 것을 95% 구간과 함께 보여준다. v10은 0.47을 근거로
+     "상성 축이 뒤집혔다"고 단정했는데, 그 값의 오차는 ±0.04였다. */
   const axisCard=(()=>{
     const ax=(a.axes||[]).filter(x=>x.auc!=null);
     if(!ax.length)return '';
     const fmt=v=>v.toFixed(2);
-    const worst=ax.slice().sort((x,y)=>x.auc-y.auc)[0];
-    const anyCut=ax.some(x=>x.trust<1), anyActive=ax.some(x=>x.active);
+    const conclusive=ax.filter(x=>x.conclusive);
+    const anyCut=ax.some(x=>x.trust!==1);
+    const anyActive=ax.some(x=>x.active);
     return `<div class="dx">
       <div class="dxh"><span class="dxt">축별 성적표 <span class="dxn">(순위 일치도)</span></span>
         <span class="dxn">${a.autoAxis?'자동 보정 켜짐':'자동 보정 꺼짐'}</span></div>
       ${ax.map(x=>{
-        const good=x.auc>=0.55, bad=x.auc<=0.45;
+        const good=x.conclusive&&x.auc>0.5, bad=x.conclusive&&x.auc<0.5;
+        const w=Math.max(2,Math.round(x.auc*100));
+        // 오차막대: 막대 위에 95% 구간을 겹쳐 그린다. 눈으로 "0.50을 넘었나"를 본다.
+        const lo=Math.max(0,Math.round((x.lo||x.auc)*100)), hi=Math.min(100,Math.round((x.hi||x.auc)*100));
         return `<div class="bar axis${x.n<AXIS_MIN_GAMES?' weak':''}">
           <span class="bl">${x.kr}</span>
-          <span class="bt"><span class="bf ${good?'':bad?'lo':'mid'}" style="width:${Math.max(2,Math.round(x.auc*100))}%"></span></span>
-          <span class="bv">${fmt(x.auc)}<small>${x.n}판${x.trust!==1?` · 발언권 ${Math.round(x.trust*100)}%`:''}</small></span></div>`;
+          <span class="bt"><span class="bf ${good?'':bad?'lo':'mid'}" style="width:${w}%"></span>
+            <span class="ci" style="left:${lo}%;width:${Math.max(1,hi-lo)}%"></span>
+            <span class="mid50"></span></span>
+          <span class="bv">${fmt(x.auc)}<small>±${(x.se!=null?x.se:0).toFixed(2)} · ${x.n}판${x.trust!==1?` · 발언권 ${Math.round(x.trust*100)}%`:''}</small></span></div>`;
       }).join('')}
-      <div class="dxs">0.50이 동전던지기입니다. <b>0.50 미만이면 그 축은 방향이 뒤집혀</b> 있다는 뜻입니다 —
-        추천을 올려야 할 때 내리고 있었습니다.
+      <div class="dxs">0.50이 동전던지기입니다(세로선). 가로선과 양끝 표시가 <b>95% 구간</b>이며,
+        그 구간이 세로선을 걸치면 <b>방향을 말할 수 없다</b>는 뜻입니다.
+        ${conclusive.length
+          ? `지금 방향을 단정할 수 있는 축: <b>${conclusive.map(x=>x.kr).join(', ')}</b>.`
+          : `<b>지금은 어느 축도 동전던지기와 구분되지 않습니다.</b> 199판 규모에서 이 값의 오차는 ±0.04라, 0.47과 0.55는 사실상 같은 관측입니다.`}
         ${anyActive
           ? (anyCut
-             ? `지금은 <b>${worst.kr} 축</b>(${fmt(worst.auc)})처럼 못 맞히는 축의 발언권을 자동으로 깎고 있습니다. 설정에서 끌 수 있습니다.`
-             : '모든 축이 제 몫을 하고 있어 가중치를 건드리지 않습니다.')
-          : `축마다 ${AXIS_MIN_GAMES}판이 모여야 자동 보정이 시작됩니다. 그전까지는 설정한 가중치를 그대로 씁니다.`}
-        <br><span style="color:var(--dimmer)">승패는 팀 단위 노이즈가 크므로 한두 판으로 뒤집히지 않게 표본이 적을수록 보정 폭을 줄입니다(최대 −50%, +15%).</span></div></div>`;
+             ? ' 보정은 오차만큼 0.50 쪽으로 당긴 뒤에 걸리므로, 근거가 약할수록 저절로 작아집니다.'
+             : ' 그래서 지금은 가중치를 사실상 건드리지 않습니다 — 표본이 쌓이면 저절로 살아납니다.')
+          : ` 축마다 ${AXIS_MIN_GAMES}판이 모여야 자동 보정이 시작됩니다.`}
+        <br><span style="color:var(--dimmer)">축이 잘 맞힌다는 증거보다 못 맞힌다는 증거가 값싸게 얻어지므로, 깎는 쪽은 −50%까지 열고 올리는 쪽은 +15%까지만 엽니다.</span></div></div>`;
   })();
 
   /* [v9] 상성 축이 실제로 켜져 있었던 판의 비율. 저장값이 아니라 지금 엔진으로
@@ -3172,12 +3474,23 @@ function renderAnalysis(){
         : `표시한 패배는 챔피언 평가에서 제외됩니다. 승리는 어떻게 얻었든 그대로 반영합니다.`}</div></div>`;
   })();
 
+  /* [v11] 교란을 숨기지 않는다. '서폿류 없음'은 대체로 '아군을 덜 입력한 판'이다. */
   const duoCard=(a.duo&&(a.duo.with.n+a.duo.without.n)>=6)?`<div class="dx">
     <div class="dxh"><span class="dxt">원딜 — 서폿 유무별</span><span class="dxn">아군 입력 기준</span></div>
     ${barRow('서폿류 있음',a.duo.with.w,a.duo.with.n)}
     ${barRow('서폿류 없음',a.duo.without.w,a.duo.without.n)}
-    <div class="dxs">아군에 엔첸터·탱커가 없으면 봇 라인 변수가 커집니다. 드래프트에서 아군 서폿이 안 잡히면
-      <b>원딜 대신 통제력이 큰 라인</b>을 고르는 것도 방법입니다.</div></div>`:'';
+    ${a.duo.byAllyCount&&a.duo.byAllyCount.length>1?`<div class="dxs" style="margin-top:4px">아군 입력 수별: ${
+      a.duo.byAllyCount.map(x=>`${x.k===2?'2명 이하':x.k+'명'} <b>${pct(x.w,x.n)}%</b>(${x.n}판)`).join(' · ')}</div>`:''}
+    <div class="dxs">${(()=>{
+      const d=a.duo.deep, weak=a.duo.p>SIG_P;
+      const deepTxt=(d&&d.with.n>=4&&d.without.n>=4)
+        ? `아군을 3명 이상 넣은 판만 보면 있음 <b>${pct(d.with.w,d.with.n)}%</b>(${d.with.n}판) vs 없음 <b>${pct(d.without.w,d.without.n)}%</b>(${d.without.n}판)입니다. `
+        : '아군을 3명 이상 넣은 판만 추리면 표본이 너무 작아 비교가 되지 않습니다. ';
+      return `아군에 엔첸터·탱커가 없으면 봇 라인 변수가 커진다는 해석이 가능합니다. 다만 <b>'서폿류 없음'은 대체로 아군을 덜 입력한 판</b>이라 두 원인이 섞여 있습니다 — `
+        +deepTxt
+        +(weak?`전체 차이도 우연일 확률이 <b>${Math.round(a.duo.p*100)}%</b>라 아직 단정할 수 없습니다.`
+              :`전체 차이는 우연일 확률 ${Math.round(a.duo.p*100)}%로 뚜렷한 편입니다.`);
+    })()}</div></div>`:'';
 
   const perfCard=a.perf.n?`<div class="dx">
     <div class="dxh"><span class="dxt">내 개인 성과</span><span class="dxn">${a.perf.n}판 기록됨</span></div>
@@ -3406,19 +3719,32 @@ function autoBackupBox(){
     <button onclick="enableAutoBackup()">켜기</button></div>`;
 }
 /* 되돌리기 스냅샷: 복원·전체삭제 직전 상태를 따로 저장해 실수를 되살릴 수 있게 한다. */
+/* [v11] 스냅샷 슬롯이 하나뿐이라, 데이터를 지우지 않는 '복원(합치기)'이
+   바로 직전 '전체삭제'의 스냅샷을 덮어써 정작 되돌려야 할 것을 잃게 만들었다.
+   삭제 계열은 따로 보관하고, 되돌릴 때는 둘 중 더 많은 판을 담은 쪽을 고른다. */
+const ROLLBACK_KEYS={clear:'wr_rollback_clear',restore:'wr_rollback'};
 async function snapshotBeforeDestructive(reason){
+  const key=ROLLBACK_KEYS[reason]||ROLLBACK_KEYS.restore;
   try{
-    await window.storage.set('wr_rollback',JSON.stringify({
+    await window.storage.set(key,JSON.stringify({
       at:new Date().toISOString(),reason,count:matches.length,matches,pool
     }));
   }catch(e){}
 }
+async function bestRollback(){
+  const out=[];
+  for(const k of Object.values(ROLLBACK_KEYS)){
+    try{const r=await window.storage.get(k);
+      if(r&&r.value){const s=JSON.parse(r.value);if(Array.isArray(s.matches))out.push(s);}
+    }catch(e){}
+  }
+  // 잃은 게 가장 많은 스냅샷이 사용자가 되돌리고 싶은 것이다.
+  return out.sort((a,b)=>(b.count||0)-(a.count||0))[0]||null;
+}
 async function rollbackRestore(){
   try{
-    const r=await window.storage.get('wr_rollback');
-    if(!r||!r.value){toast('되돌릴 스냅샷이 없습니다');return;}
-    const s=JSON.parse(r.value);
-    if(!Array.isArray(s.matches)){toast('스냅샷이 손상되었습니다');return;}
+    const s=await bestRollback();
+    if(!s){toast('되돌릴 스냅샷이 없습니다');return;}
     if(!confirm(`${s.at.slice(0,16).replace('T',' ')} 시점의 ${s.count}판으로 되돌립니다.\n지금 기록과 합쳐집니다. 계속할까요?`))return;
     const {merged,added}=mergeMatches(matches,s.matches.map(migrateMatch).filter(Boolean));
     matches=merged;
@@ -3509,7 +3835,7 @@ document.addEventListener('keydown',e=>{
   const seeded=await seedHistoryIfEmpty();
   await loadDraft();
   await saveStore();
-  await saveMatches();
+  if(!loadFailed)await saveMatches();   // [v11] 못 읽은 값을 부팅 직후 덮어쓰지 않는다
   await saveDraft();
   paintAddSide();
   renderDraft();

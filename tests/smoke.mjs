@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='10.0.0'"));
+assert.ok(html.includes("const APP_VERSION='11.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -392,43 +392,167 @@ for(const [k,re] of [['comfort',/\*TR\.comfort/],['tier',/const tierW=W\.tier\*T
   assert.ok(re.test(html),`axis trust not applied to ${k}`);
 
 /* 축 보정 산식을 실제로 실행해서 경계를 확인한다. 문자열 매칭만으로는
-   "보정이 걸려 있으나 언제나 1"인 상태를 잡을 수 없다(v9.2의 교훈). */
+   "보정이 걸려 있으나 언제나 1"인 상태를 잡을 수 없다(v9.2의 교훈).
+   [v11] 불확실성 처리가 핵심이므로 완전 분리(SE=0) 대신 노이즈 섞인 데이터로 검증한다. */
 {
-  // replayPass는 주입한다(전적·DOM 없이 돌려야 하므로). 나머지 산식만 떼어 온다.
   const src=html.slice(html.indexOf('const AXES=['),html.indexOf('let _axisNeutral='))
     +html.slice(html.indexOf('/* 순위 일치도(AUC)'),html.indexOf('/* score()가 쓰는 축별 발언권 배수'));
   const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-  /* 가짜 리플레이 결과: counter 축은 뒤집혀 있고(진 판이 더 높다), comfort·team 축은
-     잘 맞히며, tier 축은 승패와 무관하다. n을 바꿔 표본 게이트도 확인한다. */
+  /* 관측 AUC 는 n 과 무관하게 일정하고 표본만 늘어나는 가짜 리플레이.
+     10판 중 1판만 방향이 뒤집히므로 counter 는 확실히 0.5 아래, comfort 는 위. */
   const mkRows=n=>Array.from({length:n},(_,i)=>{
-    const won=i%2===0;
-    return {won,base:won?60:45,tier:50,team:won?60:45,counter:won?40:60,hasAlly:true,hasEnemy:true};
+    const won=i%2===0, flip=(i%10===0);
+    const good=(won!==flip)?60:40;
+    return {won, base:good, tier:50, team:good, counter:100-good, hasAlly:true, hasEnemy:true};
   });
   const load=rows=>Function('clamp','replayPass',
-    src+'\nreturn {rankAgreement,axisReport,AXIS_MIN_GAMES,AXIS_FULL_GAMES};')(clamp,()=>rows);
-  const {rankAgreement,AXIS_MIN_GAMES,AXIS_FULL_GAMES}=load(mkRows(60));
-  assert.ok(AXIS_FULL_GAMES>AXIS_MIN_GAMES,'full-confidence threshold must exceed the minimum');
-  assert.equal(rankAgreement(mkRows(60).map(r=>({won:r.won,v:r.won?1:0})),'v'),1,
-    'rankAgreement must be 1 for a perfect axis');
-  assert.equal(rankAgreement(mkRows(60).map(r=>({won:r.won,v:r.won?0:1})),'v'),0,
-    'rankAgreement must be 0 for a fully inverted axis');
-  assert.equal(rankAgreement([],'v'),null,'rankAgreement must abstain without both outcomes');
+    src+'\nreturn {rankAgreement,rankAgreementSE,shrinkAgreement,axisReport,AXIS_MIN_GAMES,AXIS_PRIOR_SD};')(clamp,()=>rows);
+  const L=load(mkRows(200));
+  const {rankAgreement,rankAgreementSE,shrinkAgreement,AXIS_MIN_GAMES,AXIS_PRIOR_SD}=L;
 
-  const big=Object.fromEntries(load(mkRows(AXIS_FULL_GAMES)).axisReport().map(a=>[a.k,a]));
-  assert.ok(big.counter.trust<1,'an inverted axis must lose weight');
-  assert.ok(big.counter.trust>=0.5,'axis trust must never fall below half');
-  assert.ok(big.comfort.trust>1&&big.comfort.trust<=1.15,
-    'a well-calibrated axis may gain weight, but only a little');
+  assert.ok(AXIS_PRIOR_SD>0&&AXIS_PRIOR_SD<0.5,'axis prior SD must be a plausible spread');
+  assert.equal(rankAgreement(mkRows(60).map(r=>({won:r.won,v:r.won?1:0})),'v'),1,'perfect axis must score 1');
+  assert.equal(rankAgreement(mkRows(60).map(r=>({won:r.won,v:r.won?0:1})),'v'),0,'inverted axis must score 0');
+  assert.equal(rankAgreement([],'v'),null,'must abstain without both outcomes');
+
+  // 표준오차: 완전 분리면 0, 섞이면 양수, 표본이 커지면 작아진다.
+  assert.equal(rankAgreementSE(1,50,50),0,'perfect separation has no sampling error');
+  const seSmall=rankAgreementSE(0.6,20,20), seBig=rankAgreementSE(0.6,200,200);
+  assert.ok(seSmall>0&&seBig>0,'mixed outcomes must carry sampling error');
+  assert.ok(seBig<seSmall,'standard error must shrink as the sample grows');
+  assert.equal(rankAgreementSE(0.6,0,10),null,'SE undefined without both outcomes');
+
+  /* 축소: 오차가 크면 0.5 로 당겨지고, 오차가 작아지면 관측값을 그대로 믿는다.
+     이게 v11 의 핵심 — v10 은 오차와 무관하게 점 추정을 그대로 썼다. */
+  const noisy=shrinkAgreement(0.40,0.10), sharp=shrinkAgreement(0.40,0.005);
+  assert.ok(Math.abs(noisy-0.5)<Math.abs(sharp-0.5),'a noisy estimate must be pulled toward 0.5');
+  assert.ok(noisy>0.40&&noisy<0.5,'shrunk value must sit between the estimate and 0.5');
+  assert.ok(Math.abs(sharp-0.40)<0.01,'a precise estimate must survive nearly intact');
+  assert.equal(shrinkAgreement(null,0.05),null,'no estimate, no shrinkage');
+
+  // 같은 관측 AUC 라도 표본이 크면 보정이 강해져야 한다.
+  const small=Object.fromEntries(load(mkRows(40)).axisReport().map(a=>[a.k,a]));
+  const big=Object.fromEntries(load(mkRows(400)).axisReport().map(a=>[a.k,a]));
+  assert.ok(Math.abs(small.counter.auc-big.counter.auc)<0.02,'fixture must hold AUC steady across sizes');
+  assert.ok(big.counter.trust<small.counter.trust,'more evidence must yield a stronger correction');
+  assert.ok(big.counter.trust>=0.5&&big.comfort.trust<=1.15,'axis trust must stay inside its bounds');
+  assert.ok(big.comfort.trust>1&&big.counter.trust<1,'a clearly split axis must move in the right direction');
   assert.equal(big.tier.trust,1,'an axis that tracks nothing must keep its configured weight');
 
+  // 신뢰구간과 '단정 가능' 판정
+  for(const a of Object.values(big)){
+    assert.ok(a.se>=0,'every axis must report a standard error');
+    assert.ok(a.lo<=a.auc&&a.hi>=a.auc,'interval must bracket the estimate');
+    assert.equal(a.conclusive,a.lo>0.5||a.hi<0.5,'conclusive must mean the interval clears 0.50');
+  }
+  assert.equal(big.tier.conclusive,false,'a coin-flip axis must never be called conclusive');
   // 표본이 모자라면 아무리 뒤집혀 있어도 손대지 않는다.
-  const small=Object.fromEntries(load(mkRows(AXIS_MIN_GAMES-2)).axisReport().map(a=>[a.k,a]));
-  assert.equal(small.counter.trust,1,`axes under ${AXIS_MIN_GAMES} games must not be adjusted`);
-  assert.equal(small.counter.active,false,'small samples must be reported as inactive');
-  // 표본이 늘수록 보정이 세져야 한다(확신도가 표본에 비례).
-  const mid=Object.fromEntries(load(mkRows(AXIS_MIN_GAMES+2)).axisReport().map(a=>[a.k,a]));
-  assert.ok(mid.counter.trust>big.counter.trust,'confidence in the adjustment must grow with sample size');
+  const tiny=Object.fromEntries(load(mkRows(AXIS_MIN_GAMES-2)).axisReport().map(a=>[a.k,a]));
+  assert.equal(tiny.counter.trust,1,`axes under ${AXIS_MIN_GAMES} games must not be adjusted`);
+  assert.equal(tiny.counter.active,false,'small samples must be reported as inactive');
 }
+
+/* [v11] 분석 탭 조언은 효과 크기가 아니라 유의성으로 갈라야 한다.
+   199판 시점에 "상대 픽을 끝까지 입력하세요"(p=0.55)가 단정형으로 떠 있었다. */
+assert.ok(html.includes('function propDiffP('),'two-proportion test missing');
+assert.ok(html.includes('function normCdf('),'normal CDF missing');
+assert.ok(/const SIG_P=0\.\d+/.test(html),'significance threshold missing');
+assert.ok(/const solid=a\.insights\.filter\(x=>x\.kind==='fact'\|\|\(x\.p!=null&&x\.p<=SIG_P\)\)/.test(html),
+  'insights must be split by significance');
+/* fail-closed: 승률 추론인데 p 를 안 붙이면 조용히 단정형으로 승격되면 안 된다.
+   v11 초안이 바로 이 구멍을 갖고 있었다 — p==null 을 '유의함'으로 취급했다. */
+assert.ok(!/x\.p==null\|\|x\.p<=SIG_P/.test(html),'a missing p-value must never mean "significant"');
+assert.ok(html.includes("kind:'fact'"),'descriptive insights must be tagged as facts');
+{
+  // 승률을 근거로 드는 인사이트에는 전부 p 가 붙어 있어야 한다.
+  const chunks=html.split('ins.push({t:').slice(1);
+  const pushes=chunks.map(c=>c.slice(0,900));
+  assert.ok(pushes.length>=10,`expected the full insight set, found ${pushes.length}`);
+  for(const p of pushes){
+    const tagged=/kind:'fact'/.test(p)||/\bp:/.test(p);
+    assert.ok(tagged,'every insight must declare kind:\'fact\' or carry a p-value: '+p.slice(0,80));
+  }
+}
+assert.ok(html.includes('아직 판단할 수 없는 관찰'),'tentative observation section missing');
+assert.ok(html.includes('.dx.tent{'),'tentative styling missing');
+{
+  const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+  const p=Function('clamp',html.match(/function normCdf\(z\)\{[\s\S]*?\n\}/)[0]
+    +'\n'+html.match(/function propDiffP\(w1,n1,w2,n2\)\{[\s\S]*?\n\}/)[0]
+    +'\nreturn propDiffP;')(clamp);
+  // 같은 비율이면 p=1 에 가깝고, 크게 갈리고 표본이 크면 작아진다.
+  assert.ok(p(50,100,50,100)>0.9,'identical rates must not look significant');
+  assert.ok(p(90,100,10,100)<0.001,'a huge, well-sampled gap must be significant');
+  // 작은 표본의 큰 차이는 유의하지 않아야 한다 — 이게 v10 까지 통과하던 구멍이다.
+  assert.ok(p(6,10,2,10)>0.05,'a big gap on 10 games must not clear the bar');
+  assert.ok(p(0,0,5,10)===1,'empty buckets must be inert');
+}
+/* [v11] 전적이 사라지는 경로들. 전부 실제로 재현했던 것이라 회귀로 고정한다. */
+// (1) 저장값을 못 읽었을 때 '기록 없음'으로 오해하면 안 된다 — 200판이 0판이 됐었다.
+assert.ok(html.includes('let loadFailed=null'),'load failure state missing');
+assert.ok(html.includes('function salvageMatches('),'partial salvage missing');
+assert.ok(/wr_matches_corrupt/.test(html),'corrupted payload must be quarantined');
+assert.ok(!/catch\(e\)\{matches=\[\];\}/.test(html),'a read failure must not silently mean "no history"');
+assert.ok(/if\(!loadFailed\)await saveMatches\(\)/.test(html),'boot must not overwrite an unreadable store');
+assert.ok(/if\(loadFailed\)return false;/.test(html),'seeding must not treat a read failure as a new device');
+assert.ok(/if\(loadFailed\)return;/.test(html),'auto-backup must pause while the store is unreadable');
+assert.ok(html.includes('function downloadCorrupt('),'user must be able to retrieve the raw payload');
+assert.ok(html.includes('function ackLoadFailure('),'user must be able to resume normal saving');
+// (2) ISO 문자열 t 를 가진 백업이 한 판으로 붕괴하면 안 된다.
+assert.ok(html.includes('function matchTime('),'timestamp parser missing');
+assert.ok(!/const t=Number\(m\.t\)\|\|Date\.now\(\)/.test(html),
+  'Number(t)||Date.now() collapses every ISO-timestamped record onto one id');
+{
+  const mt=Function(html.match(/function matchTime\(raw\)\{[\s\S]*?\n\}/)[0]
+    .replace('_tSeq++','(globalThis.__s=(globalThis.__s||0)+1)')+'\nreturn matchTime;')();
+  assert.equal(mt(1786525004064),1786525004064,'numeric timestamps must pass through');
+  assert.equal(mt('2026-08-01T10:00:00.000Z'),Date.parse('2026-08-01T10:00:00.000Z'),'ISO timestamps must parse');
+  assert.notEqual(mt(null),mt(null),'unknown timestamps must never collide');
+}
+// (3) 성과 입력 대상은 배열 위치가 아니라 판의 신원이어야 한다.
+assert.ok(html.includes('let gradingT=null'),'grading target must be identity-based');
+assert.ok(!/let gradingIdx/.test(html),'index-based grading target must be gone');
+assert.ok(/matches\.find\(m=>m\.t===gradingT\)/.test(html),'grading must look the match up by time');
+// (4) 되돌리기 스냅샷이 서로를 덮어쓰면 안 된다.
+assert.ok(html.includes('const ROLLBACK_KEYS='),'rollback slots must be separated by reason');
+assert.ok(html.includes('async function bestRollback('),'rollback must pick the most complete snapshot');
+// (5) 해석 못 한 챔폭 항목을 조용히 버리지 않는다.
+assert.ok(html.includes('poolOrphans'),'unresolved pool entries must be preserved');
+
+/* [v11] 통계 세대가 바뀌면 적 라인 배정 캐시도 무효화돼야 한다.
+   랭크 구간을 바꿔도 옛 통계로 계산한 배정을 계속 쓰고 있었다. */
+assert.ok(/_asgKey.*_engineDataVersion|state\.enemy\.join\(','\)\+'\|'\+_engineDataVersion/.test(html),
+  'assignment cache key must include the stats generation');
+{
+  const i=html.indexOf('function applyStatsPayload('), j=html.indexOf('function sanitizeStatsTable(');
+  assert.ok(html.slice(i,j).includes('bumpEngineData()'),
+    'the generation must bump where ROLE_STATS actually changes (bracket switches go through here)');
+}
+
+/* [v11] 적 5라인 배정 격자 — 빈 칸이 곧 '아직 모르는 라인'이다.
+   실사용 199판에서 적을 입력한 195판 중 56판(29%)은 내 라인 상대가 안 들어와
+   상성 계산이 꺼진 채였다. 문장 안내(v9.1)와 칩 배지(v10)로는 줄지 않았다. */
+assert.ok(html.includes('id="enemyLaneGrid"'),'enemy lane grid container missing');
+assert.ok(html.includes('function renderLaneGrid('),'lane grid renderer missing');
+assert.ok(/renderLaneGrid\(asg\)/.test(html),'chips() must render the grid from the shared assignment');
+assert.ok(/\.lanegrid\{display:grid;grid-template-columns:repeat\(5,1fr\)/.test(html),
+  'lane grid must lay out all five lanes');
+// 빈 칸은 버튼이어야 누를 수 있다(그냥 표시만 하면 v9.1 안내와 다를 게 없다).
+assert.ok(/onclick="focusEnemyAdd\('\$\{l\}'\)"/.test(html),'empty lane slot must be tappable');
+assert.ok(/function focusEnemyAdd\(lane\)/.test(html),'focusEnemyAdd must accept a lane');
+assert.ok(html.includes('let addLaneHint=null'),'lane hint state missing');
+// 빈 검색창에서도 그 라인 후보를 띄워야 한다.
+assert.ok(/if\(!raw&&addLaneHint\)/.test(html),'lane hint must seed suggestions without a query');
+assert.ok(/if\(!raw\.trim\(\)&&!addLaneHint\)/.test(html),'dropdown must stay open for a lane hint');
+assert.ok(html.includes('ddhead'),'lane hint header missing');
+// 힌트는 다른 쪽으로 가거나 추가하면 풀려야 한다(엉뚱한 목록이 계속 뜨면 안 된다).
+assert.ok(/setAddSide\(s\)\{if\(s!=='enemy'\)addLaneHint=null/.test(html),'lane hint must clear when switching side');
+
+/* [v11] 원딜 서폿 카드의 교란을 숨기지 않는다.
+   '서폿류 없음'은 대체로 아군을 덜 입력한 판이었다(2명 이하 0승 8패). */
+assert.ok(html.includes('out.duo.byAllyCount='),'duo card must break down by ally input count');
+assert.ok(html.includes('out.duo.deep='),'duo card must control for input completeness');
+assert.ok(html.includes('두 원인이 섞여 있습니다'),'duo card must disclose the confound');
 
 /* [v10] 분석 탭 막대가 실제로 그려져야 한다.
    `.bf`는 span이라 display:block이 없으면 인라인이 되어 width·height가 통째로
@@ -449,12 +573,20 @@ assert.ok(laneCap>0&&laneCap<=22,'lane matchup cap must not exceed the team-leve
 // 봇 듀오는 1v1 라인이 아니다 — 정글과 같은 이유로 감쇠한다.
 assert.ok(/const BOT_DUO_DAMP=0\.\d+/.test(html),'bot-lane damping missing');
 {
-  const scale=Function(html.match(/function laneMatchupScale\(lane\)\{[^}]*\}/)[0]
-    +'\n'+html.match(/const BOT_DUO_DAMP=0\.\d+;/)[0].replace('const','var')
+  const scale=Function(html.match(/const BOT_DUO_DAMP=0\.\d+;/)[0].replace('const','var')
+    +'\n'+html.match(/const LANE_MATCHUP_SCALE=\{[^}]*\};/)[0].replace('const','var')
+    +'\n'+html.match(/function laneMatchupScale\(lane\)\{[^}]*\}/)[0]
     +'\nreturn laneMatchupScale;')();
   assert.ok(scale('adc')<1&&scale('sup')<1,'bot duo lanes must be damped');
   assert.equal(scale('top'),1,'solo lanes must keep full lane matchup weight');
   assert.equal(scale('mid'),1,'solo lanes must keep full lane matchup weight');
+  /* [v11] 정글 감쇠가 클래스 매트릭스 한 성분에만 걸려 실효 0.68이던 것을
+     라인 상성 전체로 옮겼다. 감쇠는 이 표 한 곳에서만 결정돼야 한다. */
+  assert.ok(scale('jug')<scale('adc'),'jungle must be damped at least as much as the bot duo');
+  assert.ok(!/else a=Math\.round\(a\*0\.5\)/.test(html),
+    'jungle damping must not be applied to only one matchup component');
+  assert.ok(/a=Math\.round\(a\*0\.5\)/.test(html),
+    'the v8.4 guide-data damping is a different rule and must stay');
 }
 
 /* [v10] 가이드 카운터 관계의 라인 태그를 쓴다.

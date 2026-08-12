@@ -1,6 +1,6 @@
 {
   "note": "초기 시드 전적. 저장된 기록이 전혀 없을 때만 1회 적재되며, 기존 기록은 병합만 하고 덮어쓰지 않는다.",
-  "exportedAt": "2026-08-12T06:37:13.110Z",
+  "exportedAt": "2026-08-12T10:29:49.298Z",
   "matches": [
     {
       "t": 1783080669665,
@@ -23,7 +23,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783082347025,
@@ -48,7 +50,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783234115449,
@@ -73,7 +77,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783237347300,
@@ -98,7 +104,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783239206793,
@@ -121,7 +129,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783246484381,
@@ -146,7 +156,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783247276377,
@@ -171,7 +183,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783248429953,
@@ -192,7 +206,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783250068574,
@@ -213,7 +229,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783260256039,
@@ -233,7 +251,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783261745044,
@@ -258,7 +278,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783263143959,
@@ -281,7 +303,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783264346794,
@@ -305,7 +329,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783266328901,
@@ -328,7 +354,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783308435661,
@@ -353,7 +381,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783325008543,
@@ -378,7 +408,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783393793548,
@@ -403,7 +435,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783415589242,
@@ -427,7 +461,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783425413101,
@@ -452,7 +488,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783426995353,
@@ -475,7 +513,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783429605317,
@@ -498,7 +538,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783431260894,
@@ -521,7 +563,9 @@
       "top3": [],
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783435490567,
@@ -547,7 +591,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783436739732,
@@ -573,7 +619,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783438241318,
@@ -602,7 +650,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783464022397,
@@ -629,7 +679,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783481525917,
@@ -652,7 +704,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783567226731,
@@ -681,7 +735,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783572315684,
@@ -709,7 +765,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783587660633,
@@ -738,7 +796,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783614366078,
@@ -765,7 +825,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "t": 1783654348678,
@@ -790,7 +852,9 @@
       "schema": 5,
       "laneMark": null,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -829,7 +893,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -860,7 +926,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -900,7 +968,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -939,7 +1009,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -977,7 +1049,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1010,7 +1084,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1048,7 +1124,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1088,7 +1166,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1124,7 +1204,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1160,7 +1242,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1196,7 +1280,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1234,7 +1320,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1272,7 +1360,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1308,7 +1398,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1340,7 +1432,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1377,7 +1471,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1415,7 +1511,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1450,7 +1548,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1486,7 +1586,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1526,7 +1628,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1562,7 +1666,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1600,7 +1706,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1636,7 +1744,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1673,7 +1783,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1712,7 +1824,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1748,7 +1862,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1783,7 +1899,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1818,7 +1936,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1851,7 +1971,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1886,7 +2008,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1920,7 +2044,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1951,7 +2077,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -1989,7 +2117,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2028,7 +2158,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2062,7 +2194,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2100,7 +2234,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2137,7 +2273,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2176,7 +2314,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2211,7 +2351,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2248,7 +2390,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2284,7 +2428,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2322,7 +2468,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2362,7 +2510,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2402,7 +2552,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2442,7 +2594,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2480,7 +2634,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2516,7 +2672,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2553,7 +2711,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2592,7 +2752,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2629,7 +2791,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2664,7 +2828,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2701,7 +2867,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2738,7 +2906,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2774,7 +2944,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2807,7 +2979,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2846,7 +3020,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2884,7 +3060,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2920,7 +3098,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2956,7 +3136,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -2994,7 +3176,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3030,7 +3214,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3066,7 +3252,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3097,7 +3285,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3135,7 +3325,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3170,7 +3362,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3210,7 +3404,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3248,7 +3444,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3284,7 +3482,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3320,7 +3520,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3356,7 +3558,9 @@
       },
       "won": false,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3395,7 +3599,9 @@
       },
       "won": true,
       "perf": "good",
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3433,7 +3639,9 @@
       },
       "won": true,
       "perf": "bad",
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3473,7 +3681,9 @@
       },
       "won": true,
       "perf": "ok",
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3510,7 +3720,9 @@
       },
       "won": false,
       "perf": "bad",
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3539,7 +3751,9 @@
       },
       "won": true,
       "perf": "good",
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3574,7 +3788,9 @@
       },
       "won": true,
       "perf": null,
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3610,7 +3826,9 @@
       },
       "won": true,
       "perf": "good",
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3645,7 +3863,9 @@
       },
       "won": true,
       "perf": "good",
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -3679,7 +3899,9 @@
       },
       "won": true,
       "perf": "ok",
-      "kda": null
+      "kda": null,
+      "lanerAuto": null,
+      "lanerConf": 0
     },
     {
       "schema": 5,
@@ -7101,6 +7323,44 @@
       "lanerAuto": 2446127352,
       "lanerConf": 1,
       "perf": "ok",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1786525004064,
+      "patch": "7.2b",
+      "sourcePatch": "7.2b",
+      "modelVersion": "10.0.0-axis-selfcheck",
+      "lane": "jug",
+      "laneMark": null,
+      "ally": [
+        3302522831,
+        2299006054
+      ],
+      "enemy": [
+        1308915199,
+        2315421679,
+        4020172230
+      ],
+      "pick": 215000883,
+      "top": 215000883,
+      "top3": [
+        215000883,
+        2048972712,
+        75223012
+      ],
+      "scoreSnapshot": {
+        "total": 58,
+        "meta": 64,
+        "team": 53,
+        "counter": 60,
+        "comfort": 57,
+        "confidence": 85
+      },
+      "won": true,
+      "lanerAuto": 2315421679,
+      "lanerConf": 0.61,
+      "perf": "mvp",
       "kda": null
     }
   ],
