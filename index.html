@@ -929,8 +929,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='12.0.0';
-const MODEL_VERSION='12.0.0-diagnosis';
+const APP_VERSION='12.1.0';
+const MODEL_VERSION='12.1.0-diagnosis';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -3196,11 +3196,24 @@ function analysisModel(){
     /* 각 항목은 '최근이 이전과 다른가'를 같은 방식으로 묻는다.
        pick(m) 이 true 인 판의 비율을 두 구간에서 비교한다. */
     const share=(g,f)=>{const k=g.filter(f).length;return {k,n:g.length,r:g.length?k/g.length:0};};
-    const cmp=(label,f,kind,worse,note)=>{
-      const a=share(R,f), b=share(B,f);
+    /* [v12.1] 어떤 항목은 앱이 그 값을 **기록할 수 없던 시절**의 판을 baseline 으로 갖는다.
+       '팀 문제' 표시는 v8.1 에 생겼는데, 그 전 판은 정의상 전부 0 이라 최근과 비교하면
+       "팀 문제가 급증했다"가 무조건 유의하게 나온다. 실제 218판에서 이 가짜 신호가
+       p=0.002 로 카드의 유일한 '달라진 것'을 차지했다. 기능이 있던 구간으로 창을 좁힌다.
+       eligible 을 준 항목은 양쪽 창이 모두 충분히 남을 때만 검정한다. */
+    const cmp=(label,f,kind,worse,note,eligible)=>{
+      const R2=eligible?R.filter(eligible):R, B2=eligible?B.filter(eligible):B;
+      if(eligible&&(R2.length<6||B2.length<12))return null;
+      const a=share(R2,f), b=share(B2,f);
       return {label,kind,note,recent:a,base:b,delta:(a.r-b.r)*100,
-        p:propDiffP(a.k,a.n,b.k,b.n),need:gamesToDecide(a.k,a.n,b.k,b.n,1),worse:worse(a.r,b.r)};
+        p:propDiffP(a.k,a.n,b.k,b.n),need:gamesToDecide(a.k,a.n,b.k,b.n,1),worse:worse(a.r,b.r),
+        window:eligible?R2.length+B2.length:null};
     };
+    /* 기록된 modelVersion 으로 '그 판을 만든 앱이 이 필드를 알았는가'를 판정한다. */
+    const verNum=v=>{const x=/^(\d+)\.(\d+)\.(\d+)/.exec(v||'');
+      return x?(+x[1])*1e6+(+x[2])*1e3+(+x[3]):0;};
+    const TEAM_ISSUE_SINCE=verNum('8.1.0');
+    const canFlagTeam=m=>verNum(m.modelVersion)>=TEAM_ISSUE_SINCE;
     // 그 시점 기준 '처음 잡는 챔'인지 — 사후편향 없이 앞에서부터 센다.
     const seenAt={}; const firstFlag=new Map();
     M.forEach(m=>{firstFlag.set(m,(seenAt[m.pick]||0)===0);seenAt[m.pick]=(seenAt[m.pick]||0)+1;});
@@ -3225,8 +3238,8 @@ function analysisModel(){
       cmp('한 세션 3판째 이후',m=>ordFlag.get(m)>=2,'behavior',(a,b)=>a>b,
         '길게 이어서 하면 뒤 판의 승률이 떨어질 수 있다'),
       cmp('팀 문제로 표시한 판',m=>isUncontrolled(m),'context',(a,b)=>a>b,
-        '표시가 늘었다면 체감이 나빠진 이유일 수 있다(자기 신고라 해석은 조심)'),
-    ];
+        '표시가 늘었다면 체감이 나빠진 이유일 수 있다(자기 신고라 해석은 조심)',canFlagTeam),
+    ].filter(Boolean);
     /* 패치는 내가 바꾼 게 아니다. 기록에 남은 patch 값으로 갈라 본다. */
     const patches=[...new Set(M.map(m=>m.patch).filter(Boolean))];
     if(patches.length>=2){
@@ -3492,7 +3505,8 @@ function renderAnalysis(){
       return `<div class="dgrow ${bad?'hit ':''}${x.kind}">
         <div class="dgh"><span class="dgl">${x.label}</span>
           <span class="dgd">${b1}% → ${a1}%<small>${dd>0?'+':''}${dd}%p · 우연 ${pTxt(x.p)}</small></span></div>
-        <div class="dgn">${bad?x.note:'이 방향은 승률을 깎는 쪽이 아닙니다 — 되돌릴 이유는 없습니다.'}</div></div>`;
+        <div class="dgn">${bad?x.note:'이 방향은 승률을 깎는 쪽이 아닙니다 — 되돌릴 이유는 없습니다.'}${
+          x.window?` <span style="color:var(--dimmer)">이 항목은 앱이 기록할 수 있었던 ${x.window}판만으로 쟀습니다.</span>`:''}</div></div>`;
     };
     const shown=d.changed.concat(d.shifted||[]);
     const rest=d.items.filter(x=>!shown.includes(x));

@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='12.0.0'"));
+assert.ok(html.includes("const APP_VERSION='12.1.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -669,6 +669,23 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   const wide=gamesToDecide(35,50,15,50,1), narrow=gamesToDecide(27,50,23,50,1);
   assert.ok(wide>=0&&narrow>0,'both must return a usable count');
   assert.ok(wide<narrow,'a bigger observed gap must need fewer extra games');
+
+  /* [v12.1] 앱이 기록할 수 없던 시절의 판을 baseline 으로 쓰면 안 된다.
+     '팀 문제' 표시는 v8.1 에 생겼고, 그 전 판은 정의상 전부 0 이다. 창을 안 좁히면
+     실사용 218판에서 "팀 문제가 3%→18%로 급증(p=0.002)"이라는 가짜 신호가
+     카드의 유일한 '달라진 것'이 된다. 실제로 v12.0 이 그걸 띄웠다. */
+  assert.ok(/const cmp=\(label,f,kind,worse,note,eligible\)=>/.test(html),
+    'v12.1: cmp must accept an eligibility window');
+  assert.ok(/const R2=eligible\?R\.filter\(eligible\):R, B2=eligible\?B\.filter\(eligible\):B;/.test(html),
+    'v12.1: both windows must be narrowed, not just the recent one');
+  assert.ok(/if\(eligible&&\(R2\.length<6\|\|B2\.length<12\)\)return null;/.test(html),
+    'v12.1: a narrowed comparison must abstain when either side is too small');
+  assert.ok(/'표시가 늘었다면[^']*',canFlagTeam\)/.test(html),
+    'v12.1: the team-issue item must be gated to versions that could record it');
+  assert.ok(/const canFlagTeam=m=>verNum\(m\.modelVersion\)>=TEAM_ISSUE_SINCE;/.test(html)
+    &&/const TEAM_ISSUE_SINCE=verNum\('8\.1\.0'\);/.test(html),
+    'v12.1: capability must be decided by the recorded model version');
+  assert.ok(/\]\.filter\(Boolean\);/.test(html),'v12.1: abstained items must be dropped, not left as null');
 
   // 다중 비교를 보정하면 문턱이 올라가므로 더 많이 필요하다.
   assert.ok(gamesToDecide(27,50,23,50,5)>narrow,'Bonferroni correction must raise the required sample');
