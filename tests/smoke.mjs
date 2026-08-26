@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='11.0.0'"));
+assert.ok(html.includes("const APP_VERSION='12.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -643,5 +643,76 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   // 챔폭(pool)도 실제 챔피언만 가리켜야 한다.
   for(const id of Object.keys(seed.pool||{}))assert.ok(idOf.has(+id),`seed pool: unknown id ${id}`);
 }
+
+
+/* [v12] "몇 판 더 있어야 아는가" — 검정력 계산.
+   이 앱이 제일 자주 하는 말이 "아직 판단할 수 없습니다"라, 그 말에 기한을 붙이는
+   숫자가 틀리면 사용자는 답이 안 나오는 질문을 몇 백 판씩 기다리게 된다. */
+{
+  const cut=(a,b)=>{const i=html.indexOf(a),j=html.indexOf(b,i);
+    assert.ok(i>=0&&j>i,`v12: cannot extract ${a}`);return html.slice(i,j);};
+  const src=cut('function normCdf(z){','function barRow(');
+  const L=new Function('clamp',src+'\nreturn {normCdf,invNorm,propDiffP,selP,gamesToDecide,SIG_P,Z_POWER};')
+    ((v,a,b)=>Math.min(b,Math.max(a,v)));
+  const {invNorm,propDiffP,gamesToDecide,SIG_P}=L;
+
+  // 역정규: 표준 임계값을 되돌려야 한다.
+  assert.ok(Math.abs(invNorm(0.975)-1.959964)<0.002,'invNorm(0.975) must be ~1.96');
+  assert.ok(Math.abs(invNorm(0.5))<0.002,'invNorm(0.5) must be ~0');
+  assert.ok(invNorm(0.999)>invNorm(0.99),'invNorm must be increasing');
+
+  // 차이가 없으면 답이 없다 — 무한대를 큰 정수로 위장해 내놓으면 안 된다.
+  assert.equal(gamesToDecide(50,100,50,100,1),null,'no observed difference, no sample size');
+  assert.equal(gamesToDecide(5,10,5,0,1),null,'empty group must abstain');
+
+  // 관측 격차가 클수록 필요한 판수가 적어야 한다.
+  const wide=gamesToDecide(35,50,15,50,1), narrow=gamesToDecide(27,50,23,50,1);
+  assert.ok(wide>=0&&narrow>0,'both must return a usable count');
+  assert.ok(wide<narrow,'a bigger observed gap must need fewer extra games');
+
+  // 다중 비교를 보정하면 문턱이 올라가므로 더 많이 필요하다.
+  assert.ok(gamesToDecide(27,50,23,50,5)>narrow,'Bonferroni correction must raise the required sample');
+
+  /* '앞으로 더' 판수여야지 '총' 판수면 안 된다. 이미 충분히 갈린 관측에까지
+     수백 판을 더 요구하면 사용자는 답이 나온 질문을 계속 기다리게 된다. */
+  assert.equal(gamesToDecide(45,50,5,50,1),0,'an already decisive gap needs no further games');
+  assert.ok(gamesToDecide(30,50,20,50,1)<gamesToDecide(28,50,22,50,1),
+    'the returned count must be additional games, shrinking as evidence strengthens');
+
+  /* 화면이 기대는 불변식: 아직 유의하지 않은 관찰은 반드시 '앞으로 더' 필요하다.
+     여기가 깨지면 "우연일 확률 20%"라면서 "이미 판단 가능"이라고 말하게 된다. */
+  for(const [w1,n1,w2,n2] of [[27,50,23,50],[12,20,10,25],[60,120,55,130],[9,15,14,30]]){
+    const pv=propDiffP(w1,n1,w2,n2), k=gamesToDecide(w1,n1,w2,n2,1);
+    if(pv>SIG_P)assert.ok(k>0,`p=${pv.toFixed(3)} is inconclusive but asks for ${k} more games`);
+  }
+  // 정수·유한이어야 화면에 그대로 찍을 수 있다.
+  assert.ok(Number.isInteger(narrow)&&Number.isFinite(narrow),'required sample must be a finite integer');
+}
+
+/* [v12] 최근 부진 진단. 슬럼프에 없는 원인을 만들어 붙이는 게 제일 나쁜 조언이라,
+   '달라진 것'으로 올라가는 조건이 느슨해지지 않았는지 소스에서 지킨다. */
+{
+  assert.ok(/out\.diag=null;/.test(html),'v12: diag must default to null');
+  assert.ok(/changed:items\.filter\(x=>x\.p<=SIG_P&&x\.worse\)/.test(html),
+    'v12: only significant AND worse items may be reported as changed');
+  assert.ok(/shifted:items\.filter\(x=>x\.p<=SIG_P&&!x\.worse\)/.test(html),
+    'v12: significant improvements must be surfaced, not filed under "no change"');
+  // 유의하게 달라졌는데 나쁜 방향이 아닌 항목이 '이상 없음' 목록에 섞이면 안 된다.
+  assert.ok(/const shown=d\.changed\.concat\(d\.shifted\|\|\[\]\);/.test(html)
+    &&/const rest=d\.items\.filter\(x=>!shown\.includes\(x\)\);/.test(html),
+    'v12: the "no change" list must exclude everything already shown');
+  // 패치 항목은 방향을 실제로 재야 한다(v12 초안은 worse:true 고정이었다).
+  assert.ok(/worse:ow\/on\.length<fw\/off\.length,isWinrate:true/.test(html),
+    'v12: patch item must derive its direction from the data');
+  assert.ok(!/worse:true,isWinrate:true/.test(html),'v12: no hard-coded "worse" direction');
+  // 카드가 실제로 화면에 붙어 있어야 한다(v8.4의 .bf 사고 재발 방지).
+  assert.ok(/body\.innerHTML=verdict\+diagCard\+insights\+/.test(html),
+    'v12: diagnosis card must be mounted in the analysis tab');
+  assert.ok(/\.dgrow\{/.test(html)&&/\.dgok\{/.test(html),'v12: diagnosis card styles must exist');
+  // 다중 비교 보정을 p 에만 걸고 need 에 안 걸면 두 숫자가 서로 어긋난다.
+  assert.ok(/x\.need=gamesToDecide\(x\.recent\.k,x\.recent\.n,x\.base\.k,x\.base\.n,items\.length\);/.test(html),
+    'v12: required-sample must use the same multiple-comparison correction as p');
+}
+
 
 console.log(`WR Picker smoke tests passed: ${champions.length} champions, ${rows.length} role rows.`);
