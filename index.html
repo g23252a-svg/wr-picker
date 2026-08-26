@@ -172,6 +172,20 @@ button:disabled{cursor:not-allowed;opacity:.38}
   background:var(--fg);opacity:.9;box-shadow:0 0 0 1px var(--card)}
 /* 아직 판단할 수 없는 관찰 — 단정형 조언과 시각적으로 구분한다. */
 .dx.tent{opacity:.72;border-style:dashed}
+/* [v12] 최근 부진 진단. 달라진 항목은 왼쪽 색선으로, 이상 없는 항목은
+   한 줄로 접어 보여준다 — "검사했고 이상 없었다"도 결론이라 지우지 않는다. */
+.dgrow{border-left:2px solid var(--line);padding:4px 0 4px 9px;margin-top:8px}
+.dgrow.hit{border-left-color:var(--red)}
+.dgrow.hit.env{border-left-color:var(--cyan)}
+.dgrow .dgh{display:flex;justify-content:space-between;align-items:baseline;gap:8px;font-size:12px}
+.dgrow .dgl{color:var(--ink)}
+.dgrow .dgd{font-family:'Rajdhani';font-weight:700;font-size:12.5px;color:var(--dim);white-space:nowrap}
+.dgrow.hit .dgd{color:var(--red)}
+.dgrow.hit.env .dgd{color:var(--cyan)}
+.dgrow .dgd small{font-size:10.5px;font-weight:600;color:var(--dimmer);margin-left:4px}
+.dgrow .dgn{font-size:11px;color:var(--dim);line-height:1.5;margin-top:3px}
+.dgok{font-size:11.5px;color:var(--dimmer);line-height:1.75;margin-top:9px}
+.dgok b{color:var(--dim);font-family:'Rajdhani';font-weight:700}
 /* [v11] 적 5라인 배정 격자. 빈 칸이 곧 '아직 모르는 라인'이다. */
 .lanegrid{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;margin-top:7px}
 .lanegrid .lslot{display:flex;flex-direction:column;align-items:center;gap:1px;
@@ -915,8 +929,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='11.0.0';
-const MODEL_VERSION='11.0.0-uncertainty';
+const APP_VERSION='12.0.0';
+const MODEL_VERSION='12.0.0-diagnosis';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -2998,6 +3012,27 @@ const SIG_P=0.05;                         // 이 이하일 때만 단정형 조�
    후보 수만큼 커진다(다중 비교). 5개 라인을 뒤져 최악을 집었다면 p를 5배로 본다.
    보수적이지만, 이 앱이 하는 말은 사용자의 행동을 바꾸는 조언이라 이쪽이 맞다. */
 const selP=(p,candidates)=>Math.min(1,p*Math.max(1,candidates));
+/* [v12] "그래서 몇 판 더 있어야 아는데?"
+   이 앱이 제일 자주 하는 말은 "아직 판단할 수 없습니다"다. 맞는 말이지만 그 말만으로는
+   행동이 안 바뀐다 — 사용자는 계속 기다려야 하는지, 애초에 답이 안 나오는 질문인지 모른다.
+   지금 관측된 차이가 그대로 유지된다고 두고, 유의(α=.05)·검정력 80%에 닿는 데 필요한
+   추가 판수를 돌려준다. z 는 표본을 k배 하면 √k배가 되므로 k=((z_a+z_b)/z_obs)^2 이고
+   필요한 총 판수는 k*(n1+n2)이다. 800판처럼 나오면 그 숫자 자체가 답이다 —
+   "이 질문은 이 전적 규모로 답할 수 없다"는 뜻이고, 그걸 아는 게 기다리는 것보다 낫다.
+   다중 비교를 보정해 p 를 m배 했으면 문턱도 같이 올린다(α/m). */
+const Z_POWER=0.841621;
+function invNorm(q){ let lo=-8,hi=8; for(let i=0;i<60;i++){const mid=(lo+hi)/2; if(normCdf(mid)<q)lo=mid;else hi=mid;} return (lo+hi)/2; }
+function gamesToDecide(w1,n1,w2,n2,candidates){
+  if(!n1||!n2)return null;
+  const pp=(w1+w2)/(n1+n2), se=Math.sqrt(pp*(1-pp)*(1/n1+1/n2));
+  if(!(se>0))return null;
+  const z=Math.abs(w1/n1-w2/n2)/se;
+  if(!(z>0))return null;
+  const m=Math.max(1,candidates||1);
+  const k=Math.pow((invNorm(1-SIG_P/m/2)+Z_POWER)/z,2);
+  if(!isFinite(k))return null;
+  return Math.max(0,Math.ceil((k-1)*(n1+n2)));
+}
 function barRow(label,w,n,{weak=false,note=''}={}){
   const r=n?w/n:0, p=Math.round(r*100);
   /* [v11] 표본 부족 구간을 성공색(청록)으로 칠하면 7판 43%가 10판 80%와 같은 색이 된다.
@@ -3088,6 +3123,7 @@ function analysisModel(){
   out.duo={with:{n:withSup.length,w:withSup.filter(m=>m.won).length},
            without:{n:noSup.length,w:noSup.filter(m=>m.won).length}};
   out.duo.p=propDiffP(out.duo.with.w,out.duo.with.n,out.duo.without.w,out.duo.without.n);
+  out.duo.need=gamesToDecide(out.duo.with.w,out.duo.with.n,out.duo.without.w,out.duo.without.n,1);
   /* [v11] 이 카드는 '자기 신고가 아닌 객관 지표'라고 말해 왔지만, 실은 교란돼 있다.
      '서폿류 없음'은 대개 아군을 적게 입력한 판이다 — 실사용에서 아군을 2명만 넣은
      원딜 판은 0승 7패, 4명 다 넣은 판은 5승 4패였다. 즉 서폿 유무가 아니라
@@ -3141,6 +3177,101 @@ function analysisModel(){
   out.axes=axisReport();
   out.autoAxis=weights.autoAxis!==false;
 
+  /* ============ [v12] 최근 부진 진단 ============
+   * "요새 왜 지지?"에 앱이 답하지 못했다. 지금까지는 최근 10판이 정상 변동인지만
+   * 판정하고(그건 "왜"가 아니다), 나머지 카드는 전 기간을 뭉쳐 보여줬다.
+   * 슬럼프일 때 알고 싶은 건 하나다 — **직전과 비교해 무엇이 달라졌는가.**
+   *
+   * 최근 구간과 그 이전을 같은 잣대로 비교하고, 달라진 것 중 통계적으로
+   * 뒷받침되는 것만 말한다. 대부분의 경우 정답은 "달라진 건 없고 분산이다"이며,
+   * 그렇게 말할 수 있는 것 자체가 이 카드의 값어치다.
+   *
+   * 내가 바꿀 수 있는 것(행동)과 바깥에서 바뀐 것(패치)을 갈라서 보여준다. */
+  const RECENT_MIN=10, BASE_MIN=30;
+  out.diag=null;
+  if(n>=RECENT_MIN+BASE_MIN){
+    const rn=clamp(Math.round(n*0.2),12,40);
+    const R=M.slice(-rn), B=M.slice(0,n-rn);
+    const rw=R.filter(m=>m.won).length, bw=B.filter(m=>m.won).length;
+    /* 각 항목은 '최근이 이전과 다른가'를 같은 방식으로 묻는다.
+       pick(m) 이 true 인 판의 비율을 두 구간에서 비교한다. */
+    const share=(g,f)=>{const k=g.filter(f).length;return {k,n:g.length,r:g.length?k/g.length:0};};
+    const cmp=(label,f,kind,worse,note)=>{
+      const a=share(R,f), b=share(B,f);
+      return {label,kind,note,recent:a,base:b,delta:(a.r-b.r)*100,
+        p:propDiffP(a.k,a.n,b.k,b.n),need:gamesToDecide(a.k,a.n,b.k,b.n,1),worse:worse(a.r,b.r)};
+    };
+    // 그 시점 기준 '처음 잡는 챔'인지 — 사후편향 없이 앞에서부터 센다.
+    const seenAt={}; const firstFlag=new Map();
+    M.forEach(m=>{firstFlag.set(m,(seenAt[m.pick]||0)===0);seenAt[m.pick]=(seenAt[m.pick]||0)+1;});
+    // 한 세션에서 몇 판째인지도 같은 방식으로 미리 붙인다.
+    const SESSION_GAP=3*3600e3; let sT=null,sN=0; const ordFlag=new Map();
+    M.forEach(m=>{if(sT==null||m.t-sT>SESSION_GAP)sN=0;sT=m.t;ordFlag.set(m,sN++);});
+    // 라인 상대를 알고 있었는지 — 지금 엔진으로 다시 배정해서 센다.
+    const lanerKnown=new Map();
+    M.forEach(m=>{
+      if(!(m.enemy||[]).length){lanerKnown.set(m,false);return;}
+      const conf=m.laneMark!=null&&m.enemy.includes(m.laneMark)
+        ? 1 : laneOpponent(assignEnemyLanes(m.enemy,m.lane,m.laneMark),m.lane).conf;
+      lanerKnown.set(m,conf>0);
+    });
+    const items=[
+      cmp('처음 잡는 챔 비율',m=>firstFlag.get(m),'behavior',(a,b)=>a>b,
+        '새 챔이 늘면 단기 승률은 떨어진다 — 늘리는 건 좋지만 한 번에 하나씩'),
+      cmp('상대를 4명 이상 입력한 판',m=>(m.enemy||[]).length>=4,'behavior',(a,b)=>a<b,
+        '입력이 줄면 상성·조합 계산이 그만큼 꺼진 채로 추천된다'),
+      cmp('내 라인 상대를 알고 시작한 판',m=>lanerKnown.get(m),'behavior',(a,b)=>a<b,
+        '맞라인을 안 넣으면 라인 상성이 통째로 꺼진다'),
+      cmp('한 세션 3판째 이후',m=>ordFlag.get(m)>=2,'behavior',(a,b)=>a>b,
+        '길게 이어서 하면 뒤 판의 승률이 떨어질 수 있다'),
+      cmp('팀 문제로 표시한 판',m=>isUncontrolled(m),'context',(a,b)=>a>b,
+        '표시가 늘었다면 체감이 나빠진 이유일 수 있다(자기 신고라 해석은 조심)'),
+    ];
+    /* 패치는 내가 바꾼 게 아니다. 기록에 남은 patch 값으로 갈라 본다. */
+    const patches=[...new Set(M.map(m=>m.patch).filter(Boolean))];
+    if(patches.length>=2){
+      const newest=M.slice().reverse().find(m=>m.patch)?.patch;
+      if(newest){
+        const on=M.filter(m=>m.patch===newest), off=M.filter(m=>m.patch&&m.patch!==newest);
+        if(on.length>=6&&off.length>=20){
+          const ow=on.filter(m=>m.won).length, fw=off.filter(m=>m.won).length;
+          items.push({label:`현재 패치(${newest}) 이후`,kind:'env',
+            note:'패치가 바뀌면 챔 강약이 같이 바뀐다 — 이 낙폭은 내가 만든 게 아닐 수 있다',
+            recent:{k:ow,n:on.length,r:ow/on.length},
+            base:{k:fw,n:off.length,r:fw/off.length},
+            delta:(ow/on.length-fw/off.length)*100,
+            p:propDiffP(ow,on.length,fw,off.length),
+            need:gamesToDecide(ow,on.length,fw,off.length,1),
+            worse:ow/on.length<fw/off.length,isWinrate:true});
+        }
+      }
+    }
+    /* 라인 구성이 달라졌는가 — 가장 크게 늘어난 라인 하나만 본다(후보 수만큼 보정). */
+    const lanesSeen=[...new Set(M.map(m=>m.lane))];
+    const laneShift=lanesSeen.map(L=>cmp(`${LANEKR[L]} 비중`,m=>m.lane===L,'behavior',(a,b)=>a>b,
+      `${LANEKR[L]}을 예전보다 많이 하고 있다`))
+      .sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta))[0];
+    if(laneShift){laneShift.p=selP(laneShift.p,lanesSeen.length);
+      laneShift.need=gamesToDecide(laneShift.recent.k,laneShift.recent.n,laneShift.base.k,laneShift.base.n,lanesSeen.length);
+      items.push(laneShift);}
+    // 여러 항목을 한꺼번에 뒤지므로 다중 비교를 보정한다.
+    items.forEach(x=>{if(x.isWinrate)return;
+      x.p=selP(x.p,items.length);
+      x.need=gamesToDecide(x.recent.k,x.recent.n,x.base.k,x.base.n,items.length);});
+    out.diag={
+      rn,bn:B.length,
+      recent:{n:R.length,w:rw,r:rw/R.length},
+      before:{n:B.length,w:bw,r:bw/B.length},
+      dropP:propDiffP(rw,R.length,bw,B.length),
+      dropNeed:gamesToDecide(rw,R.length,bw,B.length,1),
+      items:items.sort((a,b)=>a.p-b.p),
+      /* 나빠진 쪽만 보여주면 카드가 서사에 맞는 것만 고르는 셈이다.
+         유의한데 방향이 반대인 변화도 같이 올린다. */
+      changed:items.filter(x=>x.p<=SIG_P&&x.worse),
+      shifted:items.filter(x=>x.p<=SIG_P&&!x.worse)
+    };
+  }
+
   /* [v9] 라인 상대를 실제로 알고 있었나. 저장된 값이 아니라 지금 엔진으로 다시
      배정해서 센다 — 그래야 옛 기록에도 적용되고, 엔진을 고칠 때마다 이 숫자가
      따라 움직여서 "정말 나아졌는지"를 확인할 수 있다. */
@@ -3167,6 +3298,7 @@ function analysisModel(){
     const gap=(inp4.w/inp4.n-inpLow.w/inpLow.n)*100;
     if(gap>=12)ins.push({t:'상대 픽을 끝까지 입력하세요',obs:'상대 입력이 많은 판의 승률이 높습니다',
       p:propDiffP(inp4.w,inp4.n,inpLow.w,inpLow.n),
+      need:gamesToDecide(inp4.w,inp4.n,inpLow.w,inpLow.n,1),
       d:`상대를 4명 이상 넣은 판 <b>${Math.round(inp4.w/inp4.n*100)}%</b>(${inp4.n}판) vs 거의 안 넣은 판 <b>${Math.round(inpLow.w/inpLow.n*100)}%</b>(${inpLow.n}판).`,
       act:'정보를 넣을수록 추천 정확도가 올라갑니다.'});
   }
@@ -3174,6 +3306,7 @@ function analysisModel(){
     const gap=(exp.early.w/exp.early.n-exp.first.w/exp.first.n)*100;
     if(gap>=10)ins.push({t:'처음 잡는 챔을 줄이세요',obs:'처음 잡는 챔의 승률이 낮습니다',
       p:propDiffP(exp.first.w,exp.first.n,exp.early.w,exp.early.n),
+      need:gamesToDecide(exp.first.w,exp.first.n,exp.early.w,exp.early.n,1),
       d:`처음 잡는 챔 <b>${Math.round(exp.first.w/exp.first.n*100)}%</b>(${exp.first.n}판) vs 2~3판째 <b>${Math.round(exp.early.w/exp.early.n*100)}%</b>(${exp.early.n}판).`,
       act:'새 챔은 한 번에 하나씩만 늘리는 편이 유리합니다.'});
   }
@@ -3188,6 +3321,7 @@ function analysisModel(){
         ins.push({t:`${LANEKR[best.k]}에 집중하고 ${objP(LANEKR[worst.k])} 줄이세요`,
           obs:`${LANEKR[best.k]}와 ${LANEKR[worst.k]}의 승률 차이가 큽니다`,
           p:selP(propDiffP(best.w,best.n,worst.w,worst.n),big.length),
+          need:gamesToDecide(best.w,best.n,worst.w,worst.n,big.length),
           d:`${LANEKR[best.k]} <b>${Math.round(best.w/best.n*100)}%</b>(${best.n}판) vs ${LANEKR[worst.k]} <b>${Math.round(worst.w/worst.n*100)}%</b>(${worst.n}판).`,
           act:'잘 되는 라인에 시간을 몰아주세요.'});
       }else{
@@ -3199,6 +3333,7 @@ function analysisModel(){
         ins.push({t:`${topP(LANEKR[w.k])} 라인이 아니라 챔 문제입니다`,
           obs:`${topP(LANEKR[w.k])} 다른 라인보다 낮습니다`,
           p:selP(propDiffP(best.w,best.n,worst.w,worst.n),big.length),
+          need:gamesToDecide(best.w,best.n,worst.w,worst.n,big.length),
           d:`${LANEKR[w.k]} 전체 <b>${Math.round(w.w/w.n*100)}%</b>(${w.n}판) vs 가장 높은 ${LANEKR[best.k]} <b>${Math.round(best.w/best.n*100)}%</b>(${best.n}판).`
             +(keep?` 잘 되는 픽은 ${keep}`:' 아직 자리잡은 픽이 없고')
             +(drop?`, 발목 잡는 픽은 ${drop}입니다.`:'.'),
@@ -3220,6 +3355,8 @@ function analysisModel(){
       obs:`${subP(LANEKR[growing.l.k])} 후반에 더 좋습니다`,
       p:selP(propDiffP(growing.l.late.w,growing.l.late.n,growing.l.early.w,growing.l.early.n),
         out.lanes.filter(l=>l.early.n>=4&&l.late.n>=4).length),
+      need:gamesToDecide(growing.l.late.w,growing.l.late.n,growing.l.early.w,growing.l.early.n,
+        out.lanes.filter(l=>l.early.n>=4&&l.late.n>=4).length),
       d:`전반 <b>${Math.round(growing.l.early.w/growing.l.early.n*100)}%</b>(${growing.l.early.n}판) → 후반 <b>${Math.round(growing.l.late.w/growing.l.late.n*100)}%</b>(${growing.l.late.n}판).`,
       act:'지금 방식을 유지하세요.'});
   }
@@ -3237,6 +3374,7 @@ function analysisModel(){
     if(drop)ins.push({t:`한 세션 ${drop.k.replace(/–\d+/,'').replace(/\s*이후/,'')}부터 승률이 떨어집니다`,
       obs:`한 세션에서 뒤로 갈수록 승률이 낮습니다`,
       p:selP(propDiffP(firstBlk.w,firstBlk.n,drop.b.w,drop.b.n),dayOrder.length-1),
+      need:gamesToDecide(firstBlk.w,firstBlk.n,drop.b.w,drop.b.n,dayOrder.length-1),
       d:`세션 1–2판째 <b>${Math.round(baseR*100)}%</b>(${firstBlk.n}판) → ${drop.k} <b>${Math.round(drop.b.w/drop.b.n*100)}%</b>(${drop.b.n}판).`,
       act:'무너지는 지점은 사람마다 다른데, 당신은 여기입니다 — 그 전에 끊는 게 이득입니다.'});
   }
@@ -3278,6 +3416,7 @@ function analysisModel(){
     if(hi-lo<=-0.05)ins.push({t:'지금은 추천 점수를 절대 기준으로 믿지 마세요',
       obs:'점수가 높은 판이 더 이기고 있지는 않습니다',
       p:propDiffP(out.calib.high.w,out.calib.high.n,out.calib.low.w,out.calib.low.n),
+      need:gamesToDecide(out.calib.high.w,out.calib.high.n,out.calib.low.w,out.calib.low.n,1),
       d:`점수 상위 절반 <b>${Math.round(hi*100)}%</b>(${out.calib.high.n}판) vs 하위 절반 <b>${Math.round(lo*100)}%</b>(${out.calib.low.n}판)로 방향이 뒤집혀 있습니다.`,
       act:'점수는 후보를 좁히는 용도로만 쓰고, 같은 라인 안에서 손에 익은 픽을 고르세요.'});
   }
@@ -3293,6 +3432,15 @@ function renderAnalysis(){
   const body=document.getElementById('logBody');
   if(!a.n){body.innerHTML=`<div class="logempty">기록이 쌓이면 여기서<br>내 플레이 패턴을 분석해 드립니다.</div>`;return;}
   const P=v=>Math.round(v*100);
+  /* [v12] "아직 판단할 수 없다"에 기한을 붙인다. 답이 안 나오는 질문이면
+     그렇게 말한다 — 기다리라는 말과 포기하라는 말은 다른 조언이다. */
+  const needTxt=k=>{
+    if(k==null)return '';
+    if(k<=0)return ` 이미 판단 가능한 크기입니다.`;
+    if(k>1200)return ` 이 차이가 유지돼도 <b>1200판 넘게</b> 더 있어야 갈립니다 — 사실상 이 전적 규모로는 답이 안 나오는 질문입니다.`;
+    const r=k<100?Math.ceil(k/10)*10:k<600?Math.ceil(k/25)*25:Math.ceil(k/50)*50;
+    return ` 이 차이가 그대로 유지되면 <b>약 ${r}판</b> 더 쌓였을 때 갈립니다.`;
+  };
 
   // 최근 폼 판정 — 소표본 오진(예: "10판 30%니까 망했다")을 막는 게 핵심
   let verdict='';
@@ -3329,8 +3477,57 @@ function renderAnalysis(){
     ? `<div class="logsec">아직 판단할 수 없는 관찰 <span class="dxn">(우연일 수 있음)</span></div>`
       +tentative.map(x=>
         `<div class="dx tent"><div class="dxh"><span class="dxt">${x.obs||x.t}</span><span class="dxn">우연일 확률 ${Math.round(x.p*100)}%</span></div>`
-        +`<div class="dxs">${x.d} <span style="color:var(--dimmer)">이 정도 차이는 실력 변화 없이도 자주 나옵니다. 지금 행동을 바꿀 근거로는 약합니다.</span></div></div>`).join('')
+        +`<div class="dxs">${x.d} <span style="color:var(--dimmer)">이 정도 차이는 실력 변화 없이도 자주 나옵니다. 지금 행동을 바꿀 근거로는 약합니다.${needTxt(x.need)}</span></div></div>`).join('')
     : '');
+
+  /* [v12] "요새 왜 지지?"에 답하는 카드. 최근 구간과 그 이전을 같은 잣대로 재고,
+     통계적으로 뒷받침되는 차이만 '달라진 것'으로 올린다. 아무것도 안 달라졌으면
+     그렇게 말한다 — 슬럼프에 없는 원인을 만들어 붙이는 게 제일 나쁜 조언이다. */
+  const diagCard=a.diag?(()=>{
+    const d=a.diag, dr=P(d.recent.r), db=P(d.before.r), gap=dr-db;
+    const realDrop=d.dropP<=SIG_P&&d.recent.r<d.before.r;
+    const pTxt=v=>v<0.01?'1% 미만':Math.round(v*100)+'%';
+    const dgRow=(x,bad)=>{
+      const a1=Math.round(x.recent.r*100), b1=Math.round(x.base.r*100), dd=Math.round(x.delta);
+      return `<div class="dgrow ${bad?'hit ':''}${x.kind}">
+        <div class="dgh"><span class="dgl">${x.label}</span>
+          <span class="dgd">${b1}% → ${a1}%<small>${dd>0?'+':''}${dd}%p · 우연 ${pTxt(x.p)}</small></span></div>
+        <div class="dgn">${bad?x.note:'이 방향은 승률을 깎는 쪽이 아닙니다 — 되돌릴 이유는 없습니다.'}</div></div>`;
+    };
+    const shown=d.changed.concat(d.shifted||[]);
+    const rest=d.items.filter(x=>!shown.includes(x));
+    const restTxt=rest.map(x=>{
+      const dd=Math.round(x.delta);
+      return `${x.label} <b>${dd>0?'+':''}${dd}%p</b>`;
+    }).join(' · ');
+    const envHit=d.changed.some(x=>x.kind==='env');
+    const closing=d.changed.length
+      ? (d.changed.every(x=>x.kind==='env')
+        ? `달라진 건 <b>내 행동이 아니라 바깥</b>이었습니다. 픽 습관을 뜯어고치기보다 바뀐 환경에 맞는 챔을 다시 고르는 쪽이 맞습니다.`
+        : `위 항목을 이전 수준으로 되돌리는 것부터 해보세요. ${envHit?'환경 변화도 같이 잡혔으니 전부 내 탓은 아닙니다. ':''}이 카드는 원인을 증명하지 않습니다 — 최근과 이전이 <b>다르다</b>는 것까지만 말합니다.`)
+      : (realDrop
+        ? `낙폭 자체는 우연으로 설명하기 어려운데, <b>검사한 항목 중 달라진 것은 없습니다.</b> 기록에 남지 않는 것(팀 편차·티어 이동·패치 세부)이 원인일 수 있습니다. 픽 습관을 바꾸는 건 근거가 없습니다.`
+        : `<b>지금 데이터로는 분산입니다.</b> 낙폭도 우연 범위이고, 승률을 깎는 쪽으로 달라진 습관도 없습니다. 바꿀 것을 찾기보다 하던 대로 하는 게 기대값이 높습니다.`);
+    return `<div class="dx">
+      <div class="dxh"><span class="dxt">최근 부진 진단</span>
+        <span class="dxn">최근 ${d.rn}판 vs 이전 ${d.bn}판</span></div>
+      <div class="verdict ${realDrop?'warn':'calm'}" style="margin:0 0 4px">
+        최근 <b>${dr}%</b> · 이전 <b>${db}%</b> (<b>${gap>0?'+':''}${gap}%p</b>) —
+        ${realDrop
+          ? `이 낙폭은 우연으로 설명하기 어렵습니다 (우연일 확률 ${pTxt(d.dropP)}).`
+          : `이 정도 낙폭은 실력이 그대로여도 자주 나옵니다 (우연일 확률 ${pTxt(d.dropP)}).${needTxt(d.dropNeed)}`}</div>
+      ${d.changed.length
+        ? `<div class="dxs" style="margin-top:9px">그 사이 <b>달라진 것</b></div>`+d.changed.map(x=>dgRow(x,true)).join('')
+        : ''}
+      ${(d.shifted||[]).length
+        ? `<div class="dxs" style="margin-top:9px">달라지긴 했지만 <b>나쁜 방향은 아닌 것</b></div>`
+          +d.shifted.map(x=>dgRow(x,false)).join('')
+        : ''}
+      ${rest.length?`<div class="dgok">아직 갈리지 않은 항목 <span style="opacity:.75">(움직였어도 우연 범위)</span>: ${restTxt}</div>`:''}
+      ${(()=>{const c=rest.filter(x=>x.need!=null&&x.need>0).sort((a,b)=>a.need-b.need)[0];
+        return c?`<div class="dgok" style="margin-top:5px">가장 먼저 갈릴 항목은 <b>${c.label}</b>입니다 —${needTxt(c.need).replace(/^ /,' ')}</div>`:'';})()}
+      <div class="dxs">${closing}</div></div>`;
+  })():'';
 
   const maxBlock=Math.max(...a.blocks.map(b=>b.w/b.n),0.01);
   const spark=a.blocks.length>=2?`<div class="dx">
@@ -3488,7 +3685,7 @@ function renderAnalysis(){
         : '아군을 3명 이상 넣은 판만 추리면 표본이 너무 작아 비교가 되지 않습니다. ';
       return `아군에 엔첸터·탱커가 없으면 봇 라인 변수가 커진다는 해석이 가능합니다. 다만 <b>'서폿류 없음'은 대체로 아군을 덜 입력한 판</b>이라 두 원인이 섞여 있습니다 — `
         +deepTxt
-        +(weak?`전체 차이도 우연일 확률이 <b>${Math.round(a.duo.p*100)}%</b>라 아직 단정할 수 없습니다.`
+        +(weak?`전체 차이도 우연일 확률이 <b>${Math.round(a.duo.p*100)}%</b>라 아직 단정할 수 없습니다.${needTxt(a.duo.need)}`
               :`전체 차이는 우연일 확률 ${Math.round(a.duo.p*100)}%로 뚜렷한 편입니다.`);
     })()}</div></div>`:'';
 
@@ -3506,7 +3703,7 @@ function renderAnalysis(){
     ${a.oneOff.length?`<div class="dxs">그 외 <b>${a.oneOff.length}종</b>을 한 판씩만 사용했습니다 (합계 ${Math.round(a.oneOff.filter(c=>c.w).length/a.oneOff.length*100)}%).</div>`:''}
     </div>`:'';
 
-  body.innerHTML=verdict+insights+spark+growCard+calibCard+axisCard+oppCard+inputCard+expCard+laneCard+duoCard+tiCard+dailyCard+perfCard+champCard;
+  body.innerHTML=verdict+diagCard+insights+spark+growCard+calibCard+axisCard+oppCard+inputCard+expCard+laneCard+duoCard+tiCard+dailyCard+perfCard+champCard;
 }
 let logTab='rec';
 function setLogTab(t){
