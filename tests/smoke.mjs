@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='12.1.0'"));
+assert.ok(html.includes("const APP_VERSION='13.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -670,7 +670,49 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(wide>=0&&narrow>0,'both must return a usable count');
   assert.ok(wide<narrow,'a bigger observed gap must need fewer extra games');
 
-  /* [v12.1] 앱이 기록할 수 없던 시절의 판을 baseline 으로 쓰면 안 된다.
+  /* [v13] 적응형 슬럼프 창. 고정 창은 그 길이와 다른 슬럼프를 놓친다 —
+   실사용 242판에서 고정 20%(40판)는 45%(-8%p)로 보고했는데 실제 바닥은
+   최근 30판 37%(-17%p)였다. 여러 창을 훑되, 훑은 만큼 p를 보정해야 한다.
+   보정을 빼먹으면 '가장 나쁜 구간 고르기'가 곧바로 가짜 유의성이 된다. */
+{
+  assert.ok(/const CANDS=\[10,12,16,20,24,30,40\]\.filter\(k=>k>=RECENT_MIN&&k<=Math\.floor\(n\*0\.4\)\);/.test(html),
+    'v13: candidate windows must be bounded by the history size');
+  assert.ok(/const pick=windows\.slice\(\)\.sort\(\(a,b\)=>a\.p-b\.p\|\|b\.k-a\.k\)\[0\];/.test(html),
+    'v13: the strongest window wins, ties going to the larger sample');
+  assert.ok(/dropP:selP\(propDiffP\(rw,R\.length,bw,B\.length\),WSCAN\)/.test(html),
+    'v13: scanning many windows must be paid for with a multiple-comparison correction');
+  assert.ok(/dropNeed:gamesToDecide\(rw,R\.length,bw,B\.length,WSCAN\)/.test(html),
+    'v13: required sample must use the same window correction as p');
+  assert.ok(/windows,wscan:WSCAN/.test(html),'v13: the window curve must reach the renderer');
+  assert.ok(/\.wcurve\{/.test(html)&&/\.wcurve \.wbase\{/.test(html),'v13: window curve styles must exist');
+  // 음수 마진으로 기준선을 끌어올리면 아래 문단을 덮는다(v13 초안이 그랬다).
+  assert.ok(!/class="wbase" style="margin-top:\$\{-/.test(html),
+    'v13: the baseline must be positioned inside the chart, not pulled up with a negative margin');
+}
+
+/* [v13] 성과 축. 승률만 보면 '내 플레이가 무너졌나'를 영영 못 묻는다.
+   단 성과는 승패와 강하게 붙어 있어(실사용 242판 p=0.0001), 전체 평균을
+   비교하면 '연패 중이니 성과도 낮다'는 동어반복이 된다 — v13 초안이 실제로
+   그 함정에 빠져 p=0.041 로 '성과 하락'을 단정했다. 승/패로 나눠서만 판정한다. */
+{
+  assert.ok(/function meanDiffP\(A,B\)\{/.test(html),'v13: mean-difference test must exist');
+  assert.ok(/if\(!A\|\|!B\|\|A\.length<3\|\|B\.length<3\)return null;/.test(html),
+    'v13: the mean test must abstain on tiny samples');
+  // perfValue() 는 승패(0.74/0.26)를 섞으므로 성과 비교에 쓰면 승률을 두 번 재게 된다.
+  assert.ok(/const gradeOf=m=>PERF\[m\.perf\]\?PERF\[m\.perf\]\.v:null;/.test(html),
+    'v13: the form axis must use the raw grade, not the outcome-blended perfValue');
+  assert.ok(!/gradedOf=A=>A\.filter\(m=>m\.perf\)\.map\(m=>perfValue\(m\)\)/.test(html),
+    'v13: perfValue blends the result in by design and must not drive the form axis');
+  assert.ok(/const declined=dropped\(\{\.\.\.fLost,p:fLost\.p!=null\?selP\(fLost\.p,2\):null\}\)\s*\|\|dropped\(\{\.\.\.fWon,p:fWon\.p!=null\?selP\(fWon\.p,2\):null\}\);/.test(html),
+    'v13: the decline verdict must come from within-result comparisons, corrected for both');
+  assert.ok(!/dropped\(fAll\)/.test(html),
+    'v13: the confounded aggregate must never drive the verdict');
+  assert.ok(/verdict:!enough\?'unknown':declined\?'decline':wrDown\?'held':'unknown'/.test(html),
+    'v13: verdict must fall back to unknown rather than guessing');
+  assert.ok(/\.formbox\{/.test(html),'v13: form verdict styles must exist');
+}
+
+/* [v12.1] 앱이 기록할 수 없던 시절의 판을 baseline 으로 쓰면 안 된다.
      '팀 문제' 표시는 v8.1 에 생겼고, 그 전 판은 정의상 전부 0 이다. 창을 안 좁히면
      실사용 218판에서 "팀 문제가 3%→18%로 급증(p=0.002)"이라는 가짜 신호가
      카드의 유일한 '달라진 것'이 된다. 실제로 v12.0 이 그걸 띄웠다. */

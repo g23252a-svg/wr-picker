@@ -1,4 +1,4 @@
-const CACHE='wr-picker-v12.1.0';
+const CACHE='wr-picker-v13.0.0';
 const OFFLINE='./index.html';
 const ASSETS=['./','./index.html','./stats.js','./manifest.webmanifest','./icon.svg','./data/seed-history.json','./data/guides.json'];
 self.addEventListener('install',event=>event.waitUntil(caches.open(CACHE).then(cache=>cache.addAll(ASSETS))));
