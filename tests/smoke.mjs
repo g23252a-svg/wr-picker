@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='13.0.0'"));
+assert.ok(html.includes("const APP_VERSION='14.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -670,7 +670,43 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(wide>=0&&narrow>0,'both must return a usable count');
   assert.ok(wide<narrow,'a bigger observed gap must need fewer extra games');
 
-  /* [v13] 적응형 슬럼프 창. 고정 창은 그 길이와 다른 슬럼프를 놓친다 —
+  /* [v14] 카드가 '부진'만 말할 수 있었다. v13이 창을 훑어 가장 강한 구간을 고르는데,
+   그 구간이 잘 나가는 구간일 수도 있다 — 실사용 258판에서 최근 16판 75%(+23%p)를
+   골라 놓고 "이 정도 낙폭은…"이라고 말했다. 방향을 먼저 읽어야 한다. */
+{
+  assert.ok(/const dir=d\.recent\.r>d\.before\.r\?'up':d\.recent\.r<d\.before\.r\?'down':'flat';/.test(html),
+    "v14: the card must read the direction before choosing its wording");
+  assert.ok(/const realDrop=d\.dropP<=SIG_P&&dir==='down';/.test(html),
+    'v14: a significant move is only a drop when it actually went down');
+  assert.ok(/const realRise=d\.dropP<=SIG_P&&dir==='up';/.test(html),
+    'v14: a significant upswing must be nameable');
+  assert.ok(!/최근 부진 진단<\/span>/.test(html),
+    'v14: the card title must not presume a slump');
+  assert.ok(/이 상승폭은 우연으로 설명하기 어렵습니다/.test(html),
+    'v14: an upswing needs its own sentence, not the slump one');
+  // 조사: '상승폭는'처럼 깨지지 않게 낱말에 붙여 들고 다닌다.
+  assert.ok(/const gapWord=dir==='up'\?'상승폭은':dir==='down'\?'낙폭은':'차이는';/.test(html),
+    'v14: the particle must travel with the word');
+  assert.ok(!/\$\{gapWord\}는/.test(html),'v14: no double particle');
+  // 고른 창이 항상 최저는 아니다.
+  assert.ok(!/가장 낮은 구간을 골라/.test(html),
+    'v14: the chosen window is the most divergent one, not necessarily the lowest');
+}
+
+/* [v14] 라인 비중은 '늘면 나쁘다'로 못박혀 있었다. 258판에서 원딜 비중이 +36%p 늘어
+   '나쁜 변화'로 올라왔는데 그 구간 원딜 전적은 7승 1패였다. 방향은 실제 성적으로 정한다. */
+{
+  assert.ok(/c\.worse=up&&c\.laneRec\.r!=null&&c\.laneRec\.r<rw\/R\.length;/.test(html),
+    'v14: a lane shift is only bad when that lane underperforms in the same window');
+  assert.ok(/c\.laneRec=\{n:inR\.length,w:rw2,r:inR\.length\?rw2\/inR\.length:null\};/.test(html),
+    'v14: the lane record must be measured, not assumed');
+  assert.ok(!/cmp\(`\$\{LANEKR\[L\]\} 비중`,m=>m\.lane===L,'behavior',\(a,b\)=>a>b/.test(html),
+    'v14: the hard-coded "more of this lane is worse" rule must be gone');
+  assert.ok(/x\.laneRec&&x\.laneRec\.n\?` 그 구간 /.test(html),
+    'v14: a non-negative shift must still show the numbers behind it');
+}
+
+/* [v13] 적응형 슬럼프 창. 고정 창은 그 길이와 다른 슬럼프를 놓친다 —
    실사용 242판에서 고정 20%(40판)는 45%(-8%p)로 보고했는데 실제 바닥은
    최근 30판 37%(-17%p)였다. 여러 창을 훑되, 훑은 만큼 p를 보정해야 한다.
    보정을 빼먹으면 '가장 나쁜 구간 고르기'가 곧바로 가짜 유의성이 된다. */

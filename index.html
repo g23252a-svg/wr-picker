@@ -956,8 +956,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='13.0.0';
-const MODEL_VERSION='13.0.0-form-axis';
+const APP_VERSION='14.0.0';
+const MODEL_VERSION='14.0.0-direction';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -3314,9 +3314,23 @@ function analysisModel(){
     }
     /* 라인 구성이 달라졌는가 — 가장 크게 늘어난 라인 하나만 본다(후보 수만큼 보정). */
     const lanesSeen=[...new Set(M.map(m=>m.lane))];
-    const laneShift=lanesSeen.map(L=>cmp(`${LANEKR[L]} 비중`,m=>m.lane===L,'behavior',(a,b)=>a>b,
-      `${LANEKR[L]}을 예전보다 많이 하고 있다`))
-      .sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta))[0];
+    /* [v14] 예전엔 '그 라인을 더 하면 나쁘다'로 방향을 못박았다. 실사용 258판에서
+       원딜 비중이 +36%p 늘어 '달라진 것(나쁜 쪽)'으로 올라왔는데, 정작 그 구간의
+       원딜 전적은 7승 1패였다 — 통산 43%로 제일 낮은 라인이라는 이유만으로
+       잘 되고 있는 변화를 경고한 것이다. 방향은 **그 창에서의 실제 성적**으로 정한다. */
+    const laneShift=lanesSeen.map(L=>{
+      const c=cmp(`${LANEKR[L]} 비중`,m=>m.lane===L,'behavior',()=>false,'');
+      if(!c)return null;
+      const inR=R.filter(m=>m.lane===L), rw2=inR.filter(m=>m.won).length;
+      c.laneRec={n:inR.length,w:rw2,r:inR.length?rw2/inR.length:null};
+      // 늘어난 라인이 그 구간에서 전체 승률보다 못할 때만 '나쁜 변화'다.
+      const up=c.delta>0;
+      c.worse=up&&c.laneRec.r!=null&&c.laneRec.r<rw/R.length;
+      c.note=up
+        ? `${LANEKR[L]}을 예전보다 많이 하고 있습니다${c.laneRec.n?` — 그 구간 ${c.laneRec.w}승 ${c.laneRec.n-c.laneRec.w}패`:''}`
+        : `${LANEKR[L]}을 예전보다 덜 하고 있습니다`;
+      return c;
+    }).filter(Boolean).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta))[0];
     if(laneShift){laneShift.p=selP(laneShift.p,lanesSeen.length);
       laneShift.need=gamesToDecide(laneShift.recent.k,laneShift.recent.n,laneShift.base.k,laneShift.base.n,lanesSeen.length);
       items.push(laneShift);}
@@ -3591,16 +3605,25 @@ function renderAnalysis(){
   /* [v12] "요새 왜 지지?"에 답하는 카드. 최근 구간과 그 이전을 같은 잣대로 재고,
      통계적으로 뒷받침되는 차이만 '달라진 것'으로 올린다. 아무것도 안 달라졌으면
      그렇게 말한다 — 슬럼프에 없는 원인을 만들어 붙이는 게 제일 나쁜 조언이다. */
+  const LANEKR_OF=x=>String(x.label||'').replace(/\s*비중$/,'');
   const diagCard=a.diag?(()=>{
     const d=a.diag, dr=P(d.recent.r), db=P(d.before.r), gap=dr-db;
-    const realDrop=d.dropP<=SIG_P&&d.recent.r<d.before.r;
+    /* [v14] 카드가 슬럼프만 말할 수 있었다. 창을 훑어 신호가 가장 강한 구간을
+       고르는데(v13), 그 구간이 '잘 나가는 구간'일 수도 있다. 실사용 258판에서
+       최근 16판 75%(+23%p)를 골라 놓고 "이 정도 낙폭은…"이라고 말했다.
+       방향을 먼저 읽고 문구를 고른다. */
+    const dir=d.recent.r>d.before.r?'up':d.recent.r<d.before.r?'down':'flat';
+    const realDrop=d.dropP<=SIG_P&&dir==='down';
+    const realRise=d.dropP<=SIG_P&&dir==='up';
+    const gapWord=dir==='up'?'상승폭은':dir==='down'?'낙폭은':'차이는';
     const pTxt=v=>v<0.01?'1% 미만':Math.round(v*100)+'%';
     const dgRow=(x,bad)=>{
       const a1=Math.round(x.recent.r*100), b1=Math.round(x.base.r*100), dd=Math.round(x.delta);
       return `<div class="dgrow ${bad?'hit ':''}${x.kind}">
         <div class="dgh"><span class="dgl">${x.label}</span>
           <span class="dgd">${b1}% → ${a1}%<small>${dd>0?'+':''}${dd}%p · 우연 ${pTxt(x.p)}</small></span></div>
-        <div class="dgn">${bad?x.note:'이 방향은 승률을 깎는 쪽이 아닙니다 — 되돌릴 이유는 없습니다.'}${
+        <div class="dgn">${bad?x.note:`이 방향은 승률을 깎는 쪽이 아닙니다 — 되돌릴 이유는 없습니다.${
+          x.laneRec&&x.laneRec.n?` 그 구간 ${LANEKR_OF(x)} <b>${x.laneRec.w}승 ${x.laneRec.n-x.laneRec.w}패</b>.`:''}`}${
           x.window?` <span style="color:var(--dimmer)">이 항목은 앱이 기록할 수 있었던 ${x.window}판만으로 쟀습니다.</span>`:''}</div></div>`;
     };
     const shown=d.changed.concat(d.shifted||[]);
@@ -3616,15 +3639,21 @@ function renderAnalysis(){
         : `위 항목을 이전 수준으로 되돌리는 것부터 해보세요. ${envHit?'환경 변화도 같이 잡혔으니 전부 내 탓은 아닙니다. ':''}이 카드는 원인을 증명하지 않습니다 — 최근과 이전이 <b>다르다</b>는 것까지만 말합니다.`)
       : (realDrop
         ? `낙폭 자체는 우연으로 설명하기 어려운데, <b>검사한 항목 중 달라진 것은 없습니다.</b> 기록에 남지 않는 것(팀 편차·티어 이동·패치 세부)이 원인일 수 있습니다. 픽 습관을 바꾸는 건 근거가 없습니다.`
+        : realRise
+        ? `<b>지금 잘 나가고 있습니다.</b> 상승폭이 우연으로 설명하기 어려운 크기인데, 검사한 항목 중 이걸 설명할 습관 변화는 없습니다 — 지금 하던 대로 유지하세요.`
+        : dir==='up'
+        ? `<b>지금 데이터로는 분산입니다.</b> 최근이 좋아 보이지만 이 정도는 실력이 그대로여도 자주 나옵니다. 좋을 때 픽을 늘리는 것도 근거가 약합니다.`
         : `<b>지금 데이터로는 분산입니다.</b> 낙폭도 우연 범위이고, 승률을 깎는 쪽으로 달라진 습관도 없습니다. 바꿀 것을 찾기보다 하던 대로 하는 게 기대값이 높습니다.`);
     return `<div class="dx">
-      <div class="dxh"><span class="dxt">최근 부진 진단</span>
+      <div class="dxh"><span class="dxt">최근 폼 진단</span>
         <span class="dxn">최근 ${d.rn}판 vs 이전 ${d.bn}판</span></div>
-      <div class="verdict ${realDrop?'warn':'calm'}" style="margin:0 0 4px">
+      <div class="verdict ${realDrop?'warn':realRise?'good':'calm'}" style="margin:0 0 4px">
         최근 <b>${dr}%</b> · 이전 <b>${db}%</b> (<b>${gap>0?'+':''}${gap}%p</b>) —
         ${realDrop
           ? `이 낙폭은 우연으로 설명하기 어렵습니다 (우연일 확률 ${pTxt(d.dropP)}).`
-          : `이 정도 낙폭은 실력이 그대로여도 자주 나옵니다 (우연일 확률 ${pTxt(d.dropP)}).${needTxt(d.dropNeed)}`}</div>
+          : realRise
+          ? `이 상승폭은 우연으로 설명하기 어렵습니다 (우연일 확률 ${pTxt(d.dropP)}).`
+          : `이 정도 ${gapWord} 실력이 그대로여도 자주 나옵니다 (우연일 확률 ${pTxt(d.dropP)}).${needTxt(d.dropNeed)}`}</div>
       ${(d.windows&&d.windows.length>1)?(()=>{
         const BAR=51;                       // 막대 영역 높이(px) = height - padding-bottom
         const base=d.before.r, hi=Math.max(base,...d.windows.map(w=>w.r))||1;
@@ -3635,7 +3664,7 @@ function renderAnalysis(){
             +`<div class="wb" style="height:${Math.max(2,Math.round(w.r/hi*BAR))}px"></div>`
             +`<div class="wk">${w.k}판</div></div>`).join('')
           +`</div>`
-          +`<div class="dxs">최근 몇 판을 보느냐에 따라 폼이 이만큼 달라집니다. 가장 낮은 구간을 골라 위에 적었고, <b>여러 구간을 뒤진 만큼 우연일 확률을 ${d.wscan}배로 올려</b> 잡았습니다.</div>`;
+          +`<div class="dxs">최근 몇 판을 보느냐에 따라 폼이 이만큼 달라집니다. <b>전체 평균과 가장 크게 벌어진 구간</b>을 골라 위에 적었고, 여러 구간을 뒤진 만큼 <b>우연일 확률을 ${d.wscan}배로 올려</b> 잡았습니다.</div>`;
       })():''}
       ${d.form&&d.form.verdict!=='unknown'?(()=>{
         const f=d.form, fmt=x=>x.mean!=null?x.mean.toFixed(2):'—';
