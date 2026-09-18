@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='14.0.0'"));
+assert.ok(html.includes("const APP_VERSION='15.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -670,7 +670,42 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(wide>=0&&narrow>0,'both must return a usable count');
   assert.ok(wide<narrow,'a bigger observed gap must need fewer extra games');
 
-  /* [v14] 카드가 '부진'만 말할 수 있었다. v13이 창을 훑어 가장 강한 구간을 고르는데,
+  /* [v15] 첫 픽의 실제 비용을 고르는 순간에 보여준다. 분석 탭은 v9부터 이걸 단정형으로
+   올리고 있었는데(258판에서 40% vs 65%, p=0.012) 드래프트 화면은 '첫 픽' 두 글자뿐이었다.
+   점수는 안 만진다 — 감점 4종을 A/B 했더니 전부 오차 안이었다(첫 픽은 사용자가 고르는 것이라
+   엔진 1순위가 첫 픽인 경우가 4%뿐). 유의할 때만 말한다. */
+{
+  const cut=(a,b)=>{const i=html.indexOf(a),j=html.indexOf(b,i);assert.ok(i>=0&&j>i,`v15: cannot extract ${a}`);return html.slice(i,j);};
+  const src=cut('let _fpfKey=null,_fpfVal=null;','/* 과거 전 판을 지금 엔진으로');
+  const stats=cut('function normCdf(z){','function barRow(');
+  const mk=(matches)=>new Function('matches','_engineDataVersion','MIN_BUCKET','clamp',
+    stats+'\n'+src+'\nreturn firstPickFact;')(matches,0,8,(v,a,b)=>Math.min(b,Math.max(a,v)));
+  // 첫 픽 20판 중 6승, 2~3판째 30판 중 21승 → 유의 → 사실이 나와야 한다
+  const M=[]; let t=1;
+  for(let i=0;i<20;i++)M.push({t:t++,pick:1000+i,won:i<6});
+  for(let i=0;i<15;i++){M.push({t:t++,pick:1000+i,won:true});M.push({t:t++,pick:1000+i,won:i<6});}
+  const f=mk(M)();
+  assert.ok(f&&f.first.n===20&&f.first.w===6,'v15: first-pick bucket must count only the first game of each champion');
+  assert.ok(f.early.n===30&&f.early.w===21,'v15: early bucket must be the 2nd and 3rd games only');
+  assert.ok(f.p<=0.05&&f.gap>0,'v15: a real gap must be reported');
+  // 차이가 없으면 사실이 아니다 — 배지는 예전 문구로 돌아가야 한다
+  const N=[]; t=1;
+  for(let i=0;i<20;i++)N.push({t:t++,pick:2000+i,won:i%2===0});
+  for(let i=0;i<15;i++){N.push({t:t++,pick:2000+i,won:i%2===0});N.push({t:t++,pick:2000+i,won:i%2===1});}
+  assert.equal(mk(N)(),null,'v15: no significant gap, no claim');
+  // 표본이 모자라면 기권
+  assert.equal(mk(M.slice(0,10))(),null,'v15: tiny samples must abstain');
+  // 화면: 유의할 때만 hot 배지, 아니면 기존 배지. 사실은 사용자 숫자를 담아야 한다.
+  assert.ok(/const fpf=firstPickFact\(\);/.test(html),'v15: the badge must consult the measured fact');
+  assert.ok(/내 첫 픽 승률 \$\{Math\.round\(fpf\.first\.w\/fpf\.first\.n\*100\)\}%/.test(html),
+    "v15: the badge must show the user's own first-pick win rate");
+  assert.ok(/_fpfVal=\(gap>0&&p<=SIG_P\)\?\{first:F,early:Ea,gap,p\}:null;/.test(html),
+    'v15: the fact must be gated on significance and direction');
+  // 함수 본문에 `_replayCache={}` 가 있어 [^}]* 로는 못 잡는다 — 한 줄 함수라 줄 단위로 본다.
+  assert.ok(/function invalidateSelfCheck\(\)\{[^\n]*_fpfKey=null;\}/.test(html),'v15: the cache must clear with engine data');
+}
+
+/* [v14] 카드가 '부진'만 말할 수 있었다. v13이 창을 훑어 가장 강한 구간을 고르는데,
    그 구간이 잘 나가는 구간일 수도 있다 — 실사용 258판에서 최근 16판 75%(+23%p)를
    골라 놓고 "이 정도 낙폭은…"이라고 말했다. 방향을 먼저 읽어야 한다. */
 {

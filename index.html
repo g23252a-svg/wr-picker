@@ -97,6 +97,9 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .kdain:focus{outline:none;border-color:var(--cyan)}
 .perfrow .pfhint{font-size:10.5px;color:var(--dimmer);flex:1 1 100%;line-height:1.4}
 .perfrow .pfhint b{color:var(--gold-soft)}
+.bd-first.hot{border:1px solid #f0b232;background:#2a2008}
+.bd-first.hot small{font-weight:600;opacity:.75;margin-left:2px}
+[data-theme="light"] .bd-first.hot{background:#fff0c2;border-color:#d9a300}
 .bd-first{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.04em;color:#f0b232;
   border:1px solid #4a3a1e;background:#241c0e;border-radius:4px;padding:1px 6px;margin-left:7px;vertical-align:middle;
   display:inline-block;white-space:nowrap}
@@ -956,8 +959,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='14.0.0';
-const MODEL_VERSION='14.0.0-direction';
+const APP_VERSION='15.0.0';
+const MODEL_VERSION='15.0.0-firstpick-fact';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -2274,7 +2277,28 @@ let _axisNeutral=false;                       // 채점 중 축 보정을 끄는
 let _replayCache={}, _trustKey=null, _trustVal=AXIS_NEUTRAL;
 /* 통계·가이드가 새로 들어오면 같은 전적이라도 점수가 달라진다. 캐시 키에 넣는다. */
 function bumpEngineData(){_engineDataVersion++;invalidateSelfCheck();}
-function invalidateSelfCheck(){_replayCache={};_trustKey=null;_trustVal=AXIS_NEUTRAL;}
+function invalidateSelfCheck(){_replayCache={};_trustKey=null;_trustVal=AXIS_NEUTRAL;_fpfKey=null;}
+/* [v15] 첫 픽의 실제 비용 — 사용자 자신의 전적으로 잰다.
+   분석 탭은 v9부터 "처음 잡는 챔을 줄이세요"를 단정형으로 올리고 있었고(258판에서
+   40% vs 65%, p=0.012), 엔진 1순위가 첫 픽인 경우는 4%뿐이다. 첫 픽은 엔진이
+   미는 게 아니라 사용자가 고르는 것이다 — 그래서 감점을 키워도 순위 일치도는
+   움직이지 않았다(4개 설계 전부 ±0.008, 오차 ±0.036 안). 점수를 만지는 대신
+   고르는 순간에 본인 숫자를 보여준다. 유의할 때만 말하고, 아니면 이전 배지 그대로. */
+let _fpfKey=null,_fpfVal=null;
+function firstPickFact(){
+  const key=matches.length+'|'+(matches.length?matches[matches.length-1].t:0)+'|'+_engineDataVersion;
+  if(key===_fpfKey)return _fpfVal;
+  _fpfKey=key;
+  const seen={},F={n:0,w:0},Ea={n:0,w:0};
+  for(const m of matches.slice().sort((a,b)=>a.t-b.t)){
+    const c=seen[m.pick]||0; const b=c===0?F:c<3?Ea:null;
+    if(b){b.n++;if(m.won)b.w++;} seen[m.pick]=c+1;
+  }
+  if(F.n<MIN_BUCKET||Ea.n<MIN_BUCKET){_fpfVal=null;return null;}
+  const gap=Ea.w/Ea.n-F.w/F.n, p=propDiffP(F.w,F.n,Ea.w,Ea.n);
+  _fpfVal=(gap>0&&p<=SIG_P)?{first:F,early:Ea,gap,p}:null;
+  return _fpfVal;
+}
 function selfCheckKey(){
   const last=matches.length?matches[matches.length-1].t:0;
   return matches.length+'|'+last+'|'+_engineDataVersion+'|'+weights.recMode+'|'
@@ -2663,9 +2687,14 @@ function render(){
     }
     /* [v9.1] 첫 픽 배지에 '왜 지금은 미루는 게 나은지'를 붙인다. 감점이 붙는데
        이유가 안 보이면 사용자는 엔진이 고장났다고 느낀다. */
-    else if(s.firstPick) badge+=s.familiarity<0
-      ? `<span class="bd-first" title="새로 시작한 챔이 이미 ${explorationLoad}종 — 한 번에 하나씩 늘리는 편이 유리합니다">첫 픽 · 탐색 ${explorationLoad}종 진행중</span>`
-      : `<span class="bd-first">첫 픽</span>`;
+    else if(s.firstPick){
+      const fpf=firstPickFact();
+      badge+=fpf
+        ? `<span class="bd-first hot" title="내 전적 — 처음 잡는 챔 ${fpf.first.w}승 ${fpf.first.n-fpf.first.w}패, 2~3판째 ${fpf.early.w}승 ${fpf.early.n-fpf.early.w}패 (우연일 확률 ${fpf.p<0.01?'1% 미만':Math.round(fpf.p*100)+'%'})${s.familiarity<0?` · 지금 새 챔 ${explorationLoad}종 진행중`:''}">첫 픽 · 내 첫 픽 승률 ${Math.round(fpf.first.w/fpf.first.n*100)}% <small>vs 익숙한 챔 ${Math.round(fpf.early.w/fpf.early.n*100)}%</small></span>`
+        : s.familiarity<0
+        ? `<span class="bd-first" title="새로 시작한 챔이 이미 ${explorationLoad}종 — 한 번에 하나씩 늘리는 편이 유리합니다">첫 픽 · 탐색 ${explorationLoad}종 진행중</span>`
+        : `<span class="bd-first">첫 픽</span>`;
+    }
     // 등록 숙련도가 실제 성과로 조정된 경우 그 사실을 드러낸다.
     if(s.cInfo&&s.cInfo.adjusted){
       const down=s.cInfo.value<s.cInfo.manual;
