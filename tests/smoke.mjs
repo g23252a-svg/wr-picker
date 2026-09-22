@@ -72,7 +72,7 @@ const cStart=html.indexOf('const C=')+'const C='.length;
 const cEnd=html.indexOf('\n];',cStart)+3;
 assert.ok(cStart>0&&cEnd>cStart,'champion database block not found');
 const champions=Function(`return ${html.slice(cStart,cEnd)}`)();
-assert.equal(champions.length,141);
+assert.equal(champions.length,144);   // [v16] 7.3 흐웨이·사일러스·렉사이 추가
 const names=champions.map(row=>row[1]);
 assert.equal(new Set(names).size,names.length,'duplicate champion name');
 for(const name of Object.keys(stats))assert.ok(names.includes(name),`stats champion missing from DB: ${name}`);
@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='15.0.0'"));
+assert.ok(html.includes("const APP_VERSION='16.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -670,7 +670,47 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(wide>=0&&narrow>0,'both must return a usable count');
   assert.ok(wide<narrow,'a bigger observed gap must need fewer extra games');
 
-  /* [v15] 첫 픽의 실제 비용을 고르는 순간에 보여준다. 분석 탭은 v9부터 이걸 단정형으로
+  /* [v16] 게임에 신챔이 나오면 통계엔 들어오는데 앱 DB 에 없어 sanitizeStatsTable 이
+   통째로 버렸다 — 그것도 조용히. 고를 수도, 기록할 수도, 상대팀에 넣을 수도 없는데
+   이유를 알 길이 없었다. 7.3(흐웨이·사일러스·렉사이)을 주입해 재현했다. */
+{
+  // 7.3 신챔이 DB 에 실제로 있어야 통계가 통과한다.
+  // 문자열 매칭 대신 이미 파싱해 둔 champions 를 쓴다 — Rek'Sai 의 역슬래시 이스케이프에
+  // 테스트가 걸려 정작 DB 는 멀쩡한데 실패했다.
+  const byEnRow=Object.fromEntries(champions.map(r=>[r[1],r]));
+  for(const [kr,en,lane,cls] of [['흐웨이','Hwei','mid','mage'],['사일러스','Sylas','mid','fighter'],['렉사이',"Rek'Sai",'jug','fighter']]){
+    const row=byEnRow[en];
+    assert.ok(row,`v16: ${kr}(${en}) must exist in the champion DB`);
+    assert.equal(row[0],kr,`v16: ${en} must carry its Korean name`);
+    assert.ok(row[2].includes(lane),`v16: ${en} must be playable in ${lane}`);
+    assert.equal(row[3],cls,`v16: ${en} class`);
+    // 티어는 비워 둔다 — 데이터가 오기 전에 확신을 지어내지 않는다.
+    assert.deepEqual(row[7],{},`v16: ${en} must ship with no invented tier`);
+  }
+
+  // 모르는 이름은 여전히 버리되(원격 payload 는 신뢰 경계 밖), 세어서 알린다.
+  assert.ok(/function sanitizeStatsTable\(raw,seenUnknown\)\{/.test(html),
+    'v16: the sanitizer must be able to report what it dropped');
+  assert.ok(/if\(seenUnknown&&typeof name==='string'&&\/\^\[A-Za-z' \.\]\{2,24\}\$\/\.test\(name\)\)seenUnknown\.add\(name\);/.test(html),
+    'v16: dropped names go to the screen, so they must be length- and charset-limited');
+  assert.ok(/unknown:\[\.\.\.unknown\]\.sort\(\)\.slice\(0,12\),/.test(html),
+    'v16: the unknown list must be bounded');
+  assert.ok(/statsUnknown=Array\.isArray\(payload\.unknown\)\?payload\.unknown:scanUnknownChamps\(bracket\.stats\);/.test(html),
+    'v16: the bundled path must be scanned too, or an offline boot stays silent');
+  assert.ok(/statsUnknown=scanUnknownChamps\(ROLE_STATS\);/.test(html),
+    'v16: the bundled table must be scanned at boot');
+  assert.ok(/앱이 모르는 챔 \$\{statsUnknown\.length\}종/.test(html),
+    'v16: the status bar must say how many champions the app cannot represent');
+  // 실행 검증: 모르는 이름은 걸러지고, 아는 이름은 남는다.
+  const src=(()=>{const i=html.indexOf('function scanUnknownChamps(table){'),j=html.indexOf('statsUnknown=scanUnknownChamps',i);
+    assert.ok(i>=0&&j>i,'v16: cannot extract scanUnknownChamps');return html.slice(i,j);})();
+  const scan=new Function('byEn',src+'\nreturn scanUnknownChamps;')({Ahri:1,Hwei:1});
+  assert.deepEqual(scan({Ahri:{},Hwei:{},Naafiri:{}}),['Naafiri'],'v16: only unknown names are reported');
+  assert.deepEqual(scan({Ahri:{},'<script>':{}}),[],'v16: names that fail the charset must never reach the screen');
+  assert.equal(scan({}).length,0,'v16: an empty table reports nothing');
+}
+
+/* [v15] 첫 픽의 실제 비용을 고르는 순간에 보여준다. 분석 탭은 v9부터 이걸 단정형으로
    올리고 있었는데(258판에서 40% vs 65%, p=0.012) 드래프트 화면은 '첫 픽' 두 글자뿐이었다.
    점수는 안 만진다 — 감점 4종을 A/B 했더니 전부 오차 안이었다(첫 픽은 사용자가 고르는 것이라
    엔진 1순위가 첫 픽인 경우가 4%뿐). 유의할 때만 말한다. */
