@@ -97,6 +97,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .kdain:focus{outline:none;border-color:var(--cyan)}
 .perfrow .pfhint{font-size:10.5px;color:var(--dimmer);flex:1 1 100%;line-height:1.4}
 .perfrow .pfhint b{color:var(--gold-soft)}
+.unk{color:#f0b232;font-weight:700;border-bottom:1px dotted currentColor;cursor:help}
 .bd-first.hot{border:1px solid #f0b232;background:#2a2008}
 .bd-first.hot small{font-weight:600;opacity:.75;margin-left:2px}
 [data-theme="light"] .bd-first.hot{background:#fff0c2;border-color:#d9a300}
@@ -876,6 +877,14 @@ const C=[
 ['판테온','Pantheon',['jug','top'],'fighter','AD','m',['dive','engage','poke'],{jug:'B',top:'B'}],
 ['럼블','Rumble',['top','mid'],'fighter','AP','m',['poke','engage','scaling'],{top:'B',mid:'B'}],
 ['오공','Wukong',['top','jug'],'fighter','AD','m',['dive','engage','burst'],{top:'A',jug:'A'}],
+/* [v16] 7.3 'Center Stage' 신규 챔피언 (2026-09-22). 티어는 비워 둔다 —
+   tierScore 가 미지정을 52(중립)로 읽으므로 없는 확신을 만들지 않고,
+   실제 티어·승률·픽률은 매일 도는 통계 파이프라인이 며칠 안에 채운다.
+   라인·분류·태그는 챔피언 키트에서 오는 값이라 통계와 무관하게 지금 필요하다
+   (이게 없으면 통계가 와도 sanitizeStatsTable 이 통째로 버린다). */
+['흐웨이','Hwei',['mid'],'mage','AP','r',['poke','burst','cc'],{}],
+['사일러스','Sylas',['mid','top'],'fighter','AP','m',['dive','engage','sustain'],{}],
+['렉사이','Rek\'Sai',['jug'],'fighter','AD','m',['dive','engage'],{}],
 ];
 
 // normalize into objects
@@ -959,8 +968,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='15.0.0';
-const MODEL_VERSION='15.0.0-firstpick-fact';
+const APP_VERSION='16.0.0';
+const MODEL_VERSION='16.0.0-new-champs';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -1549,7 +1558,15 @@ function kitOf(c){
 /* ============ SCORING / PATCH 7.2 ROLE STATS ============
  * Stats live in stats.js so the snapshot can be updated independently of the engine.
  * Every role keeps win / pick / ban rate instead of collapsing a champion to one lane. */
+let statsUnknown=[];
 let ROLE_STATS=window.WR_ROLE_STATS||{};
+/* [v16] 번들 stats.js 는 sanitizeStatsPayload 를 거치지 않는다(우리 파이프라인이
+   만든 파일이라 형식 검증이 필요 없다). 그래도 '앱이 모르는 챔' 신호는 여기서도
+   살아 있어야 한다 — 오프라인 첫 부팅에서 신챔이 나온 걸 알 방법이 그것뿐이다. */
+function scanUnknownChamps(table){
+  return Object.keys(table||{}).filter(n=>!byEn[n]&&/^[A-Za-z' .]{2,24}$/.test(n)).sort().slice(0,12);
+}
+statsUnknown=scanUnknownChamps(ROLE_STATS);
 let ROLE_STATS_PREV=window.WR_ROLE_STATS_PREV||{};
 const DEFAULT_WR=50;
 function statOf(c,lane=state.lane){return (ROLE_STATS[c.en]&&ROLE_STATS[c.en][lane])||null;}
@@ -1704,6 +1721,8 @@ function applyStatsPayload(payload,origin){
   ROLE_STATS=bracket.stats;
   ROLE_STATS_PREV=(prev&&prev.stats)||{};
   appliedBracket=key;
+  // [v16] 이번 통계에 앱이 모르는 챔이 몇 종 왔는지. 신챔 출시 때 화면에 뜬다.
+  statsUnknown=Array.isArray(payload.unknown)?payload.unknown:scanUnknownChamps(bracket.stats);
   META_SNAPSHOT=buildMeta({
     patch:payload.patch,capturedAt:payload.updated,region:'CN',
     bracket:bracket.label||'Diamond+',rows:bracket.rows||0,champions:bracket.champions||0,
@@ -1722,11 +1741,21 @@ function applyStatsPayload(payload,origin){
  * 채택 전에 전체를 정규화한다: 필드 형식·범위 검증(XSS·NaN 크래시 차단), 앱 DB에
  * 없는 챔피언 제거, rows/champions 재계산. 이후 렌더 경로는 정제된 값만 만진다. */
 const ROLE_KEYS=['top','jug','mid','adc','sup'];
-function sanitizeStatsTable(raw){
+/* [v16] 앱 DB 에 없는 챔은 여기서 버려진다 — 그게 맞다(원격 payload 는 신뢰 경계
+   밖이라 아는 이름만 통과시킨다). 문제는 **조용히** 버렸다는 것이다. 게임에 신챔이
+   나오면 통계엔 들어오는데 앱에선 고를 수도, 기록할 수도, 상대팀에 넣을 수도 없고,
+   앱은 그 사실을 한마디도 하지 않았다. 7.3(흐웨이·사일러스·렉사이)을 주입해 재현했다.
+   버린 이름을 모아 두고 화면에 알린다. */
+function sanitizeStatsTable(raw,seenUnknown){
   const out={};
   if(!raw||typeof raw!=='object')return out;
   for(const [name,roles] of Object.entries(raw)){
-    if(!byEn[name]||!roles||typeof roles!=='object')continue;
+    if(!byEn[name]){
+      // 이름은 원격 문자열이다 — 길이와 문자를 제한해서만 보관한다(화면에 나간다).
+      if(seenUnknown&&typeof name==='string'&&/^[A-Za-z' .]{2,24}$/.test(name))seenUnknown.add(name);
+      continue;
+    }
+    if(!roles||typeof roles!=='object')continue;
     const clean={};
     for(const r of ROLE_KEYS){
       const s=roles[r]; if(!s||typeof s!=='object')continue;
@@ -1745,10 +1774,10 @@ function sanitizeStatsPayload(raw){
   if(!raw||typeof raw!=='object')return null;
   if(!/^\d{4}-\d{2}-\d{2}$/.test(raw.updated||''))return null;
   if(!/^[0-9A-Za-z.]{1,12}$/.test(raw.patch||''))return null;
-  const brackets={};
+  const brackets={}; const unknown=new Set();
   for(const [k,b] of Object.entries(raw.brackets||{})){
     if(!/^[a-z]{3,16}$/.test(k)||!b)continue;
-    const stats=sanitizeStatsTable(b.stats);
+    const stats=sanitizeStatsTable(b.stats,unknown);
     const rows=Object.values(stats).reduce((n,r)=>n+Object.keys(r).length,0);
     if(!rows)continue;
     brackets[k]={
@@ -1758,6 +1787,7 @@ function sanitizeStatsPayload(raw){
   }
   if(!brackets.diamond)return null;
   const out={patch:raw.patch,updated:raw.updated,brackets,
+    unknown:[...unknown].sort().slice(0,12),
     url:(typeof raw.url==='string'&&/^https:\/\/[\w./#?=-]+$/.test(raw.url))?raw.url:null,
     sourceNote:typeof raw.source==='string'?raw.source.slice(0,160):''};
   // 가이드 링크 slug — URL 경로에 들어가므로 형식을 엄격히 제한한다.
@@ -2598,7 +2628,12 @@ function renderAppMeta(){
   const age=snapshotAgeDays(), freshness=age<=2?['fresh','최신']:age<=7?['aging',`${age}일 전`]:['stale',`${age}일 전 · 갱신 필요`];
   const prevTxt=META_SNAPSHOT.prevPatch?` · 추세 기준 ${META_SNAPSHOT.prevPatch}(${META_SNAPSHOT.prevCapturedAt})`:'';
   const originTxt=META_SNAPSHOT.origin==='bundled'?' · <span title="네트워크 갱신 전 번들 스냅샷">번들</span>':'';
-  if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>패치 ${META_SNAPSHOT.targetPatch} · ${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt}${prevTxt}${originTxt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
+  /* [v16] 통계엔 왔는데 앱이 모르는 챔 — 게임에 신챔이 나왔다는 뜻이다.
+     예전엔 조용히 버려서, 고를 수도 상대팀에 넣을 수도 없는 이유를 알 길이 없었다. */
+  const unknownTxt=statsUnknown.length
+    ? ` · <span class="unk" title="이 챔들은 통계엔 있지만 앱 챔피언 목록에 아직 없어 추천·기록·상대 입력에서 빠집니다: ${statsUnknown.join(', ')}">앱이 모르는 챔 ${statsUnknown.length}종</span>`
+    : '';
+  if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>패치 ${META_SNAPSHOT.targetPatch} · ${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt}${prevTxt}${originTxt}${unknownTxt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
   const legend=document.getElementById('metaLegend');
   if(legend)legend.innerHTML=`<b>승</b> 표본 보정 메타(+패치 추세) + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'} · 픽률은 신뢰도, 밴률은 가용성 위험으로 해석`;
   // 랭크 구간 선택기 — payload가 있고 구간이 2개 이상일 때만 노출.
