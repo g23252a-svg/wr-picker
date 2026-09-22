@@ -97,6 +97,12 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .kdain:focus{outline:none;border-color:var(--cyan)}
 .perfrow .pfhint{font-size:10.5px;color:var(--dimmer);flex:1 1 100%;line-height:1.4}
 .perfrow .pfhint b{color:var(--gold-soft)}
+.bd-type.fam{background:#2a2008;color:#f0b232;border:1px solid #f0b232}
+[data-theme="light"] .bd-type.fam{background:#fff0c2;color:#7a5200;border-color:#d9a300}
+.ffrow{display:flex;align-items:flex-start;gap:8px;margin-top:9px;font-size:12.5px;color:var(--ink);cursor:pointer}
+.ffrow input{margin-top:2px;flex-shrink:0}
+.ffnote{color:var(--dim);font-weight:400}
+.poolnote.ffwarn{margin-top:6px;border-left:2px solid #5b4a1e;padding-left:8px}
 .dx.warnbox{border-color:#5b4a1e;background:#1c1810}
 [data-theme="light"] .dx.warnbox{background:#fffaf0;border-color:#e9ce91}
 .unk{color:#f0b232;font-weight:700;border-bottom:1px dotted currentColor;cursor:help}
@@ -375,6 +381,9 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .rec.top1{border-color:var(--gold);background:linear-gradient(110deg,#1a2233,#13192488)}
 .rec.top1::before{content:"BEST";position:absolute;top:-7px;left:13px;background:var(--gold);color:#1a130a;
   font-family:'Rajdhani';font-weight:700;font-size:9.5px;letter-spacing:.1em;padding:1px 7px;border-radius:4px}
+/* [v18] 재정렬된 1순위는 최고점이 아니다. 배지만 고치고 이 리본을 두면 같은 카드가
+   한쪽에선 '손에 익은 픽 -2.5점', 다른 쪽에선 'BEST' 라고 말한다. */
+.rec.top1.bumped::before{content:"MY PICK"}
 .rk{font-family:'Rajdhani';font-weight:700;font-size:20px;color:var(--dimmer);width:20px;text-align:center;flex:none}
 .rec.top1 .rk{color:var(--gold)}
 .rmid{flex:1;min-width:0}
@@ -970,8 +979,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='17.0.0';
-const MODEL_VERSION='17.0.0-adherence';
+const APP_VERSION='18.0.0';
+const MODEL_VERSION='18.0.0-familiar-first';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -998,6 +1007,10 @@ const MAX_PICKS={ally:4,enemy:5,ban:10};
    처음 잡는 챔의 실제 손해(42% vs 66%)가 영영 값매김되지 않았다.
    상한을 낮게 두는 이유는 그대로다 — 정말 좋은 신규 픽은 여전히 올라와야 한다. */
 const FIRST_PICK_MAX_PENALTY=6;
+/* [v18] '손에 익은 픽 우선'이 순서를 바꿀 수 있는 점수 폭. 실사용에서 사용자가
+   이탈할 때 감수한 점수 손해가 평균 2.4점(61.4 → 59.0)이라 그 근처로 잡았다.
+   이보다 넓히면 '추천'이 아니라 '내 챔폭 정렬'이 된다. */
+const FAMILIAR_BAND=3;
 /* [v10] 라인 상성 기여분의 상한. 팀 단위 상성은 v9에서 ±22로 잘렸는데 라인
    상성은 상한이 없어 실사용에서 +37까지 나왔다(자세한 근거는 score() 안 주석). */
 const LANE_MATCHUP_CAP=16;
@@ -1017,7 +1030,7 @@ const clamp=(v,min,max)=>Math.max(min,Math.min(max,v));
 let state={ lane:'mid', ally:[], enemy:[], bans:[], laneMark:null };
 let undoStack=[],redoStack=[];
 let pool={};   // stable champion id -> {comfort:0-100}
-let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:3, goal:'allround', autoAxis:true};
+let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:3, goal:'allround', autoAxis:true, familiarFirst:false};
 let matches=[];
 let lastCands=[];
 let famMap={};
@@ -1262,7 +1275,8 @@ function mergeMatches(current,incoming){
   return {merged:[...byT.values()].sort((a,b)=>a.t-b.t),added};
 }
 function sanitizeWeights(raw){
-  const next=Object.assign({comfort:80,tier:45,team:100,counter:100,recMode:'meta',wv:3,goal:'allround'},raw||{});
+  const next=Object.assign({comfort:80,tier:45,team:100,counter:100,recMode:'meta',wv:3,goal:'allround',familiarFirst:false},raw||{});
+  next.familiarFirst=!!next.familiarFirst;
   ['comfort','tier','team','counter'].forEach(k=>next[k]=clamp(Number(next[k])||0,0,120));
   if(!['meta','weighted','poolonly'].includes(next.recMode))next.recMode='meta';
   // 목표: 승률 우선(약한 라인을 줄임) vs 전 포지션 숙련(라인마다 주력을 좁힘)
@@ -2675,6 +2689,34 @@ function render(){
     .map(c=>({c,s:score(c)}))
     .sort((x,y)=>y.s.total-x.s.total||y.s.confidence-x.s.confidence||y.s.cWR-x.s.cWR)
     .slice(0,8);
+  /* [v18] '손에 익은 픽 우선' — 기본 꺼짐, 사용자가 켤 때만 동작한다.
+   *
+   * 실사용 271판에서 1순위 그대로 50%(234판) vs 이탈 80%(15판, p=0.022) 이고,
+   * 이탈한 판의 픽은 엔진 점수가 오히려 더 낮았지만(59.0 vs 61.4) 그 챔으로
+   * 해본 판수가 많았다(7.2판 vs 5.4판). 그래서 '점수를 조금 손해 보고 더 익숙한
+   * 챔을 고르는' 그 행동만 그대로 옮긴다 — 점수는 손대지 않고, **FAMILIAR_BAND
+   * 점 안에서 순서만** 바꾼다.
+   *
+   * 기본값을 끈 이유는 근거가 없어서다. 숙련 판수 자체는 승패를 못 가른다
+   * (숙련 판수만으로 순위 일치도 0.4988 — 동전던지기, 버킷도 단조가 아니다:
+   * 0판 40% / 1~2판 63% / 3~5판 52% / 6~10판 56% / 11판+ 44%). 숙련 가중치를
+   * 올리는 설계 4종도 전부 오차 안이었고(0.5560~0.5577 vs 현재 0.5565),
+   * 판수 보너스는 오히려 나빠졌다(0.5386). 이탈의 80%는 '이탈하기로 고른 판'이라
+   * 선택 편향이 크고, 그걸 전원에게 기본으로 켜는 건 노이즈를 가중하는 짓이다.
+   * 그래서 켜고 끌 수 있게만 하고, 설정 화면에 이 숫자를 그대로 적어 둔다. */
+  let familiarBumped=null;
+  if(weights.familiarFirst&&cands.length>1){
+    const best=cands[0];
+    const top=best.s.total;
+    const band=cands.filter(x=>top-x.s.total<=FAMILIAR_BAND);
+    if(band.length>1){
+      band.sort((x,y)=>playCount(y.c.id)-playCount(x.c.id)||y.s.total-x.s.total);
+      cands.splice(0,band.length,...band);
+      // 순서를 바꿨으면 그 사실과 감수한 점수 손해를 화면에 드러낸다.
+      if(cands[0].c.id!==best.c.id)
+        familiarBumped={over:best.c.kr,cost:best.s.total-cands[0].s.total,games:playCount(cands[0].c.id)};
+    }
+  }
   lastCands=cands;
   const summary=document.getElementById('decisionSummary');
   if(summary&&cands.length){
@@ -2701,7 +2743,9 @@ function render(){
     const topCounter=Math.max(...cands.map(x=>x.s.counterAxis));
     const topConfidence=Math.max(...cands.map(x=>x.s.confidence));
     const topComfort=Math.max(...cands.map(x=>x.s.base));
-    if(i===0)badge+=`<span class="bd-type">종합 1순위</span>`;
+    if(i===0)badge+=familiarBumped
+      ? `<span class="bd-type fam" title="점수는 ${familiarBumped.over}가 ${familiarBumped.cost.toFixed(1)}점 높지만, 손에 익은 픽 우선이 켜져 있어 ${familiarBumped.games}판 해본 이 챔을 위로 올렸습니다">손에 익은 픽 · −${familiarBumped.cost.toFixed(1)}점</span>`
+      : `<span class="bd-type">종합 1순위</span>`;
     else if(s.counterAxis===topCounter&&state.enemy.length)badge+=`<span class="bd-type counter">카운터픽</span>`;
     else if(s.confidence===topConfidence)badge+=`<span class="bd-type safe">안전픽</span>`;
     else if(mode!=='meta'&&s.base===topComfort)badge+=`<span class="bd-type mastery">숙련픽</span>`;
@@ -2745,7 +2789,7 @@ function render(){
     const showSuk = s.cwUsed>0;
     const bd=(showSuk?`숙${Math.round(s.base)} `:'')+`승${Math.round(s.cTier)}`
       +(state.ally.length?` 팀${Math.round(s.teamAxis)}`:'')+(state.enemy.length?` 카${Math.round(s.counterAxis)}`:'');
-    return `<article class="rec ${i===0?'top1':''} ${mode==='weighted'&&owned&&s.offPool?'offpool':''}">
+    return `<article class="rec ${i===0?'top1'+(familiarBumped?' bumped':''):''} ${mode==='weighted'&&owned&&s.offPool?'offpool':''}">
       <div class="rk">${i+1}</div>
       <div class="rmid">
         <div class="rname">${c.kr}${badge}</div>
@@ -2896,6 +2940,9 @@ function renderCfg(){
         <button aria-pressed="${m==='poolonly'}" class="${m==='poolonly'?'on':''}" onclick="setMode('poolonly')">내 챔폭만</button>
       </div>
       <div class="poolnote" style="margin-top:7px"><b>메타 중심</b>: 역할 통계·팀 조합·상성을 계산합니다. <b>숙련 가중</b>: 아래 숙련도를 함께 반영합니다. <b>내 챔폭만</b>: 숙련도 0 초과인 챔피언만 비교합니다.</div>
+      <label class="ffrow"><input type="checkbox" ${weights.familiarFirst?'checked':''} onchange="setFamiliarFirst(this.checked)">
+        <span><b>손에 익은 픽 우선</b> <span class="ffnote">— 점수 차이가 ${FAMILIAR_BAND}점 이내면 더 많이 해본 챔을 위로</span></span></label>
+      <div class="poolnote ffwarn">이건 <b>근거가 확실해서 넣은 기능이 아닙니다.</b> 전적에서 추천을 벗어난 판이 더 좋긴 했지만(1순위 50% vs 이탈 80%, 우연일 확률 2%), 그건 <b>벗어나기로 고른 판</b>이라 편향이 큽니다. 숙련 판수 자체는 승패를 가르지 못했고(순위 일치도 0.50 — 동전던지기), 숙련 가중치를 올리는 설계 4종도 전부 오차 안이었습니다. 그래서 <b>점수는 건드리지 않고 순서만</b> 바꾸며, 기본은 꺼둡니다.</div>
     </div>
     <div class="grp"><div class="gl">목표</div>
       <div class="scopetog">
@@ -2937,6 +2984,7 @@ function renderCfg(){
     <div class="savebar"><button onclick="saveCfg()">저장하고 닫기</button></div>`;
 }
 function setMode(m){weights.recMode=m;renderCfg();render();}
+function setFamiliarFirst(v){weights.familiarFirst=!!v;saveStore();renderCfg();render();}
 function setAutoAxis(on){
   weights.autoAxis=!!on; invalidateSelfCheck(); saveStore(); renderCfg(); render();
   if(logTab==='ana'&&document.getElementById('logScrim').classList.contains('on'))renderAnalysis();
@@ -2954,8 +3002,8 @@ function quickPool(id){setComfort(id,70);renderCfg();toast(champName(id)+' 숙�
 function clearPool(){if(confirm('등록한 챔폭 숙련도를 전부 0으로 초기화한다. 계속?')){pool={};renderCfg();render();}}
 /* 가중치만 되돌린다 — 추천 모드·목표·자동 보정은 가중치가 아니므로 건드리지 않는다. */
 function resetWeights(){
-  const {recMode,goal,autoAxis}=weights;
-  weights=sanitizeWeights({comfort:80,tier:45,team:100,counter:100,recMode,goal,autoAxis,wv:3});
+  const {recMode,goal,autoAxis,familiarFirst}=weights;
+  weights=sanitizeWeights({comfort:80,tier:45,team:100,counter:100,recMode,goal,autoAxis,familiarFirst,wv:3});
   invalidateSelfCheck();renderCfg();render();
 }
 async function saveCfg(){await saveStore();closeCfg();render();toast('저장 완료');}
@@ -3059,7 +3107,10 @@ function logMatch(won){
   const chosen=lastCands.find(o=>o.c.id===pickId);
   matches.push({schema:SCHEMA_VERSION,t:Date.now(),patch:META_SNAPSHOT.targetPatch,sourcePatch:META_SNAPSHOT.sourcePatch,modelVersion:MODEL_VERSION,
     lane:state.lane,laneMark:state.laneMark,ally:state.ally.slice(),enemy:state.enemy.slice(),pick:pickId,top:topId,
-    top3:lastCands.slice(0,3).map(o=>o.c.id),scoreSnapshot:chosen?{total:Math.round(chosen.s.total),meta:Math.round(chosen.s.cTier),team:Math.round(chosen.s.teamAxis),counter:Math.round(chosen.s.counterAxis),comfort:Math.round(chosen.s.base),confidence:chosen.s.confidence}:null,won:!!won,
+    top3:lastCands.slice(0,3).map(o=>o.c.id),
+    /* [v18] 이 판의 top3 가 '손에 익은 픽 우선'으로 재정렬된 것인지. 안 남기면
+       v17 순응도 분석("1순위를 따랐나")에서 1순위의 뜻이 말없이 바뀐다. */
+    familiarFirst:weights.familiarFirst?1:undefined,scoreSnapshot:chosen?{total:Math.round(chosen.s.total),meta:Math.round(chosen.s.cTier),team:Math.round(chosen.s.teamAxis),counter:Math.round(chosen.s.counterAxis),comfort:Math.round(chosen.s.base),confidence:chosen.s.confidence}:null,won:!!won,
     /* 라인 상대는 지정값이 없으면 엔진이 배정한 상대를 남긴다. 나중에 "상성 판정이
        맞았나"를 되짚으려면 그때 무엇을 상대로 보고 계산했는지가 기록돼 있어야 한다. */
     lanerAuto:(()=>{const o=laneOpponent(currentAssign(),state.lane);return o.c?o.c.id:null;})(),
@@ -3302,6 +3353,10 @@ function analysisModel(){
       M.forEach(m=>{playedBefore.set(m,seenAt[m.pick]||0);seenAt[m.pick]=(seenAt[m.pick]||0)+1;});
       const mean=(A,f)=>A.length?A.reduce((s,m)=>s+f(m),0)/A.length:null;
       out.adhere={
+        /* [v18] '손에 익은 픽 우선'이 켜진 판은 top3[0] 이 최고점이 아니라
+           재정렬된 픽이다. 섞여 있으면 '1순위를 따랐나'의 뜻이 판마다 달라지므로
+           그 판수를 세어 카드에 밝힌다. */
+        reranked:T.filter(m=>m.familiarFirst).length,
         top1:{n:top1.length,w:w(top1)},
         devi:{n:devi.length,w:w(devi)},
         inTop3:(()=>{const g=devi.filter(m=>m.top3.includes(m.pick));return {n:g.length,w:w(g)};})(),
@@ -3828,6 +3883,7 @@ function renderAnalysis(){
     return `<div class="dx${solid&&deviBetter?' warnbox':''}">
       <div class="dxh"><span class="dxt">추천대로 골랐을 때</span>
         <span class="dxn">top3 기록된 ${A.top1.n+A.devi.n}판</span></div>
+      ${A.reranked?`<div class="dxs" style="margin-top:0">그중 <b>${A.reranked}판</b>은 '손에 익은 픽 우선'이 켜진 상태라, 그 판의 1순위는 최고점이 아니라 <b>재정렬된 픽</b>입니다 — 두 종류가 섞여 있습니다.</div>`:''}
       ${barRow('1순위 그대로',A.top1.w,A.top1.n)}
       ${barRow('다른 챔 선택',A.devi.w,A.devi.n)}
       <div class="dxs">${solid

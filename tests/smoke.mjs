@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='17.0.0'"));
+assert.ok(html.includes("const APP_VERSION='18.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -920,6 +920,118 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   // 다중 비교 보정을 p 에만 걸고 need 에 안 걸면 두 숫자가 서로 어긋난다.
   assert.ok(/x\.need=gamesToDecide\(x\.recent\.k,x\.recent\.n,x\.base\.k,x\.base\.n,items\.length\);/.test(html),
     'v12: required-sample must use the same multiple-comparison correction as p');
+}
+
+
+/* [v18] '손에 익은 픽 우선'. 사용자가 실제로 이겼을 때 한 행동(점수를 조금
+   손해 보고 더 익숙한 챔을 고르는 것)을 옮긴 기능인데, 근거는 약하다 —
+   숙련 판수만으로는 승패가 안 갈린다(일치도 0.4988). 그래서 이 기능이
+   '추천'을 '내 챔폭 정렬'로 바꿔버리지 않도록 경계를 소스에서 못박는다. */
+{
+  const band=Number(/const FAMILIAR_BAND=(\d+(?:\.\d+)?);/.exec(html)?.[1]);
+  assert.ok(Number.isFinite(band),'v18: FAMILIAR_BAND must be a literal number');
+  /* 폭이 넓어지면 점수는 의미를 잃고 '많이 해본 순'이 된다. 실측 이탈 비용
+     평균이 2.4점이었으므로 그 근처를 넘어서면 근거가 사라진다. */
+  assert.ok(band>0&&band<=4,`v18: FAMILIAR_BAND ${band} is outside the measured deviation cost`);
+
+  // 기본은 꺼짐. 근거가 없는 기능을 전원에게 켜면 노이즈를 가중하는 짓이다.
+  assert.ok(/let weights=\{[^}]*familiarFirst:false\}/.test(html),
+    'v18: familiar-first must default to OFF');
+  assert.ok(/const next=Object\.assign\(\{[^}]*familiarFirst:false\}/.test(html)
+    &&/next\.familiarFirst=!!next\.familiarFirst;/.test(html),
+    'v18: the sanitizer must supply and coerce familiarFirst');
+  // 초기화가 이 설정을 말없이 꺼버리면 사용자는 켠 줄 알고 계속 쓴다.
+  assert.ok(/const \{recMode,goal,autoAxis,familiarFirst\}=weights;/.test(html)
+    &&/sanitizeWeights\(\{[^}]*familiarFirst,/.test(html),
+    'v18: resetting the sliders must preserve the familiar-first choice');
+
+  /* 재정렬 블록을 실제로 돌려서 경계를 확인한다. 소스 문자열만 보면
+     '밴드 밖도 같이 정렬해버리는' 종류의 사고를 잡을 수 없다. */
+  const ffSrc=html.slice(html.indexOf('let familiarBumped=null;'),html.indexOf('lastCands=cands;'));
+  assert.ok(ffSrc.includes('weights.familiarFirst'),'v18: re-rank block not extractable');
+  const runFF=new Function('weights','cands','FAMILIAR_BAND','playCount',
+    ffSrc+'\nreturn {order:cands.map(x=>x.c.id),totals:cands.map(x=>x.s.total),familiarBumped};');
+  const mk=(id,total,n)=>({c:{id,kr:id},s:{total},n});
+  const run=(on,list)=>{
+    const games=Object.fromEntries(list.map(o=>[o.c.id,o.n]));
+    return runFF({familiarFirst:on},list.map(o=>({c:o.c,s:{total:o.s.total}})),band,id=>games[id]||0);
+  };
+
+  // 꺼져 있으면 아무것도 건드리지 않는다.
+  {
+    const r=run(false,[mk('A',61,1),mk('B',60,99)]);
+    assert.deepEqual(r.order,['A','B'],'v18: disabled must not re-order');
+    assert.equal(r.familiarBumped,null,'v18: disabled must not claim a bump');
+  }
+  // 밴드 안이면 더 많이 해본 챔이 올라가고, 감수한 점수 손해를 그대로 들고 온다.
+  {
+    const r=run(true,[mk('A',61,1),mk('B',60,99)]);
+    assert.deepEqual(r.order,['B','A'],'v18: the more familiar in-band pick must lead');
+    assert.ok(r.familiarBumped,'v18: a re-order must be disclosed');
+    assert.equal(r.familiarBumped.over,'A');
+    assert.ok(Math.abs(r.familiarBumped.cost-1)<1e-9,'v18: cost must be the real score gap');
+    assert.equal(r.familiarBumped.games,99,"v18: the disclosed game count must be the promoted pick");
+  }
+  /* 밴드 밖은 절대 올라오면 안 된다. 여기가 뚫리면 이 기능은 추천이 아니라
+     '많이 해본 순 정렬'이 되고, 점수는 장식이 된다. */
+  {
+    const r=run(true,[mk('A',70,0),mk('B',70-band-0.01,999)]);
+    assert.deepEqual(r.order,['A','B'],'v18: a pick outside the band must never be promoted');
+    assert.equal(r.familiarBumped,null);
+  }
+  // 경계값은 포함한다(<=). 안 그러면 설정 문구 '이내'가 거짓말이 된다.
+  {
+    const r=run(true,[mk('A',70,0),mk('B',70-band,5)]);
+    assert.deepEqual(r.order,['B','A'],'v18: the band edge must be inclusive, as the UI says');
+  }
+  // 점수는 손대지 않는다 — 순서만 바꾸는 기능이다.
+  {
+    const r=run(true,[mk('A',61,1),mk('B',60,99),mk('C',40,500)]);
+    assert.deepEqual(r.totals.slice().sort((a,b)=>b-a),[61,60,40],'v18: scores must be untouched');
+    assert.equal(r.order[2],'C','v18: below-band candidates must keep their place');
+  }
+  // 판수가 같으면 점수가 높은 쪽이 앞이다(동점에서 순서가 흔들리면 안 된다).
+  {
+    const r=run(true,[mk('A',61,7),mk('B',60,7)]);
+    assert.deepEqual(r.order,['A','B'],'v18: equal familiarity must fall back to score');
+    assert.equal(r.familiarBumped,null,'v18: no bump means no badge');
+  }
+  // 1순위가 이미 제일 익숙하면 배지를 바꿀 이유가 없다.
+  {
+    const r=run(true,[mk('A',61,99),mk('B',60,1)]);
+    assert.deepEqual(r.order,['A','B']);
+    assert.equal(r.familiarBumped,null);
+  }
+
+  /* 재정렬해 놓고 '종합 1순위'라고 적으면 화면이 거짓말을 한다.
+     v18 이전의 무조건 배지가 남아 있으면 안 된다. */
+  assert.ok(/if\(i===0\)badge\+=familiarBumped/.test(html),
+    'v18: the top badge must branch on whether it was re-ranked');
+  assert.ok(!/if\(i===0\)badge\+=`<span class="bd-type">종합 1순위<\/span>`/.test(html),
+    'v18: the unconditional "top pick" badge must be gone');
+  assert.ok(/손에 익은 픽 · −\$\{familiarBumped\.cost\.toFixed\(1\)\}점/.test(html),
+    'v18: the re-ranked badge must show the score it cost');
+  assert.ok(/\.bd-type\.fam\{/.test(html),'v18: the re-ranked badge needs its own style');
+  /* 카드 리본도 CSS 로 'BEST' 라고 적혀 있었다. 배지만 고치면 같은 카드가
+     두 가지 말을 한다. */
+  assert.ok(/\.rec\.top1\.bumped::before\{content:"MY PICK"\}/.test(html),
+    'v18: the gold ribbon must stop saying BEST on a re-ranked pick');
+  assert.ok(/i===0\?'top1'\+\(familiarBumped\?' bumped':''\):''/.test(html),
+    'v18: the ribbon class must follow the re-rank');
+
+  /* 기록에 남기지 않으면 v17 순응도 분석에서 '1순위'의 뜻이 판마다 말없이
+     달라진다. 남기고, 섞인 판수를 카드에서 밝혀야 한다. */
+  assert.ok(/familiarFirst:weights\.familiarFirst\?1:undefined,/.test(html),
+    'v18: each match must record whether its top3 was re-ranked');
+  assert.ok(/reranked:T\.filter\(m=>m\.familiarFirst\)\.length,/.test(html),
+    'v18: the adherence model must count re-ranked matches');
+  assert.ok(/\$\{A\.reranked\?/.test(html),
+    'v18: the adherence card must disclose the mixed sample');
+
+  // 근거가 약하다는 사실을 설정 화면에서 숨기면 안 된다.
+  assert.ok(/class="poolnote ffwarn"/.test(html)&&/근거가 확실해서 넣은 기능이 아닙니다/.test(html),
+    'v18: the settings screen must state that the evidence is weak');
+  assert.ok(/0\.50|0\.4988/.test(html),'v18: the measured AUC must be shown, not summarized away');
 }
 
 
