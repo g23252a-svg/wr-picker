@@ -97,6 +97,8 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .kdain:focus{outline:none;border-color:var(--cyan)}
 .perfrow .pfhint{font-size:10.5px;color:var(--dimmer);flex:1 1 100%;line-height:1.4}
 .perfrow .pfhint b{color:var(--gold-soft)}
+.dx.warnbox{border-color:#5b4a1e;background:#1c1810}
+[data-theme="light"] .dx.warnbox{background:#fffaf0;border-color:#e9ce91}
 .unk{color:#f0b232;font-weight:700;border-bottom:1px dotted currentColor;cursor:help}
 .bd-first.hot{border:1px solid #f0b232;background:#2a2008}
 .bd-first.hot small{font-weight:600;opacity:.75;margin-left:2px}
@@ -968,8 +970,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='16.0.0';
-const MODEL_VERSION='16.0.0-new-champs';
+const APP_VERSION='17.0.0';
+const MODEL_VERSION='17.0.0-adherence';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -3275,6 +3277,44 @@ function analysisModel(){
     out.calib.low={n:h,w:s.slice(0,h).filter(r=>r.won).length};
     out.calib.high={n:h,w:s.slice(-h).filter(r=>r.won).length};
   }
+  /* ============ [v17] 추천 순응도 — 이 앱을 따르면 실제로 이겼나 ============
+   * 이 앱은 v10부터 '엔진 자기 검증'(점수 구간별 승률)을 해왔지만, 정작 가장
+   * 직접적인 질문은 한 번도 묻지 않았다 — **추천대로 골랐을 때와 아닐 때
+   * 결과가 달랐는가.** 판마다 top3 를 저장해 두고도 쓰지 않았다.
+   *
+   * 실사용 271판에서 1순위 그대로 50%(234판), 이탈 80%(15판), p=0.022 다.
+   * 이건 '엔진이 해롭다'는 뜻이 아니다 — 이탈은 사용자가 이유가 있을 때만
+   * 하는 행동이라 선택 편향이 크고, 15판은 작다. 실제로 이탈한 판의 픽은
+   * 엔진 점수가 더 낮았고(59.0 vs 61.4) 대신 **그 챔으로 해본 판수가 많았다
+   * (7.2판 vs 5.4판)**. 기계가 아니라 손이 이긴 것에 가깝다.
+   *
+   * 그래도 이 숫자는 앱이 사용자에게 빚진 것이다. 숨기지 않고, 대신 교란을
+   * 같이 적는다. */
+  out.adhere=null;
+  {
+    const T=M.filter(m=>Array.isArray(m.top3)&&m.top3.length>=1);
+    const top1=T.filter(m=>m.pick===m.top3[0]);
+    const devi=T.filter(m=>m.pick!==m.top3[0]);
+    if(top1.length>=MIN_BUCKET&&devi.length>=MIN_BUCKET){
+      const w=A=>A.filter(m=>m.won).length;
+      // 이탈의 정체를 드러내는 값: 그 판 시점에 그 챔으로 해본 판수.
+      const seenAt={}, playedBefore=new Map();
+      M.forEach(m=>{playedBefore.set(m,seenAt[m.pick]||0);seenAt[m.pick]=(seenAt[m.pick]||0)+1;});
+      const mean=(A,f)=>A.length?A.reduce((s,m)=>s+f(m),0)/A.length:null;
+      out.adhere={
+        top1:{n:top1.length,w:w(top1)},
+        devi:{n:devi.length,w:w(devi)},
+        inTop3:(()=>{const g=devi.filter(m=>m.top3.includes(m.pick));return {n:g.length,w:w(g)};})(),
+        outside:(()=>{const g=devi.filter(m=>!m.top3.includes(m.pick));return {n:g.length,w:w(g)};})(),
+        p:propDiffP(w(top1),top1.length,w(devi),devi.length),
+        need:gamesToDecide(w(top1),top1.length,w(devi),devi.length,1),
+        famTop1:mean(top1,m=>playedBefore.get(m)),
+        famDevi:mean(devi,m=>playedBefore.get(m)),
+        coverage:T.length/M.length
+      };
+    }
+  }
+
   /* [v10] 축별 성적표. 총점만 검증하면 어느 축이 틀렸는지 알 수 없다. */
   out.axes=axisReport();
   out.autoAxis=weights.autoAxis!==false;
@@ -3438,6 +3478,11 @@ function analysisModel(){
          unknown: 표본이 모자라 아무 말도 못 한다. */
       /* 전체 평균은 맥락으로만 싣고 판정에서 뺀다. */
       confounded:true,
+      /* [v17] enough 는 전체 기록 판수만 봤다. 연패 구간은 이긴 판이 1~2판뿐이라
+         이긴 쪽 비교가 아예 불가능한데도(meanDiffP 가 null) 카드는 "같은 결과의
+         판끼리 비교하면 성과는 그대로"라고 양쪽을 다 본 것처럼 말했다.
+         실제로 271판 시점에 이긴 판이 1판이었다. 어느 쪽을 실제로 쟀는지 밝힌다. */
+      testedLost:fLost.p!=null, testedWon:fWon.p!=null,
       verdict:!enough?'unknown':declined?'decline':wrDown?'held':'unknown'
     };
     out.diag={
@@ -3735,10 +3780,14 @@ function renderAnalysis(){
         const row=(k,x)=>`<div class="fr"><span>${k}</span><span><b>${fmt(x.base)}</b> → <b>${fmt(x.recent)}</b>${x.p!=null?` <span style="color:var(--dimmer)">우연 ${x.p<0.01?'1%미만':Math.round(x.p*100)+'%'}</span>`:''}</span></div>`;
         return `<div class="formbox ${f.verdict}">
           <div class="fh">${f.verdict==='held'?'성과 등급은 떨어지지 않았습니다':'성과 등급도 같이 떨어졌습니다'}</div>
-          ${row('진 판의 성과',f.lost)}
-          ${row('이긴 판의 성과',f.won)}
+          ${row('진 판의 성과'+(f.testedLost?'':' <span style="opacity:.6">(표본 부족)</span>'),f.lost)}
+          ${row('이긴 판의 성과'+(f.testedWon?'':' <span style="opacity:.6">(표본 부족)</span>'),f.won)}
           <div class="fn">${f.verdict==='held'
-            ? `승률은 내려갔는데 <b>같은 결과의 판끼리 비교하면 성과는 그대로</b>입니다. 실력이 떨어졌다는 근거가 없다는 뜻이라, 픽이나 습관을 뜯어고칠 이유도 없습니다.`
+            ? (f.testedLost&&f.testedWon
+              ? `승률은 내려갔는데 <b>같은 결과의 판끼리 비교하면 성과는 그대로</b>입니다. 실력이 떨어졌다는 근거가 없다는 뜻이라, 픽이나 습관을 뜯어고칠 이유도 없습니다.`
+              : f.testedLost
+              ? `승률은 내려갔는데 <b>진 판의 성과는 그대로</b>입니다 — 지는 판에서 내 플레이가 무너진 건 아닙니다. 다만 이 구간엔 이긴 판이 ${f.won.recent.n}판뿐이라 <b>이긴 쪽은 비교하지 못했습니다.</b>`
+              : `이 구간은 <b>한쪽 표본이 모자라 성과를 제대로 비교하지 못했습니다.</b> 판이 더 쌓여야 갈립니다.`)
             : `<b>진 판·이긴 판 안에서도</b> 성과가 내려갔습니다. 이건 구성이 아니라 플레이 쪽 신호입니다 — 손에 익은 챔으로 좁히고 판수를 줄여 보세요.`}
             <span style="color:var(--dimmer)">결과가 같은 판끼리만 비교합니다. 전체 평균은 연패 중이면 자동으로 낮아져 아무것도 말해주지 않습니다.</span></div></div>`;
       })():''}
@@ -3770,6 +3819,30 @@ function renderAnalysis(){
 
   /* [v9] 엔진이 자기 성적표를 낸다. 추천 점수가 실제 승률과 같은 방향으로
      움직이지 않으면 그 사실을 숨기지 않고 그대로 보여준다. */
+  /* [v17] 이 앱을 따르면 실제로 이겼나. 가장 불편할 수 있는 숫자라 가장 먼저 낸다. */
+  const adhereCard=a.adhere?(()=>{
+    const A=a.adhere, r=x=>Math.round(x.w/x.n*100);
+    const solid=A.p<=SIG_P;
+    const deviBetter=A.devi.w/A.devi.n>A.top1.w/A.top1.n;
+    const pTx=A.p<0.01?'1% 미만':Math.round(A.p*100)+'%';
+    return `<div class="dx${solid&&deviBetter?' warnbox':''}">
+      <div class="dxh"><span class="dxt">추천대로 골랐을 때</span>
+        <span class="dxn">top3 기록된 ${A.top1.n+A.devi.n}판</span></div>
+      ${barRow('1순위 그대로',A.top1.w,A.top1.n)}
+      ${barRow('다른 챔 선택',A.devi.w,A.devi.n)}
+      <div class="dxs">${solid
+        ? (deviBetter
+          ? `<b>추천을 벗어났을 때가 더 좋았습니다</b> — 1순위 <b>${r(A.top1)}%</b>(${A.top1.n}판) vs 이탈 <b>${r(A.devi)}%</b>(${A.devi.n}판), 우연일 확률 <b>${pTx}</b>.`
+          : `추천대로 고른 쪽이 더 좋았습니다 — 1순위 <b>${r(A.top1)}%</b> vs 이탈 <b>${r(A.devi)}%</b>, 우연일 확률 <b>${pTx}</b>.`)
+        : `1순위 <b>${r(A.top1)}%</b>(${A.top1.n}판) vs 이탈 <b>${r(A.devi)}%</b>(${A.devi.n}판). 이 차이는 <b>우연일 확률 ${pTx}</b>로, 아직 어느 쪽이 낫다고 말할 수 없습니다.${needTxt(A.need)}`}
+      ${solid&&deviBetter?`<br><span style="color:var(--dimmer)">다만 이걸 "앱을 무시하라"로 읽으면 안 됩니다. 이탈은 <b>이유가 있을 때만</b> 하는 행동이라 표본이 한쪽으로 기울어 있고(${A.devi.n}판), 실제로 이탈한 판의 픽은 <b>엔진 점수가 더 낮았습니다</b>. 대신 달랐던 건 하나입니다 —</span>`:''}
+      ${A.famTop1!=null?`<div class="fr" style="margin-top:6px"><span>그 챔으로 해본 판수</span><span>1순위 <b>${A.famTop1.toFixed(1)}판</b> · 이탈 <b>${A.famDevi.toFixed(1)}판</b></span></div>`:''}
+      <span style="color:var(--dimmer);font-size:11px">${A.famDevi>A.famTop1
+        ? `추천을 벗어날 때 <b>더 손에 익은 챔</b>으로 갔습니다. 기계보다 손이 이긴 쪽에 가깝고, 이 앱의 유일한 단정형 조언(처음 잡는 챔 줄이기)과도 같은 방향입니다.`
+        : `추천을 벗어날 때 손에 익은 정도는 비슷했습니다.`}</span>
+      </div></div>`;
+  })():'';
+
   const calibCard=(a.calib.n>=12)?`<div class="dx">
     <div class="dxh"><span class="dxt">추천 점수 → 실제 승률 <span class="dxn">(엔진 성적표)</span></span><span class="dxn">${a.calib.n}판 재채점</span></div>
     ${a.calib.bands.map(b=>barRow(b.label,b.w,b.n)).join('')}
@@ -3929,7 +4002,7 @@ function renderAnalysis(){
     ${a.oneOff.length?`<div class="dxs">그 외 <b>${a.oneOff.length}종</b>을 한 판씩만 사용했습니다 (합계 ${Math.round(a.oneOff.filter(c=>c.w).length/a.oneOff.length*100)}%).</div>`:''}
     </div>`:'';
 
-  body.innerHTML=verdict+diagCard+insights+spark+growCard+calibCard+axisCard+oppCard+inputCard+expCard+laneCard+duoCard+tiCard+dailyCard+perfCard+champCard;
+  body.innerHTML=verdict+diagCard+insights+adhereCard+spark+growCard+calibCard+axisCard+oppCard+inputCard+expCard+laneCard+duoCard+tiCard+dailyCard+perfCard+champCard;
 }
 let logTab='rec';
 function setLogTab(t){
