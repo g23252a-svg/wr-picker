@@ -9643,6 +9643,503 @@
       "lanerConf": 1,
       "perf": null,
       "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789127913617,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "mid",
+      "laneMark": null,
+      "ally": [
+        3869052021,
+        3116102025
+      ],
+      "enemy": [
+        3600349451,
+        3302522831
+      ],
+      "pick": 2510988346,
+      "top": 2510988346,
+      "top3": [
+        2510988346,
+        487321584,
+        2885201677
+      ],
+      "scoreSnapshot": {
+        "total": 63,
+        "meta": 49,
+        "team": 62,
+        "counter": 73,
+        "comfort": 61,
+        "confidence": 42
+      },
+      "won": true,
+      "lanerAuto": 3600349451,
+      "lanerConf": 1,
+      "perf": "ok",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789340738128,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "jug",
+      "laneMark": null,
+      "ally": [
+        3869052021,
+        3350865018,
+        218792401
+      ],
+      "enemy": [
+        1192808340,
+        2927277762,
+        1054796970
+      ],
+      "pick": 2048972712,
+      "top": 2048972712,
+      "top3": [
+        2048972712,
+        3822637018,
+        215000883
+      ],
+      "scoreSnapshot": {
+        "total": 69,
+        "meta": 71,
+        "team": 67,
+        "counter": 75,
+        "comfort": 60,
+        "confidence": 91
+      },
+      "won": false,
+      "lanerAuto": 2927277762,
+      "lanerConf": 1,
+      "perf": null,
+      "kda": null,
+      "teamIssue": 1
+    },
+    {
+      "schema": 5,
+      "t": 1789358253267,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "mid",
+      "laneMark": null,
+      "ally": [
+        3121909278,
+        2803669030
+      ],
+      "enemy": [
+        535786191,
+        2512882388,
+        1627807079
+      ],
+      "pick": 3600349451,
+      "top": 3600349451,
+      "top3": [
+        3600349451,
+        2675241855,
+        3356476760
+      ],
+      "scoreSnapshot": {
+        "total": 64,
+        "meta": 61,
+        "team": 80,
+        "counter": 55,
+        "comfort": 63,
+        "confidence": 88
+      },
+      "won": true,
+      "lanerAuto": 1627807079,
+      "lanerConf": 0.03,
+      "perf": "mvp",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789378275407,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "mid",
+      "laneMark": null,
+      "ally": [
+        2512882388
+      ],
+      "enemy": [
+        1006242304,
+        566834281
+      ],
+      "pick": 2755145694,
+      "top": 2755145694,
+      "top3": [
+        2755145694,
+        2885201677,
+        2510988346
+      ],
+      "scoreSnapshot": {
+        "total": 61,
+        "meta": 66,
+        "team": 54,
+        "counter": 66,
+        "comfort": 50,
+        "confidence": 89
+      },
+      "won": false,
+      "lanerAuto": 566834281,
+      "lanerConf": 1,
+      "perf": "bad",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789390588991,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "jug",
+      "laneMark": null,
+      "ally": [
+        218792401,
+        528224650
+      ],
+      "enemy": [
+        2446127352,
+        1214650771
+      ],
+      "pick": 3822637018,
+      "top": 2048972712,
+      "top3": [
+        2048972712,
+        3822637018,
+        799675594
+      ],
+      "scoreSnapshot": {
+        "total": 63,
+        "meta": 70,
+        "team": 69,
+        "counter": 60,
+        "comfort": 55,
+        "confidence": 85
+      },
+      "won": false,
+      "lanerAuto": 1214650771,
+      "lanerConf": 1,
+      "perf": "bad",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789397124076,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "jug",
+      "laneMark": null,
+      "ally": [
+        731805585,
+        437655700
+      ],
+      "enemy": [
+        1830583958,
+        2269074049
+      ],
+      "pick": 799675594,
+      "top": 799675594,
+      "top3": [
+        799675594,
+        2048972712,
+        215000883
+      ],
+      "scoreSnapshot": {
+        "total": 62,
+        "meta": 63,
+        "team": 70,
+        "counter": 56,
+        "comfort": 58,
+        "confidence": 82
+      },
+      "won": true,
+      "lanerAuto": null,
+      "lanerConf": 0,
+      "perf": null,
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789398546616,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "sup",
+      "laneMark": null,
+      "ally": [
+        70789481,
+        2755145694,
+        3869052021
+      ],
+      "enemy": [
+        2446127352,
+        2143559556
+      ],
+      "pick": 2510988346,
+      "top": 1054796970,
+      "top3": [
+        1054796970,
+        2510988346,
+        2675241855
+      ],
+      "scoreSnapshot": {
+        "total": 56,
+        "meta": 52,
+        "team": 59,
+        "counter": 52,
+        "comfort": 61,
+        "confidence": 91
+      },
+      "won": true,
+      "lanerAuto": 2143559556,
+      "lanerConf": 1,
+      "perf": "bad",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789425793250,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "sup",
+      "laneMark": null,
+      "ally": [
+        528224650,
+        1674769685,
+        2885201677
+      ],
+      "enemy": [
+        2315421679,
+        1214650771,
+        2882632998,
+        2803669030
+      ],
+      "pick": 3600349451,
+      "top": 3600349451,
+      "top3": [
+        3600349451,
+        3302522831,
+        2510988346
+      ],
+      "scoreSnapshot": {
+        "total": 65,
+        "meta": 58,
+        "team": 94,
+        "counter": 48,
+        "comfort": 62,
+        "confidence": 95
+      },
+      "won": false,
+      "lanerAuto": 2803669030,
+      "lanerConf": 1,
+      "perf": "svp",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789444699015,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "top",
+      "laneMark": null,
+      "ally": [
+        2269074049,
+        3116102025,
+        2755145694
+      ],
+      "enemy": [
+        1214650771,
+        2446127352,
+        459949500
+      ],
+      "pick": 2675241855,
+      "top": 2675241855,
+      "top3": [
+        2675241855,
+        4256665268,
+        509118187
+      ],
+      "scoreSnapshot": {
+        "total": 67,
+        "meta": 72,
+        "team": 86,
+        "counter": 50,
+        "comfort": 66,
+        "confidence": 95
+      },
+      "won": false,
+      "lanerAuto": 459949500,
+      "lanerConf": 1,
+      "perf": "svp",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789721440143,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "top",
+      "laneMark": null,
+      "ally": [
+        2803669030,
+        2849955854,
+        2751956187
+      ],
+      "enemy": [],
+      "pick": 3554680443,
+      "top": 3554680443,
+      "top3": [
+        3554680443,
+        1116116504,
+        509118187
+      ],
+      "scoreSnapshot": {
+        "total": 63,
+        "meta": 52,
+        "team": 74,
+        "counter": 50,
+        "comfort": 55,
+        "confidence": 70
+      },
+      "won": false,
+      "lanerAuto": null,
+      "lanerConf": 0,
+      "perf": "bad",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789723016094,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "14.0.0-direction",
+      "lane": "adc",
+      "laneMark": null,
+      "ally": [
+        2401543660,
+        816995889,
+        5872201,
+        538194489
+      ],
+      "enemy": [
+        1662690149,
+        459949500,
+        1627807079,
+        1214650771,
+        234998409
+      ],
+      "pick": 295451893,
+      "top": 295451893,
+      "top3": [
+        295451893,
+        2882632998,
+        2726008380
+      ],
+      "scoreSnapshot": {
+        "total": 57,
+        "meta": 49,
+        "team": 59,
+        "counter": 63,
+        "comfort": 51,
+        "confidence": 95
+      },
+      "won": false,
+      "lanerAuto": 234998409,
+      "lanerConf": 1,
+      "perf": "good",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1789962575142,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "15.0.0-firstpick-fact",
+      "lane": "mid",
+      "laneMark": null,
+      "ally": [
+        459949500,
+        3121909278
+      ],
+      "enemy": [
+        816995889,
+        3454692617,
+        1830583958
+      ],
+      "pick": 2755145694,
+      "top": 2755145694,
+      "top3": [
+        2755145694,
+        2510988346,
+        487321584
+      ],
+      "scoreSnapshot": {
+        "total": 60,
+        "meta": 68,
+        "team": 53,
+        "counter": 66,
+        "comfort": 44,
+        "confidence": 95
+      },
+      "won": false,
+      "lanerAuto": 816995889,
+      "lanerConf": 1,
+      "perf": "ok",
+      "kda": null
+    },
+    {
+      "schema": 5,
+      "t": 1790068882261,
+      "patch": "7.2e",
+      "sourcePatch": "7.2e",
+      "modelVersion": "15.0.0-firstpick-fact",
+      "lane": "sup",
+      "laneMark": null,
+      "ally": [
+        1925432104,
+        1993410990,
+        295451893
+      ],
+      "enemy": [
+        2315421679,
+        240250082,
+        3871436374,
+        2885201677
+      ],
+      "pick": 3600349451,
+      "top": 3600349451,
+      "top3": [
+        3600349451,
+        2510988346,
+        3302522831
+      ],
+      "scoreSnapshot": {
+        "total": 67,
+        "meta": 59,
+        "team": 82,
+        "counter": 66,
+        "comfort": 61,
+        "confidence": 95
+      },
+      "won": false,
+      "lanerAuto": 3871436374,
+      "lanerConf": 1,
+      "perf": "ok",
+      "kda": null
     }
   ],
   "pool": {

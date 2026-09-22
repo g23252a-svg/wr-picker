@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='16.0.0'"));
+assert.ok(html.includes("const APP_VERSION='17.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -670,7 +670,45 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(wide>=0&&narrow>0,'both must return a usable count');
   assert.ok(wide<narrow,'a bigger observed gap must need fewer extra games');
 
-  /* [v16] 게임에 신챔이 나오면 통계엔 들어오는데 앱 DB 에 없어 sanitizeStatsTable 이
+  /* [v17] 이 앱을 따르면 실제로 이겼나. 판마다 top3 를 저장해 두고도 한 번도
+   쓰지 않았다 — 가장 직접적인 자기 검증인데. 271판에서 1순위 50%(234판) vs
+   이탈 80%(15판), p=0.022. 불편한 숫자라 더더욱 게이트와 교란 표시가 중요하다. */
+{
+  assert.ok(/out\.adhere=null;/.test(html),'v17: adherence must default to null');
+  assert.ok(/if\(top1\.length>=MIN_BUCKET&&devi\.length>=MIN_BUCKET\)\{/.test(html),
+    'v17: both sides need a real sample before the app says anything');
+  assert.ok(/p:propDiffP\(w\(top1\),top1\.length,w\(devi\),devi\.length\)/.test(html),
+    'v17: the adherence gap must be tested, not just shown');
+  assert.ok(/need:gamesToDecide\(w\(top1\),top1\.length,w\(devi\),devi\.length,1\)/.test(html),
+    'v17: an inconclusive adherence gap must say how many games would settle it');
+  // 교란을 반드시 싣는다 — 이탈은 이유가 있을 때만 하는 행동이다.
+  assert.ok(/famTop1:mean\(top1,m=>playedBefore\.get\(m\)\)/.test(html)
+    &&/famDevi:mean\(devi,m=>playedBefore\.get\(m\)\)/.test(html),
+    'v17: the familiarity confound must be measured alongside the claim');
+  assert.ok(/앱을 무시하라/.test(html),
+    'v17: a significant "deviation wins" result must carry its selection-bias caveat');
+  assert.ok(/const solid=A\.p<=SIG_P;/.test(html),'v17: confident wording is gated on significance');
+  // playedBefore 는 '그 판 시점까지'여야 한다 — 사후편향이 들어가면 교란 설명이 거짓이 된다.
+  assert.ok(/M\.forEach\(m=>\{playedBefore\.set\(m,seenAt\[m\.pick\]\|\|0\);seenAt\[m\.pick\]=\(seenAt\[m\.pick\]\|\|0\)\+1;\}\);/.test(html),
+    'v17: familiarity must be counted forward, without hindsight');
+  assert.ok(/body\.innerHTML=verdict\+diagCard\+insights\+adhereCard\+/.test(html),
+    'v17: the adherence card must be mounted');
+}
+
+/* [v17] 성과 축의 enough 게이트는 전체 기록 판수만 봤다. 연패 구간은 이긴 판이
+   1~2판뿐이라 이긴 쪽 비교가 불가능한데도 "같은 결과의 판끼리" 양쪽을 다 본 것처럼
+   말했다. 실제로 271판 시점에 이긴 판이 1판이었다. */
+{
+  assert.ok(/testedLost:fLost\.p!=null, testedWon:fWon\.p!=null,/.test(html),
+    'v17: the card must know which side it could actually test');
+  assert.ok(/f\.testedLost&&f\.testedWon/.test(html),
+    'v17: the both-sides sentence must require both sides');
+  assert.ok(/이긴 판이 \$\{f\.won\.recent\.n\}판뿐이라/.test(html),
+    'v17: the count must come from the right field (the draft printed undefined)');
+  assert.ok(!/\$\{f\.won\.n\}/.test(html),'v17: f.won.n does not exist');
+}
+
+/* [v16] 게임에 신챔이 나오면 통계엔 들어오는데 앱 DB 에 없어 sanitizeStatsTable 이
    통째로 버렸다 — 그것도 조용히. 고를 수도, 기록할 수도, 상대팀에 넣을 수도 없는데
    이유를 알 길이 없었다. 7.3(흐웨이·사일러스·렉사이)을 주입해 재현했다. */
 {
