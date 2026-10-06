@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='18.0.0'"));
+assert.ok(html.includes("const APP_VERSION='19.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -1032,6 +1032,121 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(/class="poolnote ffwarn"/.test(html)&&/근거가 확실해서 넣은 기능이 아닙니다/.test(html),
     'v18: the settings screen must state that the evidence is weak');
   assert.ok(/0\.50|0\.4988/.test(html),'v18: the measured AUC must be shown, not summarized away');
+}
+
+
+/* [v19] 추세 기준선과 자기 채점의 시점. 두 결함 모두 '이름과 다른 것을 재고 있던' 경우다.
+   - "직전 패치 대비"가 실은 '어제 대비'였고, 그 하루 변화는 다음 날 되돌아간다(−0.27).
+   - 엔진 자기 검증이 7월 판을 10월 통계로 채점해 메타 축이 실제보다 좋아 보였다
+     (0.544 → 그 판 당시 통계로 0.497). 자동 보정이 그걸 믿고 메타 발언권을 올렸다. */
+{
+  const {patchBaseline}=await import('../scripts/trend-baseline.mjs');
+  const {buildByPatch}=await import('../scripts/patch-history.mjs');
+  const row=(win,pick=5,ban=1,extra={})=>({win,pick,ban,...extra});
+  const arc=(patch,updated,stats,extra={})=>({patch,updated,brackets:{diamond:{stats},...extra}});
+
+  // 같은 패치 아카이브만 있으면 기준선은 없다 — '어제'로 대신하지 않는다.
+  assert.equal(patchBaseline([arc('7.3a','2026-10-01',{A:{mid:row(50)}})],'7.3a'),null,
+    'v19: no previous patch means no trend, not a day-over-day one');
+  // 현재 패치는 건너뛰고, 직전 패치의 마지막 3일만 평균한다.
+  {
+    const A=[arc('7.2e','2026-09-18',{A:{mid:row(40)}}),arc('7.2e','2026-09-19',{A:{mid:row(50)}}),
+      arc('7.2e','2026-09-20',{A:{mid:row(52)}}),arc('7.2e','2026-09-21',{A:{mid:row(54)}}),
+      arc('7.3','2026-09-22',{A:{mid:row(99)}})];
+    const b=patchBaseline(A,'7.3');
+    assert.equal(b.patch,'7.2e','v19: baseline must come from the previous patch');
+    assert.equal(b.days,3);assert.equal(b.from,'2026-09-19');assert.equal(b.updated,'2026-09-21');
+    assert.equal(b.brackets.diamond.stats.A.mid.win,52,'v19: baseline is the mean of the last 3 days');
+  }
+  // 그 사흘 중 하루라도 빠진 행은 평균하지 않는다. 픽률은 최솟값(앱의 1% 문턱을 보수적으로).
+  {
+    const A=[arc('7.2e','2026-09-19',{A:{mid:row(50,3)},B:{top:row(50)}}),arc('7.2e','2026-09-20',{A:{mid:row(52,0.8)}}),
+      arc('7.2e','2026-09-21',{A:{mid:row(54,4)},B:{top:row(50)}})];
+    const s=patchBaseline(A,'7.3').brackets.diamond.stats;
+    assert.ok(!s.B,'v19: a row missing on any baseline day must be dropped');
+    assert.equal(s.A.mid.pick,0.8,'v19: baseline pick rate must be the minimum');
+  }
+
+  // 배포 데이터가 실제로 그렇게 만들어졌는지(정기 수집 봇도 이 검사를 통과해야 커밋된다).
+  assert.ok(!latest.prev||latest.prev.patch!==latest.patch,
+    `v19: latest.json trend baseline is the same patch (${latest.patch}) — that is day-over-day noise`);
+  assert.ok(!meta.prevPatch||meta.prevPatch!==meta.patch,'v19: stats.js trend baseline must be a previous patch');
+
+  /* 패치별 통계 묶음. 앱이 옛 판을 그 판 당시 통계로 채점하는 근거 자료다. */
+  const byPatch=JSON.parse(fs.readFileSync(new URL('../data/by-patch.json',import.meta.url),'utf8'));
+  const bpRaw=fs.readFileSync(new URL('../data/by-patch.json',import.meta.url));
+  assert.ok(bpRaw.length<400*1024,`v19: by-patch.json grew to ${bpRaw.length} bytes`);
+  assert.equal(byPatch.updated,latest.updated,'v19: by-patch.json must be regenerated with latest.json');
+  assert.ok(byPatch.patches[latest.patch],'v19: by-patch.json must include the current patch');
+  for(const [p,v] of Object.entries(byPatch.patches)){
+    assert.match(p,/^[0-9A-Za-z.]{1,12}$/);
+    assert.ok(isDate(v.from)&&isDate(v.to)&&v.from<=v.to,`v19: ${p} date range`);
+    assert.ok(v.brackets.diamond,`v19: ${p} must carry Diamond+`);
+    for(const roles of Object.values(v.brackets.diamond))for(const a of Object.values(roles))
+      assert.ok(Array.isArray(a)&&(a.length===3||(a.length===4&&a[3]===1)),`v19: ${p} compact row shape`);
+  }
+  // 절반 규칙과 주 라인 다수결, 그리고 앱이 고를 수 없는 구간은 싣지 않는다.
+  {
+    const A=[arc('7.2b','2026-08-01',{A:{mid:row(50,3,1,{main:1})},B:{top:row(40)}},{apex:{stats:{A:{mid:row(1)}}}}),
+      arc('7.2b','2026-08-02',{A:{mid:row(52,3,1,{main:1})}}),arc('7.2b','2026-08-03',{A:{mid:row(54,3,1)}})];
+    const out=buildByPatch(A,['diamond']).patches['7.2b'];
+    assert.deepEqual(out.brackets.diamond.A.mid,[52,3,1,1],'v19: per-patch mean with majority main flag');
+    assert.ok(!out.brackets.diamond.B,'v19: a row seen on under half the days is chance, not an average');
+    assert.ok(!out.brackets.apex,'v19: brackets the app cannot select must be dropped');
+    assert.equal(out.days,3);
+  }
+
+  /* 앱 쪽 — 원격 payload 는 신뢰 경계 밖이고, v18 시절 캐시가 남아 있을 수 있다.
+     같은 패치 기준선은 받지 않는다. 정제기를 실제로 돌려서 확인한다. */
+  const fnSrc=name=>{
+    const i=html.indexOf(`function ${name}(`);assert.ok(i>=0,`v19: cannot find ${name}`);
+    let d=0,j=html.indexOf('{',i);
+    for(;j<html.length;j++){if(html[j]==='{')d++;else if(html[j]==='}'&&--d===0)break;}
+    return html.slice(i,j+1);
+  };
+  const byEnStub=Object.fromEntries(champions.map(r=>[r[1],true]));
+  const S=new Function('byEn','ROLE_KEYS',
+    ['isPatchBaseline','sanitizeStatsTable','sanitizeStatsPayload','sanitizeByPatch'].map(fnSrc).join('\n')
+    +'\nreturn {isPatchBaseline,sanitizeStatsPayload,sanitizeByPatch};')(byEnStub,['top','jug','mid','adc','sup']);
+  const okRow={Ahri:{mid:{win:51,pick:4,ban:1}}};
+  const pay=(patch,prevPatch)=>({patch,updated:'2026-10-05',brackets:{diamond:{stats:okRow}},
+    prev:{patch:prevPatch,updated:'2026-10-04',brackets:{diamond:{stats:okRow}}}});
+  assert.equal(S.sanitizeStatsPayload(pay('7.3a','7.3a')).prev,undefined,
+    'v19: a same-patch (day-over-day) baseline must be refused, even from cache');
+  assert.equal(S.sanitizeStatsPayload(pay('7.3a','7.3')).prev.patch,'7.3','v19: a previous-patch baseline is kept');
+  assert.equal(S.isPatchBaseline('7.3a',null),false);
+  // 실제 배포 파일이 앱 정제기를 통과하고, 압축 행이 앱 형식으로 펼쳐지는지.
+  const bp=S.sanitizeByPatch(byPatch);
+  assert.ok(bp&&bp[latest.patch]&&Object.keys(bp[latest.patch].brackets.diamond).length>=100,
+    'v19: the shipped by-patch table must survive the app sanitizer');
+  const anyMain=Object.values(bp).some(p=>Object.values(p.brackets.diamond).some(r=>Object.values(r).some(x=>x.main===1)));
+  assert.ok(anyMain,'v19: main-lane flags must survive (enemy lane assignment uses them)');
+  assert.equal(S.sanitizeByPatch({patches:{'<x>':{from:'2026-01-01',to:'2026-01-02',brackets:{diamond:okRow}}}}),null,
+    'v19: unsafe patch labels must be dropped');
+
+  // 자기 채점은 판마다 그 판 당시 패치의 표로 바꿔 끼우고, 반드시 되돌린다.
+  assert.ok(/const hist=statsForMatch\(m\), tbl=hist\|\|savedStats;/.test(html),
+    'v19: replay must score each game with the stats of its own patch');
+  assert.ok(/if\(ROLE_STATS!==savedStats\|\|ROLE_STATS_PREV!==savedPrev\)\{ROLE_STATS=savedStats;ROLE_STATS_PREV=savedPrev;_asgKey=null;\}/.test(html),
+    'v19: replay must restore the live stats (and drop the lane-assignment cache) in finally');
+  assert.ok(/out\.push\(\{m,won:!!m\.won,asOf:hist\?1:0,/.test(html),'v19: each replayed game records what it was scored with');
+  assert.ok(/out\.asOf=\{n:R\.length,k:R\.filter\(r=>r\.asOf\)\.length\}/.test(html)&&/class="dxs asofwarn"/.test(html),
+    'v19: the axis card must say which stats it scored with, and warn when it used today’s');
+  assert.ok(/loadStatsByPatch\(\);\n\}\)\(\);/.test(html),'v19: the per-patch table must be loaded at startup');
+  assert.ok(/STATS_BY_PATCH=t;\n\s*_byPatchOrder=[^\n]*\n\s*bumpEngineData\(\);/.test(html),
+    'v19: adopting the table must invalidate the self-check caches');
+
+  // 추세는 사실로만: 점수 반영 0, 판 전체 이동은 빼고, '상승세/하락세'라고 부르지 않는다.
+  assert.ok(/const MOMENTUM_K=0;/.test(html),'v19: trend must not be extrapolated into the score');
+  assert.ok(/clamp\(trend\*MOMENTUM_K,/.test(html)&&!/trend\*1\.2/.test(html),'v19: the 1.2x momentum must be gone');
+  assert.ok(!/score\+=Math\.min\(t,3\)\*2/.test(html),'v19: ban threat must not add the trend either');
+  assert.ok(/return \+\(now\.win-prev\.win-trendOffset\(\)\)\.toFixed\(2\);/.test(html),
+    'v19: trend must be relative to the field');
+  assert.ok(!/패치 상승세|패치 하락세/.test(html.replace(/\/\*[\s\S]*?\*\//g,'')),
+    'v19: "상승세/하락세" implies it will continue — it did not');
+  assert.ok(!/메타\(\+패치 추세\)/.test(html),'v19: the legend must not claim the trend is in the score');
+  assert.ok(/let ROLE_STATS_PREV=\(window\.WR_STATS_META&&isPatchBaseline\(/.test(html),
+    'v19: the bundled snapshot must not show a same-patch trend either');
 }
 
 

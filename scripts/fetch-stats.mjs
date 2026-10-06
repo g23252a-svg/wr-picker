@@ -6,17 +6,22 @@
  *
  *   data/latest.json           every rank bracket, fetched by the app at runtime
  *   data/history/<date>.json   one archive per upstream "updated" date (trend source)
+ *   data/by-patch.json         per-patch averages, so the app can re-score old games
+ *                              with the stats of their own patch (patch-history.mjs)
  *   stats.js                   Diamond+ snapshot bundled into the app shell as the
- *                              offline fallback, plus the previous archive for trends
+ *                              offline fallback, plus the previous patch's baseline for trends
  *
  * Usage:
  *   node scripts/fetch-stats.mjs                  fetch from the network
  *   node scripts/fetch-stats.mjs --from <file>    parse a saved page (offline testing)
  *   node scripts/fetch-stats.mjs --dry-run        report only, write nothing
+ *   node scripts/fetch-stats.mjs --rebuild        regenerate outputs from the newest archive (no network)
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {patchBaseline} from './trend-baseline.mjs';
+import {buildByPatch} from './patch-history.mjs';
 
 const ROOT=path.resolve(path.dirname(fileURLToPath(import.meta.url)),'..');
 const SOURCE_URL='https://www.wildriftfire.com/stats';
@@ -102,7 +107,7 @@ const fmtRoles=roles=>'{'+Object.entries(roles)
 const fmtStats=stats=>Object.entries(stats)
   .map(([name,roles])=>`  ${JSON.stringify(name)}:${fmtRoles(roles)}`).join(',\n');
 
-function renderStatsJs({patch,updated,label,stats,prev,prevPatch,prevUpdated,sourceNote,brackets}){
+function renderStatsJs({patch,updated,label,stats,prev,prevPatch,prevUpdated,prevFrom,prevDays,sourceNote,brackets}){
   return `/* WR Picker meta snapshot — GENERATED FILE, do not edit by hand.
  * Regenerate with: node scripts/fetch-stats.mjs
  * Source: WildRiftFire ${label} role table (${SOURCE_URL})
@@ -121,7 +126,9 @@ window.WR_STATS_META=Object.freeze({
   cadence:'daily',
   brackets:${JSON.stringify(brackets)},
   prevPatch:${JSON.stringify(prevPatch)},
-  prevCapturedAt:${JSON.stringify(prevUpdated)}
+  prevCapturedAt:${JSON.stringify(prevUpdated)},
+  prevFrom:${JSON.stringify(prevFrom??null)},
+  prevDays:${JSON.stringify(prevDays??null)}
 });
 
 window.WR_ROLE_STATS=Object.freeze({
@@ -135,17 +142,30 @@ ${prev?fmtStats(prev):''}
 }
 
 /* ---------- main ---------- */
-const html=await loadPage();
-const payload=extractPayload(html);
-const known=championNames();
+/* --rebuild: 네트워크 없이 가장 최근 아카이브로 latest.json·stats.js 를 다시 만든다.
+   추세 기준선 계산 방식이 바뀌었을 때 다음 정기 실행을 기다리지 않으려고 둔다. */
+const rebuild=args.includes('--rebuild');
 const unknown=new Set();
-
-const brackets={};
-const slugs={};                                   // 챔피언 → 가이드 URL slug (업스트림 제공값)
-for(const [key,b] of Object.entries(payload.brackets)){
-  const rows=Array.isArray(b.rows)?b.rows:[];
-  if(!rows.length)continue;                       // Legendary is empty until it populates
-  brackets[key]={label:b.label,stats:normaliseBracket(rows,known,unknown,slugs)};
+let payload,brackets,slugs;
+if(rebuild){
+  const newest=fs.readdirSync(HISTORY_DIR).filter(f=>f.endsWith('.json')).sort().pop();
+  if(!newest)throw new Error('--rebuild needs at least one archive in data/history');
+  const a=JSON.parse(fs.readFileSync(path.join(HISTORY_DIR,newest),'utf8'));
+  payload={patch:a.patch,updated:a.updated,source:a.source};
+  brackets=a.brackets;
+  const latestPath=path.join(DATA_DIR,'latest.json');
+  slugs=fs.existsSync(latestPath)?(JSON.parse(fs.readFileSync(latestPath,'utf8')).slugs||{}):{};
+}else{
+  const html=await loadPage();
+  payload=extractPayload(html);
+  const known=championNames();
+  brackets={};
+  slugs={};                                       // 챔피언 → 가이드 URL slug (업스트림 제공값)
+  for(const [key,b] of Object.entries(payload.brackets)){
+    const rows=Array.isArray(b.rows)?b.rows:[];
+    if(!rows.length)continue;                     // Legendary is empty until it populates
+    brackets[key]={label:b.label,stats:normaliseBracket(rows,known,unknown,slugs)};
+  }
 }
 if(!brackets.diamond)throw new Error('Diamond+ bracket missing from payload');
 
@@ -159,43 +179,26 @@ for(const [key,b] of Object.entries(brackets)){
   if(!/^[A-Za-z0-9+ .\-]{1,24}$/.test(b.label||''))throw new Error(`unsafe bracket label: ${b.label}`);
 }
 
-// Archive this upstream revision, then find the newest strictly-older archive for trends.
+// Archive this upstream revision, then build the trend baseline from the previous patch.
 fs.mkdirSync(HISTORY_DIR,{recursive:true});
 const archivePath=path.join(HISTORY_DIR,`${updated}.json`);
 const archive={patch:payload.patch,updated,source:payload.source,brackets};
 
-const olderDates=fs.existsSync(HISTORY_DIR)
-  ? fs.readdirSync(HISTORY_DIR).filter(f=>f.endsWith('.json')).map(f=>f.replace(/\.json$/,''))
-      .filter(d=>d<updated).sort()
-  : [];
-const prevDate=olderDates[olderDates.length-1]||null;
-let prevArchive=null;
-if(prevDate){
-  try{prevArchive=JSON.parse(fs.readFileSync(path.join(HISTORY_DIR,`${prevDate}.json`),'utf8'));}
-  catch{prevArchive=null;}
-}
-// Fall back to whatever the bundled file already carries, so the very first run
-// after this pipeline lands still has a trend baseline.
-let prevStats=prevArchive&&prevArchive.brackets&&prevArchive.brackets.diamond
-  ? prevArchive.brackets.diamond.stats : null;
-let prevPatch=prevArchive?prevArchive.patch:null;
-let prevUpdated=prevArchive?prevArchive.updated:null;
-if(!prevStats){
-  const bundled=path.join(ROOT,'stats.js');
-  if(fs.existsSync(bundled)){
-    const ctx={window:{}};
-    new Function('window',fs.readFileSync(bundled,'utf8'))(ctx.window);
-    const meta=ctx.window.WR_STATS_META||{};
-    if(ctx.window.WR_ROLE_STATS&&meta.capturedAt&&meta.capturedAt<updated){
-      prevStats=ctx.window.WR_ROLE_STATS;prevPatch=meta.patch;prevUpdated=meta.capturedAt;
-    }
-  }
-}
+const olderArchives=fs.readdirSync(HISTORY_DIR).filter(f=>f.endsWith('.json'))
+  .map(f=>f.replace(/\.json$/,'')).filter(d=>d<updated).sort()
+  .map(d=>{try{return JSON.parse(fs.readFileSync(path.join(HISTORY_DIR,`${d}.json`),'utf8'));}catch{return null;}})
+  .filter(Boolean);
+/* [v19] 기준선은 '어제'가 아니라 '직전 패치의 마지막 며칠'이다 — 이유는
+   trend-baseline.mjs 머리말. 직전 패치가 없으면 추세를 비운다(전날로 대신하지 않는다). */
+const base=patchBaseline(olderArchives,payload.patch);
+const prevStats=base?base.brackets.diamond.stats:null;
+const prevPatch=base?base.patch:null;
+const prevUpdated=base?base.updated:null;
 
 const diamond=brackets.diamond;
 const statsJs=renderStatsJs({
   patch:payload.patch,updated,label:diamond.label,stats:diamond.stats,
-  prev:prevStats,prevPatch,prevUpdated,sourceNote:payload.source,
+  prev:prevStats,prevPatch,prevUpdated,prevFrom:base?base.from:null,prevDays:base?base.days:null,sourceNote:payload.source,
   brackets:Object.entries(brackets).map(([k,b])=>({key:k,label:b.label,rows:countRows(b.stats)}))
 });
 
@@ -208,11 +211,7 @@ const latest={
   }])),
   // Trend baseline travels with the data so the app can compute deltas for whichever
   // bracket it is showing, without shipping a second request.
-  prev:prevArchive?{
-    patch:prevArchive.patch,updated:prevArchive.updated,
-    brackets:Object.fromEntries(Object.entries(prevArchive.brackets||{})
-      .map(([k,b])=>[k,{stats:b.stats}]))
-  }:(prevStats?{patch:prevPatch,updated:prevUpdated,brackets:{diamond:{stats:prevStats}}}:null)
+  prev:base?{patch:base.patch,updated:base.updated,from:base.from,days:base.days,brackets:base.brackets}:null
 };
 
 /* ---------- report ---------- */
@@ -220,7 +219,7 @@ const summary=Object.entries(brackets)
   .map(([k,b])=>`${b.label} ${countRows(b.stats)}행/${Object.keys(b.stats).length}챔프`).join(' · ');
 console.log(`patch ${payload.patch} · updated ${updated}`);
 console.log(summary);
-console.log(prevUpdated?`trend baseline: ${prevPatch} (${prevUpdated})`:'trend baseline: none yet');
+console.log(base?`trend baseline: ${base.patch} (${base.from}~${base.updated}, ${base.days}일 평균)`:'trend baseline: none (no previous patch archived)');
 if(unknown.size){
   console.log('UNMAPPED (skipped, add to index.html champion DB):');
   for(const u of unknown)console.log('  - '+u);
@@ -228,8 +227,12 @@ if(unknown.size){
 
 if(dryRun){console.log('\n--dry-run: no files written');process.exit(unknown.size?2:0);}
 
-fs.writeFileSync(archivePath,JSON.stringify(archive)+'\n');
+if(!rebuild)fs.writeFileSync(archivePath,JSON.stringify(archive)+'\n');
+// 오늘 아카이브까지 포함해 패치별 평균을 다시 만든다(현재 패치의 평균도 하루씩 자란다).
+const byPatch=buildByPatch(olderArchives.concat([archive]),Object.keys(brackets));
+byPatch.updated=updated;
+fs.writeFileSync(path.join(DATA_DIR,'by-patch.json'),JSON.stringify(byPatch)+'\n');
 fs.writeFileSync(path.join(DATA_DIR,'latest.json'),JSON.stringify(latest)+'\n');
 fs.writeFileSync(path.join(ROOT,'stats.js'),statsJs);
-console.log(`\nwrote data/history/${updated}.json, data/latest.json, stats.js`);
+console.log(rebuild?"\nrebuilt data/latest.json, data/by-patch.json, stats.js (archive untouched)":`\nwrote data/history/${updated}.json, data/latest.json, data/by-patch.json, stats.js`);
 if(unknown.size)process.exitCode=2;
