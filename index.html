@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta name="description" content="와일드 리프트 7.2a 역할별 통계와 패치 추세, 팀 조합, 상대 상성, 개인 숙련도를 함께 계산하는 드래프트 추천 도구">
+<meta name="description" content="와일드 리프트 역할별 통계와 직전 패치 대비 변화, 팀 조합, 상대 상성, 개인 숙련도를 함께 계산하는 드래프트 추천 도구">
 <meta name="color-scheme" content="dark light">
 <meta name="theme-color" content="#0a0e14">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -156,6 +156,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .dx .dxn{font-size:10.5px;color:var(--dimmer);font-family:'Rajdhani';font-weight:600}
 .dx .dxs{font-size:11.5px;color:var(--dim);line-height:1.55;margin-top:7px}
 .dx .dxs b{color:var(--gold-soft);font-weight:600}
+.dx .dxs.asofwarn{border-left:2px solid #5b4a1e;padding-left:8px}
 .bar{display:flex;align-items:center;gap:8px;margin:5px 0;font-size:12px}
 .bar .bl{flex:0 0 92px;color:var(--dim);font-size:11.5px}
 .bar .bt{flex:1;height:16px;background:var(--panel);border-radius:4px;overflow:hidden;position:relative;min-width:40px}
@@ -528,7 +529,8 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .bd-confidence{display:inline-block;margin-top:4px;font-family:'Rajdhani';font-weight:700;font-size:10px;
   letter-spacing:.03em;color:var(--dim);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
 .bd-type{font-family:'Rajdhani';font-weight:700;font-size:9px;letter-spacing:.06em;margin-left:5px;
-  padding:1px 5px;border-radius:4px;border:1px solid #31516b;color:#8ed8ff;background:#101f2c;vertical-align:middle}
+  padding:1px 5px;border-radius:4px;border:1px solid #31516b;color:#8ed8ff;background:#101f2c;vertical-align:middle;
+  white-space:nowrap;display:inline-block}  /* [v19] "7.3 대비 하/락"처럼 배지 안에서 줄이 갈렸다 */
 .bd-type.safe{border-color:#28513c;color:#8be0b0;background:#10241b}
 .bd-type.counter{border-color:#633438;color:#f0a0a0;background:#281317}
 .bd-type.mastery{border-color:#59451f;color:#f0c674;background:#261d0e}
@@ -979,14 +981,21 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='18.0.0';
-const MODEL_VERSION='18.0.0-familiar-first';
+const APP_VERSION='19.0.0';
+const MODEL_VERSION='19.0.0-asof-replay';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
 const DATA_ENDPOINT='./data/latest.json';
+/* [v19] 추세 기준선이 현재와 같은 패치면 그건 '직전 패치'가 아니라 '어제'다.
+   v18 까지의 데이터(그리고 아직 캐시에 남은 payload)는 전날 아카이브를 기준선으로
+   담고 있었고, 앱은 그 차이를 "직전 패치 대비", "패치 상승세"라고 불렀다. 같은 패치
+   안의 하루 변화는 다음 날 되돌아가는 노이즈다(회귀계수 −0.27, 11,151쌍). 그런
+   기준선은 받지 않는다 — 추세를 비우는 게 거꾸로 된 추세를 보여주는 것보다 낫다. */
+function isPatchBaseline(patch,prevPatch){return !!prevPatch&&prevPatch!==patch;}
 function buildMeta(m){
   m=m||{};
+  const pb=isPatchBaseline(m.patch,m.prevPatch);
   return Object.freeze({
     targetPatch:m.patch||'7.2',sourcePatch:m.patch||'7.2',
     capturedAt:m.capturedAt||'2026-07-15',
@@ -995,7 +1004,8 @@ function buildMeta(m){
     source:m.source||'https://www.wildriftfire.com/stats',
     sourceNote:m.sourceNote||'',
     cadence:m.cadence||'daily',
-    prevPatch:m.prevPatch||null,prevCapturedAt:m.prevCapturedAt||null,
+    prevPatch:pb?m.prevPatch:null,prevCapturedAt:pb?(m.prevCapturedAt||null):null,
+    prevFrom:pb?(m.prevFrom||null):null,prevDays:pb?(m.prevDays||null):null,
     origin:m.origin||'bundled'
   });
 }
@@ -1011,6 +1021,16 @@ const FIRST_PICK_MAX_PENALTY=6;
    이탈할 때 감수한 점수 손해가 평균 2.4점(61.4 → 59.0)이라 그 근처로 잡았다.
    이보다 넓히면 '추천'이 아니라 '내 챔폭 정렬'이 된다. */
 const FAMILIAR_BAND=3;
+/* [v19] 패치 추세의 점수 반영 계수 — 0. 추세는 '보여주기만' 하고 점수에는 안 넣는다.
+   v18 까지는 ×1.2 로 더했는데, 그 추세가 실은 '어제 대비'였고 하루 변화는 다음 날
+   되돌아간다(회귀계수 −0.27, 11,151쌍). 기준선을 직전 패치로 고친 뒤에도, 패치 기간
+   전체로 재면 지금 추세는 2~4일 뒤 승률 변화를 오히려 반대로 가리킨다(−0.13 ±0.007,
+   9,589쌍). 패치 첫 이틀만은 +0.27 로 이어지지만 그건 하루이틀짜리 예외다. 어떤 양의
+   계수도 '지금 승률을 그대로 쓰는 것'보다 예측이 나빴다(×0.3: 0.597, ×1.2: 1.509 vs
+   0.438). 사용자 실전 205판(그날 통계로 재채점)에서도 이 항은 순위 일치도를 못
+   움직였다(0.5482 → 0.5483). 이 숫자는 '이번 패치에 무엇이 바뀌었나'라는 사실이지
+   '앞으로 오를 것'이라는 예측이 아니다. */
+const MOMENTUM_K=0;
 /* [v10] 라인 상성 기여분의 상한. 팀 단위 상성은 v9에서 ±22로 잘렸는데 라인
    상성은 상한이 없어 실사용에서 +37까지 나왔다(자세한 근거는 score() 안 주석). */
 const LANE_MATCHUP_CAP=16;
@@ -1583,14 +1603,31 @@ function scanUnknownChamps(table){
   return Object.keys(table||{}).filter(n=>!byEn[n]&&/^[A-Za-z' .]{2,24}$/.test(n)).sort().slice(0,12);
 }
 statsUnknown=scanUnknownChamps(ROLE_STATS);
-let ROLE_STATS_PREV=window.WR_ROLE_STATS_PREV||{};
+let ROLE_STATS_PREV=(window.WR_STATS_META&&isPatchBaseline(window.WR_STATS_META.patch,window.WR_STATS_META.prevPatch)&&window.WR_ROLE_STATS_PREV)||{};
 const DEFAULT_WR=50;
 function statOf(c,lane=state.lane){return (ROLE_STATS[c.en]&&ROLE_STATS[c.en][lane])||null;}
-// 직전 스냅샷 대비 승률 변화(%p). 양쪽 표본이 어느 정도 있을 때만 신뢰(둘 다 픽률 1% 이상).
+// 직전 패치 대비 승률 변화(%p) — [v19] 기준선은 직전 패치 마지막 며칠 평균(scripts/trend-baseline.mjs).
+// 양쪽 표본이 어느 정도 있을 때만 신뢰(둘 다 픽률 1% 이상).
 function trendOf(c,lane=state.lane){
   const now=statOf(c,lane), prev=ROLE_STATS_PREV[c.en]&&ROLE_STATS_PREV[c.en][lane];
   if(!now||!prev||now.pick<1||prev.pick<1)return null;
-  return +(now.win-prev.win).toFixed(2);
+  return +(now.win-prev.win-trendOffset()).toFixed(2);
+}
+/* [v19] 판 전체의 평균 이동을 뺀다(픽률 가중). 7.3a 는 7.3 기준선 대비 모든 챔이
+   평균 +0.39%p 떠 있었고, 그 결과 '패치 상승세' 배지가 35개, 하락세가 6개로 한쪽에
+   쏠렸다(빼면 17 대 12). 판 전체가 같이 움직인 건 어느 챔의 변화도 아니다 — 드래프트에서
+   의미 있는 건 '다른 챔들보다' 올랐는가다. */
+let _trendOffset=0,_trendOffsetKey=null;
+function trendOffset(){
+  if(_trendOffsetKey&&_trendOffsetKey[0]===ROLE_STATS&&_trendOffsetKey[1]===ROLE_STATS_PREV)return _trendOffset;
+  let s=0,w=0;
+  for(const [en,roles] of Object.entries(ROLE_STATS))for(const [lane,v] of Object.entries(roles)){
+    const p=ROLE_STATS_PREV[en]&&ROLE_STATS_PREV[en][lane];
+    if(!p||v.pick<1||p.pick<1)continue;
+    s+=(v.win-p.win)*v.pick;w+=v.pick;
+  }
+  _trendOffset=w>0?s/w:0;_trendOffsetKey=[ROLE_STATS,ROLE_STATS_PREV];
+  return _trendOffset;
 }
 function allStatsOf(c){return ROLE_STATS[c.en]||{};}
 function lanesOf(c){return [...new Set([...c.lanes,...Object.keys(allStatsOf(c))])];}
@@ -1745,6 +1782,7 @@ function applyStatsPayload(payload,origin){
     source:payload.url||META_SNAPSHOT.source,sourceNote:payload.source||'',cadence:'daily',
     prevPatch:prev?payload.prev.patch:null,
     prevCapturedAt:prev?payload.prev.updated:null,
+    prevFrom:prev?(payload.prev.from||null):null,prevDays:prev?(payload.prev.days||null):null,
     origin
   });
   /* [v11] ROLE_STATS 자체가 바뀌는 지점은 여기다. 세대 번호를 여기서 올려야
@@ -1814,14 +1852,19 @@ function sanitizeStatsPayload(raw){
     if(Object.keys(s).length)out.slugs=s;
   }
   const p=raw.prev;
-  if(p&&/^\d{4}-\d{2}-\d{2}$/.test(p.updated||'')&&/^[0-9A-Za-z.]{1,12}$/.test(p.patch||'')){
+  if(p&&/^\d{4}-\d{2}-\d{2}$/.test(p.updated||'')&&/^[0-9A-Za-z.]{1,12}$/.test(p.patch||'')
+     &&isPatchBaseline(raw.patch,p.patch)){
     const pb={};
     for(const [k,b] of Object.entries(p.brackets||{})){
       if(!/^[a-z]{3,16}$/.test(k)||!b)continue;
       const stats=sanitizeStatsTable(b.stats);
       if(Object.keys(stats).length)pb[k]={stats};
     }
-    if(Object.keys(pb).length)out.prev={patch:p.patch,updated:p.updated,brackets:pb};
+    if(Object.keys(pb).length){
+      out.prev={patch:p.patch,updated:p.updated,brackets:pb};
+      if(/^\d{4}-\d{2}-\d{2}$/.test(p.from||''))out.prev.from=p.from;
+      if(Number.isInteger(p.days)&&p.days>=1&&p.days<=7)out.prev.days=p.days;
+    }
   }
   return out;
 }
@@ -1921,6 +1964,71 @@ async function refreshStats(){
     }
   }catch(e){}
 }
+/* ============ [v19] 패치별 통계 — 자기 채점용 ============
+ * 엔진 자기 검증(replayPass)은 과거 판을 전부 다시 채점하고, 자동 축 보정은 그 결과로
+ * 축의 발언권을 바꾼다. v18 까지는 그 채점에 '오늘' 통계를 썼다 — 7월(7.2)에 한 판을
+ * 10월(7.3a) 승률로 채점한 것이다. 실사용 271판을 그렇게 재면 메타 축 순위 일치도가
+ * 0.544(네 축 중 1위, 자동 보정 발언권 106%)인데, 각 판을 기록할 때 앱이 쓰던 패치의 통계로 재면 0.497 —
+ * 동전던지기다. 자동 보정은 앞의 숫자를 믿고 메타 축에 발언권을 더 주고 있었다.
+ * 판마다 기록된 patch 로 그 패치의 평균 통계(data/by-patch.json)를 찾아 채점한다. */
+const BY_PATCH_ENDPOINT='./data/by-patch.json';
+let STATS_BY_PATCH=null, _byPatchOrder=[];
+function sanitizeByPatch(raw){
+  if(!raw||typeof raw!=='object'||!raw.patches||typeof raw.patches!=='object')return null;
+  const out={};
+  for(const [p,v] of Object.entries(raw.patches)){
+    if(!/^[0-9A-Za-z.]{1,12}$/.test(p)||!v||typeof v!=='object')continue;
+    if(!/^\d{4}-\d{2}-\d{2}$/.test(v.from||'')||!/^\d{4}-\d{2}-\d{2}$/.test(v.to||''))continue;
+    const brackets={};
+    for(const [k,t] of Object.entries(v.brackets||{})){
+      if(!/^[a-z]{3,16}$/.test(k)||!t||typeof t!=='object')continue;
+      // 압축 행 [승률,픽률,밴률,주라인?] → 앱 행 형식으로 펼친 뒤 같은 정제기를 거친다.
+      const wide={};
+      for(const [name,roles] of Object.entries(t)){
+        if(!roles||typeof roles!=='object')continue;
+        const r={};
+        for(const [role,a] of Object.entries(roles)){
+          if(!Array.isArray(a)||a.length<3)continue;
+          r[role]={win:a[0],pick:a[1],ban:a[2]}; if(a[3]===1)r[role].main=1;
+        }
+        wide[name]=r;
+      }
+      const clean=sanitizeStatsTable(wide);
+      if(Object.keys(clean).length)brackets[k]=clean;
+    }
+    if(brackets.diamond)out[p]={from:v.from,to:v.to,brackets};
+  }
+  return Object.keys(out).length?out:null;
+}
+function adoptByPatch(raw){
+  const t=sanitizeByPatch(raw);
+  if(!t)return false;
+  STATS_BY_PATCH=t;
+  _byPatchOrder=Object.keys(t).sort((a,b)=>t[a].from.localeCompare(t[b].from));
+  bumpEngineData();
+  return true;
+}
+async function loadStatsByPatch(){
+  try{
+    const res=await fetch(BY_PATCH_ENDPOINT,{cache:'no-cache'});
+    if(!res.ok)return;
+    if(adoptByPatch(await res.json()))render();
+  }catch(e){}
+}
+/* 그 판을 고를 때 앱이 쓰던 통계. 기록된 patch 가 표에 있으면 그 패치, 없으면(패치를
+   기록하기 전의 옛 판) 날짜로 그 무렵 패치를, 그보다 오래됐으면 가장 오래된 패치를 쓴다.
+   표를 아직 못 받았으면 null — 호출부가 오늘 통계로 채점하고 그 사실을 화면에 밝힌다. */
+function statsForMatch(m){
+  if(!STATS_BY_PATCH||!m)return null;
+  let p=(m.patch&&STATS_BY_PATCH[m.patch])?m.patch:null;
+  if(!p){
+    const d=new Date(m.t).toISOString().slice(0,10);
+    p=_byPatchOrder[0];
+    for(const q of _byPatchOrder)if(STATS_BY_PATCH[q].from<=d)p=q;
+  }
+  const e=STATS_BY_PATCH[p];
+  return (e&&(e.brackets[appliedBracket]||e.brackets.diamond))||null;
+}
 async function setBracket(k){
   if(k===appliedBracket&&k===statsBracket)return;
   if(!lastStatsPayload||!lastStatsPayload.brackets[k]||!lastStatsPayload.brackets[k].stats){
@@ -1935,7 +2043,7 @@ async function setBracket(k){
 }
 
 /* ============ BAN ADVICE ============
- * 위협 점수 = 표본 보정 승률 + 픽/밴 존재감 + 상승 추세. 여기에 개인화 두 겹:
+ * 위협 점수 = 표본 보정 승률 + 픽/밴 존재감([v19] 추세 가산은 뺐다 — MOMENTUM_K). 여기에 개인화 두 겹:
  * 내 라인에서 만나는 챔은 가중, 내 주력을 카운터치는 챔은 가산. */
 function myMains(){
   return DB.map(c=>({c,comfort:(pool[c.id]&&pool[c.id].comfort)||famComfort(c.id)}))
@@ -1956,7 +2064,8 @@ function banSuggestions(){
       let score=(adjWR-50)*6+Math.log1p(presence)*4;
       const why=[];
       const t=trendOf(c,role);
-      if(t!=null&&t>=1){score+=Math.min(t,3)*2;why.push('급상승');}
+      // [v19] 사실로만 적는다. 점수 가산(+min(t,3)×2)은 뺐다 — 추세는 앞날을 예측하지 못했다(MOMENTUM_K).
+      if(t!=null&&t>=1)why.push('이번 패치 상승');
       if(role===state.lane){score*=1.25;why.push('내 라인 위협');}
       if(!best||score>best.score)best={role,s,score,why};
     }
@@ -2030,9 +2139,10 @@ function score(cand){
   const statReliability=metaKnown?reliabilityOf(cPick):0;
   const adjustedWR=50+(cWR-50)*statReliability;
   const rawMeta=metaScore(adjustedWR,cPick,cBan);
-  // 패치 추세(직전 스냅샷 대비 승률 변화)를 메타 축에 소폭 반영. 표본 신뢰도로 다시 감쇠.
+  /* 패치 추세(직전 패치 대비 승률 변화). [v19] 점수 반영 계수 MOMENTUM_K=0 — 근거는
+     상수 정의부. 화면 표시와 설명용으로만 계산해 둔다. */
   const trend=metaKnown?trendOf(cand,state.lane):null;
-  const momentum=trend!=null?clamp(trend*1.2,-2.5,2.5)*statReliability:0;
+  const momentum=trend!=null?clamp(trend*MOMENTUM_K,-2.5,2.5)*statReliability:0;
   // 통계가 없는 역할은 중립 50이 아니라 '평균 승률 + 존재감 0'으로 평가한다(≈48.5).
   // 50을 주면 측정된 평균 이하 챔피언보다 높게 나와, 데이터가 없는 쪽이 유리해지는
   // 역전이 생긴다. rawMeta가 이미 metaScore(50,0,0)이므로 분기 없이 그대로 쓴다.
@@ -2350,12 +2460,14 @@ function selfCheckKey(){
   return matches.length+'|'+last+'|'+_engineDataVersion+'|'+weights.recMode+'|'
     +[weights.comfort,weights.tier,weights.team,weights.counter].join(',');
 }
-/* 과거 전 판을 지금 엔진으로 다시 채점한다. useTrust=false면 축 보정을 끈 원본 축이다. */
+/* 과거 전 판을 지금 엔진으로 다시 채점한다. useTrust=false면 축 보정을 끈 원본 축이다.
+   [v19] 통계는 '오늘'이 아니라 그 판 당시 패치의 것으로 바꿔 끼운다(statsForMatch). */
 function replayPass(useTrust){
   const key=(useTrust?'T':'N')+selfCheckKey();
   if(_replayCache[key])return _replayCache[key];
   const M=matches.slice().sort((a,b)=>a.t-b.t);
   const savedFam=famMap, savedLoad=explorationLoad, savedState=state, savedNeutral=_axisNeutral;
+  const savedStats=ROLE_STATS, savedPrev=ROLE_STATS_PREV;
   const acc={}, out=[], flags=[];
   _axisNeutral=!useTrust;
   try{
@@ -2367,8 +2479,13 @@ function replayPass(useTrust){
         explorationLoad=new Set(flags.slice(-10).filter(f=>f.started).map(f=>f.id)).size;
         state={lane:m.lane,ally:(m.ally||[]).slice(),enemy:(m.enemy||[]).slice(),
                bans:[],laneMark:m.laneMark!=null?m.laneMark:null};
+        const hist=statsForMatch(m), tbl=hist||savedStats;
+        if(tbl!==ROLE_STATS){
+          ROLE_STATS=tbl; ROLE_STATS_PREV=hist?{}:savedPrev;
+          _asgKey=null;   // 상대 라인 배정도 통계(laneFit)에 기대므로 표가 바뀌면 다시 푼다
+        }
         const s=score(c);
-        out.push({m,won:!!m.won,total:s.total,base:s.base,tier:s.cTier,
+        out.push({m,won:!!m.won,asOf:hist?1:0,total:s.total,base:s.base,tier:s.cTier,
           team:s.teamAxis,counter:s.counterAxis,
           hasAlly:state.ally.length>0,hasEnemy:state.enemy.length>0});
       }
@@ -2377,6 +2494,8 @@ function replayPass(useTrust){
     });
   }finally{
     famMap=savedFam; explorationLoad=savedLoad; state=savedState; _axisNeutral=savedNeutral;
+    // 채점 중에 바꿔 끼운 통계를 반드시 되돌린다. 배정 캐시는 옛 표로 푼 값일 수 있어 비운다.
+    if(ROLE_STATS!==savedStats||ROLE_STATS_PREV!==savedPrev){ROLE_STATS=savedStats;ROLE_STATS_PREV=savedPrev;_asgKey=null;}
   }
   _replayCache[key]=out;
   return out;
@@ -2642,7 +2761,7 @@ function renderAppMeta(){
   const pl=document.getElementById('patchLabel');if(pl)pl.textContent='Patch '+META_SNAPSHOT.targetPatch;
   const status=document.getElementById('dataStatus');
   const age=snapshotAgeDays(), freshness=age<=2?['fresh','최신']:age<=7?['aging',`${age}일 전`]:['stale',`${age}일 전 · 갱신 필요`];
-  const prevTxt=META_SNAPSHOT.prevPatch?` · 추세 기준 ${META_SNAPSHOT.prevPatch}(${META_SNAPSHOT.prevCapturedAt})`:'';
+  const prevTxt=META_SNAPSHOT.prevPatch?` · 추세 기준 직전 패치 ${META_SNAPSHOT.prevPatch}(${META_SNAPSHOT.prevDays>1&&META_SNAPSHOT.prevFrom?`${META_SNAPSHOT.prevFrom.slice(5)}~${META_SNAPSHOT.prevCapturedAt.slice(5)} ${META_SNAPSHOT.prevDays}일 평균`:META_SNAPSHOT.prevCapturedAt})`:' · 추세 없음(직전 패치 기록 없음)';
   const originTxt=META_SNAPSHOT.origin==='bundled'?' · <span title="네트워크 갱신 전 번들 스냅샷">번들</span>':'';
   /* [v16] 통계엔 왔는데 앱이 모르는 챔 — 게임에 신챔이 나왔다는 뜻이다.
      예전엔 조용히 버려서, 고를 수도 상대팀에 넣을 수도 없는 이유를 알 길이 없었다. */
@@ -2651,7 +2770,7 @@ function renderAppMeta(){
     : '';
   if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>패치 ${META_SNAPSHOT.targetPatch} · ${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt}${prevTxt}${originTxt}${unknownTxt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
   const legend=document.getElementById('metaLegend');
-  if(legend)legend.innerHTML=`<b>승</b> 표본 보정 메타(+패치 추세) + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'} · 픽률은 신뢰도, 밴률은 가용성 위험으로 해석`;
+  if(legend)legend.innerHTML=`<b>승</b> 표본 보정 메타 + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'} · 픽률은 신뢰도, 밴률은 가용성 위험으로 해석`;
   // 랭크 구간 선택기 — payload가 있고 구간이 2개 이상일 때만 노출.
   // DOM API로만 조립한다(원격 유래 문자열을 innerHTML/onclick에 넣지 않음).
   // 재렌더로 버튼이 교체되므로, 누르던 버튼의 키를 기억해 포커스를 복원한다.
@@ -2751,8 +2870,11 @@ function render(){
     else if(mode!=='meta'&&s.base===topComfort)badge+=`<span class="bd-type mastery">숙련픽</span>`;
     if(s.metaKnown&&s.statReliability>=.85)badge+=`<span class="bd-type evidence">표본 탄탄</span>`;
     if(s.metaKnown&&s.cBan>=15)badge+=`<span class="bd-type banrisk">밴 주의</span>`;
-    if(s.trend!=null&&s.trend>=1)badge+=`<span class="bd-type rising">패치 상승세</span>`;
-    else if(s.trend!=null&&s.trend<=-1.5)badge+=`<span class="bd-type falling">패치 하락세</span>`;
+    /* [v19] '상승세/하락세'는 앞으로도 그렇다는 말이라 뺐다 — 추세는 앞날을 예측하지
+       못했다(MOMENTUM_K). 직전 패치보다 다른 챔들 대비 올랐/내렸다는 사실만 적는다. */
+    const vsPrev=META_SNAPSHOT.prevPatch?`${META_SNAPSHOT.prevPatch} 대비 `:'';
+    if(s.trend!=null&&s.trend>=1)badge+=`<span class="bd-type rising" title="직전 패치(${META_SNAPSHOT.prevPatch}) 마지막 며칠 평균보다 다른 챔들 대비 ${s.trend.toFixed(2)}%p 높습니다. 앞으로 더 오른다는 뜻은 아닙니다.">${vsPrev}상승</span>`;
+    else if(s.trend!=null&&s.trend<=-1.5)badge+=`<span class="bd-type falling" title="직전 패치(${META_SNAPSHOT.prevPatch}) 마지막 며칠 평균보다 다른 챔들 대비 ${Math.abs(s.trend).toFixed(2)}%p 낮습니다. 앞으로 더 떨어진다는 뜻은 아닙니다.">${vsPrev}하락</span>`;
     // mastery badge only meaningful in weighted mode with a pool set
     if(s.offRole) badge+=`<span class="bd-role">통계 없음</span>`;
     const fm=famMap[c.id];
@@ -2794,7 +2916,7 @@ function render(){
       <div class="rmid">
         <div class="rname">${c.kr}${badge}</div>
         <div class="rmeta">${LANEKR[state.lane]} · ${CLSKR[c.cls]} · ${c.dmg} · <span class="tg">${tagstr}</span></div>
-        <div class="resultstats"><span>승률 ${wrTxt}</span>${s.metaKnown?`<span>보정 ${s.adjustedWR.toFixed(2)}%</span>${s.trend!=null?`<span class="${s.trend>=0.75?'up':s.trend<=-0.75?'down':''}">추세 ${s.trend>0?'▲':s.trend<0?'▼':'－'}${Math.abs(s.trend).toFixed(2)}%p</span>`:''}<span>픽 ${s.cPick.toFixed(2)}%</span><span class="${s.cBan>=10?'hot':''}">밴 ${s.cBan.toFixed(2)}%</span><span class="evidence">표본 ${Math.round(s.statReliability*100)}%</span>`:''}</div>
+        <div class="resultstats"><span>승률 ${wrTxt}</span>${s.metaKnown?`<span>보정 ${s.adjustedWR.toFixed(2)}%</span>${s.trend!=null?`<span class="${s.trend>=0.75?'up':s.trend<=-0.75?'down':''}">직전 패치 ${s.trend>0?'▲':s.trend<0?'▼':'－'}${Math.abs(s.trend).toFixed(2)}%p</span>`:''}<span>픽 ${s.cPick.toFixed(2)}%</span><span class="${s.cBan>=10?'hot':''}">밴 ${s.cBan.toFixed(2)}%</span><span class="evidence">표본 ${Math.round(s.statReliability*100)}%</span>`:''}</div>
         <div class="rwhy">${why}</div>
         ${tacticsPanel(c,s,i)}
       </div>
@@ -3373,6 +3495,9 @@ function analysisModel(){
   /* [v10] 축별 성적표. 총점만 검증하면 어느 축이 틀렸는지 알 수 없다. */
   out.axes=axisReport();
   out.autoAxis=weights.autoAxis!==false;
+  /* [v19] 몇 판을 그 판 당시 패치의 통계로 채점했는지. 0 이면 패치별 통계를 아직
+     못 받은 것이고, 그때 메타 축 값은 오늘 통계로 잰 것이라 실제보다 좋게 나올 수 있다. */
+  {const R=replayPass(false);out.asOf={n:R.length,k:R.filter(r=>r.asOf).length};}
 
   /* ============ [v12] 최근 부진 진단 ============
    * "요새 왜 지지?"에 앱이 답하지 못했다. 지금까지는 최근 10판이 정상 변동인지만
@@ -3927,6 +4052,12 @@ function renderAnalysis(){
     return `<div class="dx">
       <div class="dxh"><span class="dxt">축별 성적표 <span class="dxn">(순위 일치도)</span></span>
         <span class="dxn">${a.autoAxis?'자동 보정 켜짐':'자동 보정 꺼짐'}</span></div>
+      ${(()=>{const q=a.asOf;if(!q||!q.n)return '';
+        /* [v19] 무엇으로 채점했는지 밝힌다. 오늘 통계로 옛 판을 채점하면 메타 축이 실제보다
+           좋아 보인다(실사용 271판: 오늘 통계 0.54 vs 그 판 당시 통계 0.50). */
+        if(q.k===q.n)return `<div class="dxs" style="margin-top:0">${q.n}판 모두 <b>그 판 당시 패치의 통계</b>로 채점했습니다 — 오늘 승률로 옛 판을 채점하지 않습니다.</div>`;
+        if(q.k>0)return `<div class="dxs" style="margin-top:0">${q.n}판 중 <b>${q.k}판</b>은 그 판 당시 패치의 통계로, 나머지 ${q.n-q.k}판은 오늘 통계로 채점했습니다.</div>`;
+        return `<div class="dxs asofwarn" style="margin-top:0">패치별 통계를 아직 받지 못해 <b>오늘(${META_SNAPSHOT.targetPatch}) 통계로 옛 판을 채점</b>했습니다. 이 경우 <b>메타 축이 실제보다 좋게</b> 나옵니다(실사용 271판: 0.54 vs 당시 통계 0.50).</div>`;})()}
       ${ax.map(x=>{
         const good=x.conclusive&&x.auc>0.5, bad=x.conclusive&&x.auc<0.5;
         const w=Math.max(2,Math.round(x.auc*100));
@@ -3943,7 +4074,7 @@ function renderAnalysis(){
         그 구간이 세로선을 걸치면 <b>방향을 말할 수 없다</b>는 뜻입니다.
         ${conclusive.length
           ? `지금 방향을 단정할 수 있는 축: <b>${conclusive.map(x=>x.kr).join(', ')}</b>.`
-          : `<b>지금은 어느 축도 동전던지기와 구분되지 않습니다.</b> 199판 규모에서 이 값의 오차는 ±0.04라, 0.47과 0.55는 사실상 같은 관측입니다.`}
+          : `<b>지금은 어느 축도 동전던지기와 구분되지 않습니다.</b> ${Math.max(...ax.map(x=>x.n))}판 규모에서 이 값의 오차는 ±${Math.max(...ax.map(x=>x.se||0)).toFixed(2)}라, 0.47과 0.55는 사실상 같은 관측입니다.`}
         ${anyActive
           ? (anyCut
              ? ' 보정은 오차만큼 0.50 쪽으로 당긴 뒤에 걸리므로, 근거가 약할수록 저절로 작아집니다.'
@@ -4395,6 +4526,7 @@ document.addEventListener('keydown',e=>{
   if(seeded)toast(`전적 ${matches.length}판을 불러왔습니다`);
   refreshStats();
   loadGuides();
+  loadStatsByPatch();
 })();
 </script>
 </body>
