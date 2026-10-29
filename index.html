@@ -548,6 +548,21 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .resultstats .down{color:#f0a0a0;border-color:#633438}
 .bd-type.rising{border-color:#28513c;color:#8be0b0;background:#10241b}
 .bd-type.falling{border-color:#59451f;color:#f0c674;background:#261d0e}
+/* [v21] 패치 노트 배지 — 통계가 아니라 노트에서 온 '방향' */
+.bd-type.pn.buff{border-color:#28513c;color:#8be0b0;background:#10241b}
+.bd-type.pn.nerf{border-color:#633438;color:#f0a0a0;background:#281317}
+.bd-type.pn.adjust{border-color:#59451f;color:#f0c674;background:#261d0e}
+.patchcard{margin:-4px 0 12px;padding:8px 10px;border:1px solid #3a4a5e;background:#111a24;border-radius:9px;font-size:11.5px;line-height:1.5;color:var(--dim)}
+.patchcard .pch{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer}
+.patchcard .pct{font-family:'Rajdhani';font-weight:700;font-size:12.5px;letter-spacing:.03em;color:var(--ink)}
+.patchcard .pcn{color:var(--dimmer);font-size:10.5px}
+.patchcard .pch>.pcn{white-space:nowrap;flex:none}
+.patchcard .pcb{margin-top:6px;display:grid;gap:4px}
+.patchcard .pcrow{display:flex;gap:6px;align-items:baseline}
+.patchcard .pcrow b.me{color:var(--gold-soft)}
+.patchcard a{color:var(--cyan-soft);text-decoration:underline;text-underline-offset:2px}
+.pdir{font-family:'Rajdhani';font-weight:700;font-size:10px;letter-spacing:.06em;padding:0 5px;border-radius:4px;border:1px solid;flex:none}
+.pdir.buff{border-color:#28513c;color:#8be0b0;background:#10241b}.pdir.nerf{border-color:#633438;color:#f0a0a0;background:#281317}.pdir.adjust{border-color:#59451f;color:#f0c674;background:#261d0e}
 .updatebar{display:none;align-items:center;justify-content:space-between;gap:10px;margin-bottom:12px;padding:9px 11px;border:1px solid var(--cyan);background:var(--panel);border-radius:9px;font-size:11.5px;color:var(--dim)}
 .updatebar.on{display:flex}.updatebar button{color:var(--cyan-soft);font-weight:700}
 .storagewarn{margin-bottom:12px;padding:11px 13px;border:1px solid var(--red);background:#2a1216;
@@ -574,6 +589,9 @@ button:disabled{cursor:not-allowed;opacity:.38}
 [data-theme="light"] .bd-off{background:#fff6df}[data-theme="light"] .bd-main{background:#e7f8f6}
 [data-theme="light"] .bd-type{background:#edf7ff}[data-theme="light"] .bd-type.safe{background:#eaf8ef}
 [data-theme="light"] .bd-type.counter{background:#fff0f1}[data-theme="light"] .bd-type.mastery{background:#fff7e4}
+[data-theme="light"] .bd-type.pn.buff{background:#eaf8ef}[data-theme="light"] .bd-type.pn.nerf{background:#fff0f1}[data-theme="light"] .bd-type.pn.adjust{background:#fff7e4}
+[data-theme="light"] .patchcard{background:#f4f8fc;border-color:#c8d6e4}
+[data-theme="light"] .pdir.buff{background:#eaf8ef}[data-theme="light"] .pdir.nerf{background:#fff0f1}[data-theme="light"] .pdir.adjust{background:#fff7e4}
 @media (min-width:761px){
   .sheet{border:1px solid var(--line);border-radius:16px;margin:auto;max-height:84vh}
   .scrim{align-items:center;padding:24px}
@@ -631,6 +649,7 @@ button:disabled{cursor:not-allowed;opacity:.38}
     </div>
   </div>
   <div class="datastatus" id="dataStatus"></div>
+  <div class="patchcard" id="patchCard" hidden></div>
   <div class="bracketsel" id="bracketSel" role="group" aria-label="랭크 구간 선택" hidden></div>
   <nav class="lanebar" id="lanebar" aria-label="추천 포지션"></nav>
 
@@ -988,8 +1007,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='20.0.0';
-const MODEL_VERSION='20.0.0-honest-tables';
+const APP_VERSION='21.0.0';
+const MODEL_VERSION='21.0.0-patch-notes';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -1937,6 +1956,77 @@ function adoptStatsPayload(raw,origin){
  * 콤보·아이템 수치는 담지 않는다 — 패치마다 바뀌고 틀리면 실전에서 손해다.
  * 대신 원문 링크를 제공하고, 앱은 '무엇을 하는 챔인지 / 언제 강한지 /
  * 누가 카운터인지'처럼 변동이 적은 정보만 보여준다. */
+/* ============ [v21] 패치 노트 레이어 ============
+ * 통계는 패치 뒤 며칠을 밀린다 — 7.3d 첫날 데이터로는 말파이트가 깎였는지 알 수 없다.
+ * 공식 노트의 '방향'(상향/하향/조정)은 그날 바로 안다. 그래서 통계와 별개의 층으로 보여준다:
+ * 카드 배지, 드래프트 보드의 패치 카드(내가 쓰는 챔 먼저), 진단의 패치 항목 주석.
+ * 점수에는 넣지 않는다 — 방향은 알아도 크기는 모르고, 측정 없이 점수를 만지지 않는 것이
+ * 이 프로젝트의 규칙이다(MOMENTUM_K 와 같은 이유). 노트는 data/patch-notes.json 에 패치마다
+ * 손으로 적는다(공식 페이지는 봇이 읽을 수 없다). 통계 패치가 노트보다 앞서면 노트를 숨긴다. */
+let PATCH_NOTES=null, patchCardOpen=false;
+const PN_DIR={buff:'상향',nerf:'하향',adjust:'조정'};
+const PN_MARK={buff:'▲',nerf:'▼',adjust:'◆'};
+/* '7.3d' vs '7.3c' → 양수, '7.4' vs '7.3d' → 양수. 형식이 다르면 0(비교 불가). */
+function cmpPatch(a,b){
+  const pa=/^(\d+)\.(\d+)([a-z]?)$/.exec(a||''), pb=/^(\d+)\.(\d+)([a-z]?)$/.exec(b||'');
+  if(!pa||!pb)return 0;
+  return (+pa[1]-+pb[1])||(+pa[2]-+pb[2])||pa[3].localeCompare(pb[3]);
+}
+function sanitizePatchNotes(raw){
+  if(!raw||typeof raw!=='object'||!PATCH_RE.test(String(raw.patch||'')))return null;
+  const str=(v,n)=>typeof v==='string'?v.replace(/[<>]/g,'').slice(0,n):'';
+  const ok=d=>!!PN_DIR[d];
+  const champions=[], seen=new Set();
+  for(const c of (Array.isArray(raw.champions)?raw.champions:[]).slice(0,60)){
+    const en=c&&typeof c.en==='string'?c.en:'';
+    if(!en||!hasOwn(byEn,en)||!ok(c.dir)||seen.has(en))continue;
+    seen.add(en); champions.push({en,id:byEn[en].id,dir:c.dir,note:str(c.note,200)});
+  }
+  const list=a=>(Array.isArray(a)?a:[]).slice(0,30).map(x=>x&&ok(x.dir)&&str(x.name,60)?{name:str(x.name,60),dir:x.dir,note:str(x.note,200)}:null).filter(Boolean);
+  const out={patch:String(raw.patch),
+    released:/^\d{4}-\d{2}-\d{2}$/.test(raw.released||'')&&Number.isFinite(Date.parse(raw.released))?raw.released:null,
+    source:(typeof raw.source==='string'&&/^https:\/\/[\w./#?=-]+$/.test(raw.source))?raw.source:null,
+    champions,items:list(raw.items),systems:list(raw.systems)};
+  return (champions.length||out.items.length)?out:null;
+}
+function patchNotesApply(){return !!(PATCH_NOTES&&cmpPatch(PATCH_NOTES.patch,META_SNAPSHOT.targetPatch)>=0);}
+function patchNoteOf(c){if(!c||!patchNotesApply())return null;return PATCH_NOTES.champions.find(x=>x.id===c.id)||null;}
+/* 내가 해본 챔 중 이번 노트에 오른 것 — 진단의 패치 항목과 패치 카드가 같이 쓴다. */
+function patchNotesMine(){
+  if(!patchNotesApply())return [];
+  return PATCH_NOTES.champions.filter(x=>playCount(x.id)>0).sort((a,b)=>playCount(b.id)-playCount(a.id));
+}
+function adoptPatchNotes(raw){const p=sanitizePatchNotes(raw);if(!p)return false;PATCH_NOTES=p;return true;}
+async function loadPatchNotes(){
+  try{const cached=await window.storage.get('wr_patch_notes');if(cached&&cached.value&&adoptPatchNotes(JSON.parse(cached.value)))render();}catch(e){}
+  try{
+    const res=await fetch('./data/patch-notes.json',{cache:'no-cache'});
+    if(!res.ok)return;
+    if(adoptPatchNotes(await res.json())){
+      try{await window.storage.set('wr_patch_notes',JSON.stringify(PATCH_NOTES));}catch(e){}
+      render();
+    }
+  }catch(e){}
+}
+function togglePatchCard(){patchCardOpen=!patchCardOpen;renderPatchCard();}
+function renderPatchCard(){
+  const el=document.getElementById('patchCard'); if(!el)return;
+  if(!patchNotesApply()){el.hidden=true;el.innerHTML='';return;}
+  const P=PATCH_NOTES, mine=patchNotesMine();
+  const n=d=>P.champions.filter(x=>x.dir===d).length;
+  const lag=cmpPatch(P.patch,META_SNAPSHOT.targetPatch)>0;
+  const kr=x=>esc(byId[x.id].kr);
+  const head=`<div class="pch" onclick="togglePatchCard()" role="button" tabindex="0" aria-expanded="${patchCardOpen}">
+      <span><span class="pct">패치 노트 ${esc(P.patch)}</span>${P.released?` <span class="pcn">${esc(P.released.slice(5))}</span>`:''} · 상향 ${n('buff')} · 하향 ${n('nerf')} · 조정 ${n('adjust')}${P.items.length?` · 아이템 ${P.items.length}`:''}${mine.length?` — <b>내 챔 ${mine.map(x=>kr(x)+PN_MARK[x.dir]).join(' ')}</b>`:''}</span>
+      <span class="pcn">${patchCardOpen?'접기 ▴':'펼치기 ▾'}</span></div>`;
+  const row=x=>`<div class="pcrow"><span class="pdir ${x.dir}">${PN_DIR[x.dir]}</span><span>${x.id!=null
+      ?`<b class="${playCount(x.id)?'me':''}">${kr(x)}</b>${playCount(x.id)?` <span class="pcn">${playCount(x.id)}판</span>`:''}`
+      :`<b>${esc(x.name)}</b>`}${x.note?` — ${esc(x.note)}`:''}</span></div>`;
+  const order=[...P.champions].sort((a,b)=>playCount(b.id)-playCount(a.id)||a.dir.localeCompare(b.dir));
+  const body=patchCardOpen?`<div class="pcb">${order.map(row).join('')}${P.items.map(row).join('')}${P.systems.map(row).join('')}
+      <div class="pcn" style="margin-top:4px">점수에는 넣지 않습니다 — 방향은 노트로 알지만 크기는 통계가 쌓여야 압니다${lag?`. 통계는 아직 ${esc(META_SNAPSHOT.targetPatch)} 기준입니다`:''}.${P.source?` <a href="${esc(P.source)}" target="_blank" rel="noopener noreferrer">원문 ↗</a>`:''}</div></div>`:'';
+  el.hidden=false; el.innerHTML=head+body;
+}
 let GUIDES=null, guideSlugs={};
 const GUIDE_BASE='https://www.wildriftfire.com/guide/';
 async function loadGuides(){
@@ -2142,10 +2232,16 @@ function myMains(){
   return DB.map(c=>({c,comfort:effectiveComfort(c.id,null).value}))
     .filter(x=>x.comfort>=60).sort((a,b)=>b.comfort-a.comfort).slice(0,4).map(x=>x.c);
 }
+/* [v21] 자주 쓰는 챔은 밴하라고 권하지 않는다. '내 주력'(숙련 60 이상)만 빼던 v20 은 사용자의
+   최다 픽 말파이트(25판, 적용 숙련 58)를 탑에서 밴하라고 권했다 — 주력 보호 가산(+10)은
+   여전히 myMains 만, 밴 제외는 8판 이상·숙련 50 이상이면 전부. */
+function myRegulars(){
+  return DB.filter(c=>playCount(c.id)>=8&&effectiveComfort(c.id,null).value>=50);
+}
 function banSuggestions(){
   const picked=new Set([...state.ally,...state.enemy,...state.bans]);
   const mains=myMains();
-  const mainIds=new Set(mains.map(m=>m.id)); // 내가 픽할 챔을 밴하라고 권하지 않는다
+  const mainIds=new Set([...mains,...myRegulars()].map(m=>m.id)); // 내가 픽할 챔을 밴하라고 권하지 않는다
   const out=[];
   for(const [en,roles] of Object.entries(ROLE_STATS)){
     const c=byEn[en]; if(!c||picked.has(c.id)||mainIds.has(c.id))continue;
@@ -2894,7 +2990,7 @@ function renderAppMeta(){
 }
 
 function render(){
-  renderAppMeta();chips();compReadout();renderBanAdvice();
+  renderAppMeta();renderPatchCard();chips();compReadout();renderBanAdvice();
   const owned=anyOwned();
   const mode=weights.recMode||'meta';
   document.getElementById('modeLbl').innerHTML =
@@ -2982,6 +3078,9 @@ function render(){
     const vsPrev=META_SNAPSHOT.prevPatch?`${META_SNAPSHOT.prevPatch} 대비 `:'';
     if(s.trend!=null&&s.trend>=TREND_BADGE)badge+=`<span class="bd-type rising" title="직전 패치(${META_SNAPSHOT.prevPatch}) 마지막 며칠 평균보다 다른 챔들 대비 ${s.trend.toFixed(2)}%p 높습니다. 앞으로 더 오른다는 뜻은 아닙니다.">${vsPrev}상승</span>`;
     else if(s.trend!=null&&s.trend<=-TREND_BADGE)badge+=`<span class="bd-type falling" title="직전 패치(${META_SNAPSHOT.prevPatch}) 마지막 며칠 평균보다 다른 챔들 대비 ${Math.abs(s.trend).toFixed(2)}%p 낮습니다. 앞으로 더 떨어진다는 뜻은 아닙니다.">${vsPrev}하락</span>`;
+    // [v21] 노트의 방향 — 통계(위의 추세 배지)와는 다른 출처라 따로 붙인다.
+    const pn=patchNoteOf(c);
+    if(pn)badge+=`<span class="bd-type pn ${pn.dir}" title="패치 노트 ${esc(PATCH_NOTES.patch)}: ${esc(pn.note||PN_DIR[pn.dir])}. 점수에는 넣지 않았습니다 — 통계에 반영되기까지 며칠 걸립니다.">${esc(PATCH_NOTES.patch)} ${PN_MARK[pn.dir]}${PN_DIR[pn.dir]}</span>`;
     // mastery badge only meaningful in weighted mode with a pool set
     if(s.offRole) badge+=`<span class="bd-role">통계 없음</span>`;
     const fm=famMap[c.id];
@@ -3715,7 +3814,8 @@ function analysisModel(){
         if(on.length>=6&&off.length>=20){
           const ow=on.filter(m=>m.won).length, fw=off.filter(m=>m.won).length;
           items.push({label:`현재 패치(${esc(newest)}) 이후 — ${on.length}판 vs 이전 패치 ${off.length}판`,kind:'env',
-            note:'패치가 바뀌면 챔 강약이 같이 바뀐다 — 이 낙폭은 내가 만든 게 아닐 수 있다',
+            note:'패치가 바뀌면 챔 강약이 같이 바뀐다 — 이 낙폭은 내가 만든 게 아닐 수 있다'
+              +(patchNotesMine().length?` · 패치 노트 ${esc(PATCH_NOTES.patch)}에서 바뀐 내 챔: ${patchNotesMine().map(x=>esc(byId[x.id].kr)+PN_MARK[x.dir]).join(', ')}`:''),
             recent:{k:ow,n:on.length,r:ow/on.length},
             base:{k:fw,n:off.length,r:fw/off.length},
             delta:(ow/on.length-fw/off.length)*100,
@@ -4701,6 +4801,7 @@ document.addEventListener('keydown',e=>{
   refreshStats();
   loadGuides();
   loadStatsByPatch();
+  loadPatchNotes();
 })();
 </script>
 </body>

@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='20.0.0'"));
+assert.ok(html.includes("const APP_VERSION='21.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -1142,7 +1142,7 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(/asOf:hist\?hist\.how:'today',/.test(html),'v19: each replayed game records what it was scored with');
   assert.ok(/out\.asOf=\{n:R\.length,exact:c\('exact'\)/.test(html)&&/class="dxs asofwarn"/.test(html),
     'v19: the axis card must say which stats it scored with, and warn when it used today’s');
-  assert.ok(/loadStatsByPatch\(\);\n\}\)\(\);/.test(html),'v19: the per-patch table must be loaded at startup');
+  assert.ok(/loadStatsByPatch\(\);\n  loadPatchNotes\(\);\n\}\)\(\);/.test(html),'v19/v21: the per-patch table and the patch notes must be loaded at startup');
   assert.ok(/STATS_BY_PATCH=t;\n\s*_byPatchOrder=[^\n]*\n\s*bumpEngineData\(\);/.test(html),
     'v19: adopting the table must invalidate the self-check caches');
 
@@ -1316,6 +1316,17 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
     const mains=B.myMains().map(c=>c.en);
     assert.ok(!mains.includes('Shen'),'v20: a champion with 6 recorded losses is not a "main" just because the pool says 80');
     assert.ok(mains.includes('Galio'),'v20: a champion the engine rates ≥60 from results is a main even with no pool entry');
+    // [v21] 자주 쓰는 챔(8판 이상·숙련 50 이상)은 주력이 아니어도 밴 추천에서 뺀다.
+    {
+      const M=B.byEn['Malphite'];
+      for(let i=0;i<10;i++)B.live.matches.push(B.migrateMatch({lane:'top',pick:M.id,won:i%3!==0,ally:[],enemy:[],t:NOW-(60-i)*1e6}));   // 6승 4패
+      B.computeFam();
+      const eff=B.effectiveComfort(M.id,null).value;
+      assert.ok(eff>=50&&eff<60,`fixture: Malphite must sit between 50 and 60 (got ${eff})`);
+      assert.ok(B.myRegulars().some(c=>c.en==='Malphite'),'v21: 10 games at comfort 50+ is a regular');
+      B.state.lane='top';B.state.ally=[];B.state.enemy=[];B.state.bans=[];
+      assert.ok(!B.banSuggestions().some(x=>x.c&&x.c.en==='Malphite'),'v21: the app must not tell the user to ban a champion they play regularly');
+    }
     // 챔폭을 바꾸면 자기 채점 키가 바뀌어야 한다(캐시가 옛 챔폭으로 남는 사고)
     const k1=B.selfCheckKey(); B.live.pool[G.id]={comfort:70}; const k2=B.selfCheckKey();
     assert.notEqual(k1,k2,'v20: editing the pool must invalidate the self-check cache key');
@@ -1430,6 +1441,51 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   const yml=fs.readFileSync(new URL('../.github/workflows/update-stats.yml',import.meta.url),'utf8');
   assert.ok(/git rebase origin\/main/.test(yml)&&/upload-artifact/.test(yml)&&/fetch-depth: 0/.test(yml),
     'v20: a rejected push must retry after rebasing and keep the snapshot as an artifact');
+}
+
+
+/* [v21] 패치 노트 레이어 — 통계와 별개의 층. 점수에는 넣지 않고, 통계 패치보다 오래된 노트는 숨긴다. */
+{
+  const {loadEngine}=await import('./engine.mjs');
+  const E=loadEngine();
+  const notes=JSON.parse(fs.readFileSync(new URL('../data/patch-notes.json',import.meta.url),'utf8'));
+  // 배포 파일: 형식과 내용
+  assert.match(notes.patch,/^\d+\.\d+[a-z]?$/,'v21: patch label format');
+  assert.ok(isDate(notes.released),'v21: release date');
+  assert.ok(notes.champions.length>=1&&notes.champions.every(c=>E.hasOwn(E.byEn,c.en)),'v21: every champion in the notes must exist in the DB');
+  assert.ok(notes.champions.every(c=>['buff','nerf','adjust'].includes(c.dir)),'v21: dir enum');
+  assert.ok(new Set(notes.champions.map(c=>c.en)).size===notes.champions.length,'v21: no duplicate champions');
+  assert.ok(cmpOk(notes.patch,meta.patch),'v21: the shipped notes must not be older than the shipped stats patch');
+  function cmpOk(a,b){return E.cmpPatch(a,b)>=0;}
+  assert.ok(sw.includes("'./data/patch-notes.json'"),'v21: patch notes must be precached for offline');
+  // 순서 비교
+  assert.ok(E.cmpPatch('7.3d','7.3c')>0&&E.cmpPatch('7.4','7.3d')>0&&E.cmpPatch('8.0','7.9z')>0&&E.cmpPatch('7.3','7.3')===0&&E.cmpPatch('7.3','7.3a')<0,'v21: patch ordering');
+  assert.equal(E.cmpPatch('x','7.3'),0,'v21: unparseable labels compare as equal, never as newer');
+  // 정제기: 모르는 챔·잘못된 방향·마크업
+  const p=E.sanitizePatchNotes({patch:'9.9a',released:'2026-11-01',source:'javascript:alert(1)',
+    champions:[{en:'Ahri',dir:'buff',note:'<b>x</b> '+'y'.repeat(300)},{en:'Nobody',dir:'nerf'},{en:'Lux',dir:'sideways'},{en:'Ahri',dir:'nerf'},{en:'constructor',dir:'buff'}],
+    items:[{name:'Thing',dir:'nerf',note:'<img>'},{name:'',dir:'buff'}]});
+  assert.ok(p,'v21: sanitizer must keep a valid payload');
+  assert.equal(p.champions.length,1,'v21: unknown champions, bad dirs and duplicates are dropped');
+  assert.equal(p.champions[0].note.length,200,'v21: notes are length-capped');
+  assert.ok(!/[<>]/.test(p.champions[0].note),'v21: markup stripped from notes');
+  assert.equal(p.source,null,'v21: only https sources survive (it goes into href)');
+  assert.equal(JSON.stringify(p.items),'[{"name":"Thing","dir":"nerf","note":"img"}]');
+  assert.equal(E.sanitizePatchNotes({patch:'<7.3>',champions:[{en:'Ahri',dir:'buff'}]}),null,'v21: a bad patch label rejects the file');
+  // 통계보다 오래된 노트는 적용되지 않는다
+  assert.ok(E.adoptPatchNotes({patch:'1.0',champions:[{en:'Ahri',dir:'buff'}]}));
+  assert.equal(E.patchNotesApply(),false,'v21: notes older than the stats patch must be hidden');
+  assert.equal(E.patchNoteOf(E.byEn['Ahri']),null);
+  assert.ok(E.adoptPatchNotes({patch:'99.9',champions:[{en:'Ahri',dir:'nerf',note:'n'}]}));
+  assert.equal(E.patchNotesApply(),true);
+  assert.equal(E.patchNoteOf(E.byEn['Ahri']).dir,'nerf');
+  assert.equal(E.patchNoteOf(E.byEn['Lux']),null);
+  // 화면: 배지·카드·진단 주석은 있고, 점수 경로에는 없다
+  assert.ok(/const pn=patchNoteOf\(c\);\n    if\(pn\)badge\+=`<span class="bd-type pn \$\{pn\.dir\}"/.test(html),'v21: card badge from the notes');
+  assert.ok(/renderAppMeta\(\);renderPatchCard\(\);/.test(html),'v21: the patch card renders with the board');
+  assert.ok(/patchNotesMine\(\)\.map\(x=>esc\(byId\[x\.id\]\.kr\)\+PN_MARK\[x\.dir\]\)/.test(html),'v21: the diagnosis patch row names my changed champions');
+  const scoreSrc=html.slice(html.indexOf('function score('),html.indexOf('function score(')+html.slice(html.indexOf('function score(')).indexOf('\n}\n'));
+  assert.ok(!/patchNote|PATCH_NOTES/.test(scoreSrc),'v21: the notes must not enter score()');
 }
 
 

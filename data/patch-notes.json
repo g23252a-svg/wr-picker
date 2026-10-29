@@ -1,0 +1,27 @@
+{
+  "patch": "7.3d",
+  "released": "2026-10-28",
+  "source": "https://wildrift.leagueoflegends.com/ko-kr/news/game-updates/wild-rift-patch-notes-7-3d/",
+  "note": "공식 패치 노트 기준. 방향(상향/하향/조정)은 공식 노트와 2차 출처(riftpatchnotes, wildriftalpha, 루리웹 게시물)가 일치하는 것만 담았고, 수치는 두 출처 이상에서 같은 값만 적었다. 수치가 확인되지 않은 항목은 변경 의도만 적는다.",
+  "champions": [
+    {"en": "Malphite", "dir": "nerf",   "note": "기본 체력·공속 성장 조정, 폭발 피해와 생존력 하향(보호막 계수, 1스킬 피해·방어력 계수 하향)"},
+    {"en": "Ashe",     "dir": "nerf",   "note": "평타 기반 피해 하향"},
+    {"en": "Ekko",     "dir": "nerf",   "note": "몬스터 상대 피해 하향 — 패시브 120%→110%, 1스킬 115%→100% (정글 에코 겨냥)"},
+    {"en": "Samira",   "dir": "nerf",   "note": "최근 올렸던 스킬 계수 일부 되돌림(소폭)"},
+    {"en": "Singed",   "dir": "nerf",   "note": "초중반 라인전·한타, 후반 교란력 하향"},
+    {"en": "Akali",    "dir": "buff",   "note": "초반 라인전 강화, 후반 콤보가 더 부드럽고 빠르게"},
+    {"en": "Camille",  "dir": "buff",   "note": "레벨당 공격속도 0.016→0.028"},
+    {"en": "Lee Sin",  "dir": "buff",   "note": "레벨당 공격속도 0.02→0.04"},
+    {"en": "Nasus",    "dir": "buff",   "note": "공격력 58→62, 궁 방어·마저 40/50/60→40/55/70, 대신 혼령의 불꽃 기본 피해 하향(라인 정리↓, 라인전·한타↑)"},
+    {"en": "Miss Fortune", "dir": "buff", "note": "패시브 사랑의 한 방 추가 공격력 배율 40%→50%, 궁 조정"},
+    {"en": "Shyvana",  "dir": "adjust", "note": "인간 폼 강화(레벨당 체력 120→130, 체력 재생 9→12, 공속 0.012→0.024, 1스킬 쿨 7/6.5/6/5.5), 풀성장 시 힘은 하향"}
+  ],
+  "items": [
+    {"name": "폭풍갈퀴 (Stormrazor)",      "dir": "nerf", "note": "볼트 피해 120→100, 이동속도 45%→35%"},
+    {"name": "속삭임의 서클릿 (Whispering Circlet)", "dir": "nerf", "note": "회복·보호막 효과 8%→6%"},
+    {"name": "노래의 왕관 (Diadem of Songs)",  "dir": "nerf", "note": "회복·보호막 효과 8%→6%"}
+  ],
+  "systems": [
+    {"name": "내셔 남작의 손길 (Hand of Baron)", "dir": "buff", "note": "첫 바론 보상 강화"}
+  ]
+}
