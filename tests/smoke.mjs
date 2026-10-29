@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='19.0.0'"));
+assert.ok(html.includes("const APP_VERSION='20.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -246,7 +246,7 @@ assert.ok(html.includes('function mergeMatches('),'match merge missing');
 assert.ok(!/matches=d\.matches\.map\(migrateMatch\)/.test(html),'import must merge, not replace');
 assert.ok(/const \{merged,added\}=mergeMatches\(matches,incoming\)/.test(html),'import must use merge');
 // 챔피언 ID를 못 찾아도 판을 버리지 않는다.
-assert.ok(html.includes('out.pickRaw=m.pick'),'unresolved picks must be preserved');
+assert.ok(/out\.pickRaw=raw;/.test(html),'unresolved picks must be preserved');  // [v20] 실행 검사는 v20 블록
 assert.ok(!/const pick=toStableId\(m\.pick\);\s*if\(pick==null\)return null;/.test(html),
   'migrateMatch must not drop matches with unknown champions');
 // 파괴적 작업 전 스냅샷 + 되돌리기
@@ -379,7 +379,7 @@ assert.ok(html.includes('function foldMatch('),'shared fam accumulator missing')
 assert.ok(/matches\.forEach\(m=>foldMatch\(famMap,m\)\)/.test(html),
   'computeFam and the replay must share one accumulator');
 // 채점은 그 판 직전까지의 전적만 봐야 한다. 전체 전적으로 채점하면 결과를 미리 아는 셈이다.
-assert.ok(/famMap=acc;/.test(html)&&/foldMatch\(acc,m\)/.test(html),'replay must be prequential');
+assert.ok(/famMap=acc;/.test(html)&&/foldMatch\(acc,m\)/.test(html),'replay must be prequential');  // [v20] 순서는 v20 블록이 실제로 돌려 본다
 assert.ok(html.includes('function rankAgreement('),'axis rank agreement missing');
 assert.ok(html.includes('function axisReport('),'axis report missing');
 assert.ok(html.includes('function axisTrust('),'axis trust missing');
@@ -503,7 +503,7 @@ assert.ok(html.includes('function matchTime('),'timestamp parser missing');
 assert.ok(!/const t=Number\(m\.t\)\|\|Date\.now\(\)/.test(html),
   'Number(t)||Date.now() collapses every ISO-timestamped record onto one id');
 {
-  const mt=Function(html.match(/function matchTime\(raw\)\{[\s\S]*?\n\}/)[0]
+  const mt=Function('const T_MIN=946684800000;'+html.match(/function matchTime\(raw\)\{[\s\S]*?\n\}/)[0]
     .replace('_tSeq++','(globalThis.__s=(globalThis.__s||0)+1)')+'\nreturn matchTime;')();
   assert.equal(mt(1786525004064),1786525004064,'numeric timestamps must pass through');
   assert.equal(mt('2026-08-01T10:00:00.000Z'),Date.parse('2026-08-01T10:00:00.000Z'),'ISO timestamps must parse');
@@ -918,7 +918,7 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
     'v12: diagnosis card must be mounted in the analysis tab');
   assert.ok(/\.dgrow\{/.test(html)&&/\.dgok\{/.test(html),'v12: diagnosis card styles must exist');
   // 다중 비교 보정을 p 에만 걸고 need 에 안 걸면 두 숫자가 서로 어긋난다.
-  assert.ok(/x\.need=gamesToDecide\(x\.recent\.k,x\.recent\.n,x\.base\.k,x\.base\.n,items\.length\);/.test(html),
+  assert.ok(/x\.need=gamesToDecide\(x\.recent\.k,x\.recent\.n,x\.base\.k,x\.base\.n,fam\);/.test(html),   // [v20] 가족 크기 fam 으로 통일
     'v12: required-sample must use the same multiple-comparison correction as p');
 }
 
@@ -937,7 +937,7 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   // 기본은 꺼짐. 근거가 없는 기능을 전원에게 켜면 노이즈를 가중하는 짓이다.
   assert.ok(/let weights=\{[^}]*familiarFirst:false\}/.test(html),
     'v18: familiar-first must default to OFF');
-  assert.ok(/const next=Object\.assign\(\{[^}]*familiarFirst:false\}/.test(html)
+  assert.ok(/const next=\{[^}]*familiarFirst:false\};/.test(html)
     &&/next\.familiarFirst=!!next\.familiarFirst;/.test(html),
     'v18: the sanitizer must supply and coerce familiarFirst');
   // 초기화가 이 설정을 말없이 꺼버리면 사용자는 켠 줄 알고 계속 쓴다.
@@ -949,13 +949,21 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
      '밴드 밖도 같이 정렬해버리는' 종류의 사고를 잡을 수 없다. */
   const ffSrc=html.slice(html.indexOf('let familiarBumped=null;'),html.indexOf('lastCands=cands;'));
   assert.ok(ffSrc.includes('weights.familiarFirst'),'v18: re-rank block not extractable');
-  const runFF=new Function('weights','cands','FAMILIAR_BAND','playCount',
+  const runFF=new Function('weights','cands','FAMILIAR_BAND','playCount','famMap','state',
     ffSrc+'\nreturn {order:cands.map(x=>x.c.id),totals:cands.map(x=>x.s.total),familiarBumped};');
-  const mk=(id,total,n)=>({c:{id,kr:id},s:{total},n});
+  // [v20] 이 라인 판수(ln)가 먼저, 같으면 전체 판수(n)
+  const mk=(id,total,n,ln=0)=>({c:{id,kr:id},s:{total},n,ln});
   const run=(on,list)=>{
     const games=Object.fromEntries(list.map(o=>[o.c.id,o.n]));
-    return runFF({familiarFirst:on},list.map(o=>({c:o.c,s:{total:o.s.total}})),band,id=>games[id]||0);
+    const famMap=Object.fromEntries(list.map(o=>[o.c.id,{n:o.n,lane:{mid:{n:o.ln}}}]));
+    return runFF({familiarFirst:on},list.map(o=>({c:o.c,s:{total:o.s.total}})),band,id=>games[id]||0,famMap,{lane:'mid'});
   };
+  {
+    const r=run(true,[mk('A',61,1,1),mk('B',60,99,0)]);
+    assert.deepEqual(r.order,['A','B'],'v20: familiarity is counted in THIS lane first — 99 games elsewhere do not outrank 1 game here');
+    const r2=run(true,[mk('A',61,30,3),mk('B',60,10,8)]);
+    assert.deepEqual(r2.order,['B','A']); assert.equal(r2.familiarBumped.games,8); assert.equal(r2.familiarBumped.total,10);
+  }
 
   // 꺼져 있으면 아무것도 건드리지 않는다.
   {
@@ -970,7 +978,7 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
     assert.ok(r.familiarBumped,'v18: a re-order must be disclosed');
     assert.equal(r.familiarBumped.over,'A');
     assert.ok(Math.abs(r.familiarBumped.cost-1)<1e-9,'v18: cost must be the real score gap');
-    assert.equal(r.familiarBumped.games,99,"v18: the disclosed game count must be the promoted pick");
+    assert.equal(r.familiarBumped.total,99,"v18: the disclosed game count must be the promoted pick");
   }
   /* 밴드 밖은 절대 올라오면 안 된다. 여기가 뚫리면 이 기능은 추천이 아니라
      '많이 해본 순 정렬'이 되고, 점수는 장식이 된다. */
@@ -1021,7 +1029,7 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
 
   /* 기록에 남기지 않으면 v17 순응도 분석에서 '1순위'의 뜻이 판마다 말없이
      달라진다. 남기고, 섞인 판수를 카드에서 밝혀야 한다. */
-  assert.ok(/familiarFirst:weights\.familiarFirst\?1:undefined,/.test(html),
+  assert.ok(/familiarFirst:lastFamiliarBumped\?1:undefined,/.test(html),   // [v20] 켜진 판이 아니라 실제로 재정렬된 판
     'v18: each match must record whether its top3 was re-ranked');
   assert.ok(/reranked:T\.filter\(m=>m\.familiarFirst\)\.length,/.test(html),
     'v18: the adherence model must count re-ranked matches');
@@ -1031,7 +1039,7 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   // 근거가 약하다는 사실을 설정 화면에서 숨기면 안 된다.
   assert.ok(/class="poolnote ffwarn"/.test(html)&&/근거가 확실해서 넣은 기능이 아닙니다/.test(html),
     'v18: the settings screen must state that the evidence is weak');
-  assert.ok(/0\.50|0\.4988/.test(html),'v18: the measured AUC must be shown, not summarized away');
+  assert.ok(/순위 일치도 0\.50 — 동전던지기/.test(html),'v18: the measured AUC must be shown, not summarized away');
 }
 
 
@@ -1075,7 +1083,9 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   /* 패치별 통계 묶음. 앱이 옛 판을 그 판 당시 통계로 채점하는 근거 자료다. */
   const byPatch=JSON.parse(fs.readFileSync(new URL('../data/by-patch.json',import.meta.url),'utf8'));
   const bpRaw=fs.readFileSync(new URL('../data/by-patch.json',import.meta.url));
-  assert.ok(bpRaw.length<400*1024,`v19: by-patch.json grew to ${bpRaw.length} bytes`);
+  /* [v20] 패치마다 ~25KB 씩 자란다. 고정 400KB 는 열 패치 뒤 봇 자신의 검사를 넘겨 매일의 커밋을
+     영영 막았을 것이다. 패치 수에 비례하는 상한으로 두고, 행 하나가 비정상적으로 커지는 것만 잡는다. */
+  assert.ok(bpRaw.length<120*1024+40*1024*Object.keys(byPatch.patches).length,`v19: by-patch.json grew to ${bpRaw.length} bytes for ${Object.keys(byPatch.patches).length} patches`);
   assert.equal(byPatch.updated,latest.updated,'v19: by-patch.json must be regenerated with latest.json');
   assert.ok(byPatch.patches[latest.patch],'v19: by-patch.json must include the current patch');
   for(const [p,v] of Object.entries(byPatch.patches)){
@@ -1125,12 +1135,12 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
     'v19: unsafe patch labels must be dropped');
 
   // 자기 채점은 판마다 그 판 당시 패치의 표로 바꿔 끼우고, 반드시 되돌린다.
-  assert.ok(/const hist=statsForMatch\(m\), tbl=hist\|\|savedStats;/.test(html),
+  assert.ok(/const hist=statsForMatch\(m\), tbl=hist\?hist\.tbl:savedStats;/.test(html),
     'v19: replay must score each game with the stats of its own patch');
   assert.ok(/if\(ROLE_STATS!==savedStats\|\|ROLE_STATS_PREV!==savedPrev\)\{ROLE_STATS=savedStats;ROLE_STATS_PREV=savedPrev;_asgKey=null;\}/.test(html),
     'v19: replay must restore the live stats (and drop the lane-assignment cache) in finally');
-  assert.ok(/out\.push\(\{m,won:!!m\.won,asOf:hist\?1:0,/.test(html),'v19: each replayed game records what it was scored with');
-  assert.ok(/out\.asOf=\{n:R\.length,k:R\.filter\(r=>r\.asOf\)\.length\}/.test(html)&&/class="dxs asofwarn"/.test(html),
+  assert.ok(/asOf:hist\?hist\.how:'today',/.test(html),'v19: each replayed game records what it was scored with');
+  assert.ok(/out\.asOf=\{n:R\.length,exact:c\('exact'\)/.test(html)&&/class="dxs asofwarn"/.test(html),
     'v19: the axis card must say which stats it scored with, and warn when it used today’s');
   assert.ok(/loadStatsByPatch\(\);\n\}\)\(\);/.test(html),'v19: the per-patch table must be loaded at startup');
   assert.ok(/STATS_BY_PATCH=t;\n\s*_byPatchOrder=[^\n]*\n\s*bumpEngineData\(\);/.test(html),
@@ -1147,6 +1157,279 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(!/메타\(\+패치 추세\)/.test(html),'v19: the legend must not claim the trend is in the score');
   assert.ok(/let ROLE_STATS_PREV=\(window\.WR_STATS_META&&isPatchBaseline\(/.test(html),
     'v19: the bundled snapshot must not show a same-patch trend either');
+}
+
+
+/* ============ [v20] 실제로 돌려 보는 검사 ============
+   v19 까지의 검사는 대부분 소스 정규식이었다. 감사에서 확인된 사실: replayPass 가 옛 판을
+   오늘 통계로 채점하는 한 토큰 돌연변이, 채점 전에 결과를 famMap 에 섞는(사후편향)
+   돌연변이, trendOffset 을 0 으로 만드는 돌연변이가 전부 통과했다. 아래는 엔진을 vm 에
+   올려 놓고 실제 값을 본다. */
+{
+  const {loadEngine}=await import('./engine.mjs');
+  const fresh=()=>loadEngine();
+  const NOW=Date.now();
+  const E=fresh();
+  const ahri=E.byEn['Ahri'], lux=E.byEn['Lux'], zed=E.byEn['Zed'], shen=E.byEn['Shen'], galio=E.byEn['Galio'];
+  assert.ok(ahri&&lux&&zed&&shen&&galio,'v20: fixture champions must exist');
+  const mk=(o)=>E.migrateMatch(Object.assign({lane:'mid',ally:[],enemy:[],won:true},o));
+
+  /* --- 신뢰 경계: 조회표 프로토타입, 가져온 백업, 가중치, 가이드 --- */
+  assert.equal(E.byEn['constructor'],undefined,'v20: lookup tables must not expose Object.prototype names');
+  assert.equal(E.hasOwn(E.sanitizeStatsTable({constructor:{mid:{win:50,pick:5,ban:1}}}),'constructor'),false,
+    'v20: a remote champion named "constructor" must not become a stats row');
+  {
+    const w=E.sanitizeWeights(JSON.parse('{"__proto__":{"evil":1},"comfort":50,"junk":1}'));
+    assert.equal(w.evil,undefined,'v20: a "__proto__" key in stored weights must not re-point the prototype');
+    assert.ok(!('evil' in w),'v20: nothing from the hostile key may be reachable through the prototype chain');
+    assert.equal(w.junk,undefined,'v20: unknown weight keys must be dropped');
+    assert.equal(w.comfort,50);
+  }
+  {
+    const m=mk({pick:ahri.id,t:1e20,patch:'7.3a<b>',sourcePatch:'7.3a',modelVersion:'<img src=x>',junk:'x'.repeat(50),
+      scoreSnapshot:{total:'77',meta:NaN,comfort:140},bracket:'master'});
+    assert.ok(m.t>946684800000&&m.t<=NOW+86400000,'v20: an out-of-range timestamp must be replaced, not kept');
+    assert.equal(m.patch,undefined,'v20: a patch label with markup must be dropped (it is rendered)');
+    assert.equal(m.sourcePatch,'7.3a');
+    assert.equal(m.modelVersion,undefined,'v20: modelVersion must be validated — it is rendered into innerHTML');
+    assert.equal(m.junk,undefined,'v20: unknown backup fields must not be persisted');
+    assert.equal(JSON.stringify(m.scoreSnapshot),'{"total":77,"comfort":100}','v20: scoreSnapshot fields must be numeric and clamped');
+    assert.equal(m.bracket,'master','v20: the bracket in use must survive migration');
+    assert.equal(mk({pick:ahri.id,modelVersion:'19.0.0-asof-replay'}).modelVersion,'19.0.0-asof-replay');
+  }
+  {
+    const m1=mk({pick:'NoSuchChamp'}); assert.equal(m1.pick,null); assert.equal(m1.pickRaw,'NoSuchChamp');
+    const m2=E.migrateMatch(JSON.parse(JSON.stringify(m1)));
+    assert.equal(m2.pickRaw,'NoSuchChamp','v20: pickRaw must survive re-migration (it was deleted on the first boot)');
+    const m3=E.migrateMatch({pick:null,pickRaw:ahri.key,lane:'mid',t:NOW-5e6});
+    assert.equal(m3.pick,ahri.id,'v20: a repaired DB must restore the pick from pickRaw');
+    assert.equal(m3.pickRaw,undefined);
+    assert.equal(mk({pick:'<img src=x onerror=1>'}).pickRaw,undefined,'v20: pickRaw is shown on screen — unsafe strings are not kept');
+  }
+  {
+    const g=E.sanitizeGuides({champions:{
+      Ahri:{slug:'ahri" onclick="x',summaryKo:['<img src=x onerror=1>','ok'],chapters:[{t:'Early',tKo:'초반',ko:['<b>x</b>']}],
+            counteredBy:[{slug:'zed',lane:'mid'},{slug:'bad slug'}],synergy:'nope'},
+      Nobody:{slug:'nobody'}, constructor:{slug:'abc'}}});
+    assert.ok(g&&g.Ahri,'v20: known champions survive the guide sanitizer');
+    assert.equal(g.Nobody,undefined,'v20: unknown guide champions are dropped');
+    assert.equal(E.hasOwn(g,'constructor'),false);
+    assert.equal(g.Ahri.slug,undefined,'v20: a slug that is not /^[a-z0-9-]+$/ must be dropped (it goes into href)');
+    // vm 영역의 배열은 strict deepEqual 로 호스트 배열과 비교할 수 없다 — JSON 으로 견준다.
+    assert.equal(JSON.stringify(g.Ahri.summaryKo),'["img src=x onerror=1","ok"]','v20: angle brackets are stripped from guide text');
+    assert.equal(JSON.stringify(g.Ahri.counteredBy),'[{"slug":"zed","lane":"mid"}]');
+    assert.equal(JSON.stringify(g.Ahri.synergy),'[]');
+    assert.equal(g.Ahri.chapters[0].ko[0],'bx/b');
+  }
+  assert.ok(/const g=sanitizeGuides\(await res\.json\(\)\);/.test(html)&&/sanitizeGuides\(JSON\.parse\(cached\.value\)\)/.test(html),
+    'v20: both guide paths (network and cache) must go through the sanitizer');
+  assert.ok(/<li>\$\{esc\(x\)\}<\/li>/.test(html)&&/href="\$\{esc\(url\)\}"/.test(html),'v20: tactics panel must escape guide strings');
+  assert.ok(/<span class="nm">\$\{esc\(k\)\}/.test(html),'v20: the version table must escape the stored modelVersion');
+  assert.equal(E.sanitizeStatsPayload({patch:'7.3a',updated:'2026-99-99',brackets:{diamond:{stats:{Ahri:{mid:{win:50,pick:5,ban:1}}}}}}),null,
+    'v20: "updated" must be a real date, not just date-shaped');
+
+  /* --- 패치별 통계로 채점한다는 말이 사실인지 — statsForMatch 와 replayPass 를 실제로 돌린다 --- */
+  {
+    const R=fresh();
+    const A=R.byEn['Ahri'];
+    const base=t=>({lane:'mid',pick:A.id,ally:[],enemy:[],won:true,t});
+    const ms=[
+      R.migrateMatch(Object.assign(base(NOW-9e6),{patch:'9.1'})),                      // exact, diamond
+      R.migrateMatch(Object.assign(base(NOW-8e6),{patch:'9.2'})),                      // exact, diamond
+      R.migrateMatch(Object.assign(base(NOW-7e6),{patch:'9.2',bracket:'master'})),     // exact, master table
+      R.migrateMatch(Object.assign(base(NOW-6e6),{patch:'9.1',bracket:'master'})),     // 9.1 has no master → bracket fallback
+      R.migrateMatch(Object.assign(base(Date.parse('2026-01-15T00:00:00Z')),{})),      // no patch → by date → 9.2
+      R.migrateMatch(Object.assign(base(Date.parse('2025-12-01T00:00:00Z')),{})),      // before any archive
+    ];
+    ms.forEach(m=>R.live.matches.push(m)); R.computeFam();
+    const today=R.replayPass(false);
+    assert.equal(today.length,6); assert.ok(today.every(r=>r.asOf==='today'),'v20: without a per-patch table every row is scored with today');
+    const liveBefore=R.live.ROLE_STATS;
+    assert.ok(R.adoptByPatch({v:1,patches:{
+      // 메타 축은 28~84 로 잘리므로 극단값(70/30/90)을 쓰면 위에서 같아진다 — 구간 안의 값으로 둔다.
+      '9.1':{from:'2026-01-01',to:'2026-01-10',days:10,brackets:{diamond:{Ahri:{mid:[56,10,1,1]}}}},
+      '9.2':{from:'2026-01-11',to:'2026-01-20',days:10,brackets:{diamond:{Ahri:{mid:[48,10,1,1]}},master:{Ahri:{mid:[60,10,1,1]}}}}}}),
+      'v20: fixture by-patch table must be adopted');
+    const how=ms.map(m=>R.statsForMatch(m));
+    assert.deepEqual(how.map(h=>h&&h.how),['exact','exact','exact','bracket','date','before'],'v20: statsForMatch must say how each table was chosen');
+    assert.deepEqual(how.map(h=>h&&h.patch),['9.1','9.2','9.2','9.1','9.2','9.1']);
+    assert.deepEqual(how.map(h=>h&&h.bracket),['diamond','diamond','master','diamond','diamond','diamond']);
+    assert.equal(how[2].tbl.Ahri.mid.win,60,'v20: a game logged on Master+ is scored with the Master+ table of its patch');
+    assert.doesNotThrow(()=>R.statsForMatch({patch:'constructor',t:NOW,lane:'mid'}),'v20: hostile patch names must not throw');
+    assert.doesNotThrow(()=>R.statsForMatch({patch:'9.1',t:1e20,lane:'mid'}),'v20: an invalid date must not throw');
+    // replayPass 는 시간순으로 돌리므로 행을 판의 t 로 찾는다.
+    const byT=new Map(R.replayPass(false).map(r=>[r.m.t,r])), rows=ms.map(m=>byT.get(m.t));
+    assert.deepEqual(rows.map(r=>r.asOf),['exact','exact','exact','bracket','date','before'],'v20: replay rows must carry the class, not a boolean');
+    assert.ok(rows[0].tier>rows[1].tier,'v20: the 9.1 game (56%) must score higher than the 9.2 game (48%) — the stats really were swapped');
+    assert.ok(rows[2].tier>rows[0].tier,'v20: the Master+ game (60%) must score highest');
+    assert.strictEqual(R.live.ROLE_STATS,liveBefore,'v20: replay must restore the live stats table');
+    const A2=R.analysisModel();
+    assert.deepEqual([A2.asOf.exact,A2.asOf.bracket,A2.asOf.date,A2.asOf.before,A2.asOf.today],[3,1,1,1,0],'v20: the axis card counts every class');
+  }
+  assert.ok(/기록된 패치·구간의 통계/.test(html)&&/그 패치에 기록된 구간 표가 없어 Diamond\+ 표/.test(html),
+    'v20: the card must say when a table was substituted');
+  assert.ok(/bracket:appliedBracket,familiarFirst:lastFamiliarBumped\?1:undefined,/.test(html),
+    'v20: each game must record the bracket in use, and the re-rank flag only when a re-rank happened');
+
+  /* --- 사후편향: 그 판의 결과를 그 판의 채점에 섞지 않는다 --- */
+  {
+    const P=fresh(), Q=fresh(); const A=P.byEn['Ahri'];
+    const g=(i,won)=>({lane:'mid',pick:A.id,ally:[],enemy:[],won,t:NOW-(10-i)*1e6,patch:'7.3a'});
+    [g(1,false),g(2,false),g(3,false),g(4,true)].forEach(m=>P.live.matches.push(P.migrateMatch(m))); P.computeFam();
+    [g(1,false),g(2,false),g(3,false)].forEach(m=>Q.live.matches.push(Q.migrateMatch(m))); Q.computeFam();
+    /* 행마다 '그 판 이전까지만' 접은 엔진의 값과 같아야 한다. 마지막 행만 보면 3패+1승(40)이
+       3패(40)와 우연히 같아 사후편향 돌연변이가 살아남았다 — 네 행을 전부 본다. */
+    const expected=[0,1,2,3].map(k=>{const Z=fresh();for(let i=1;i<=k;i++)Z.live.matches.push(Z.migrateMatch(g(i,false)));Z.computeFam();Z.state.lane='mid';Z.state.ally=[];Z.state.enemy=[];return Z.score(A).base;});
+    const rows=P.replayPass(false);
+    // rows 는 vm 영역 배열이라 .map 결과도 vm Array 다 — 호스트 배열로 옮겨 비교한다.
+    assert.deepEqual(Array.from(rows,r=>r.base),expected,`v20: each replayed game must be scored from the games before it only (got ${Array.from(rows,r=>r.base)}, expected ${expected})`);
+    assert.ok(expected[0]>expected[3],'sanity: three losses must lower comfort');
+  }
+
+  /* --- 추세: 판 전체 이동을 뺀 값, 픽률 가중, 저픽률 제외 --- */
+  {
+    const T=fresh();
+    const pay=(cur,prev)=>({patch:'9.2',updated:'2026-01-20',url:'https://x.y/z',source:'t',
+      brackets:{diamond:{label:'Diamond+',stats:cur}},prev:{patch:'9.1',updated:'2026-01-10',brackets:{diamond:{stats:prev}}}});
+    const row=(w,p)=>({mid:{win:w,pick:p,ban:1}});
+    assert.ok(T.applyStatsPayload(T.sanitizeStatsPayload(pay({Ahri:row(52,5),Lux:row(52,5),Zed:row(52,0.5)},{Ahri:row(50,5),Lux:row(50,5),Zed:row(40,0.5)})),'t'));
+    assert.ok(Math.abs(T.trendOffset()-2)<1e-9,'v20: when every champion rose 2%p the field offset is 2');
+    assert.equal(T.trendOf(T.byEn['Ahri'],'mid'),0,'v20: a champion that moved with the field has no trend');
+    assert.equal(T.trendOf(T.byEn['Zed'],'mid'),null,'v20: rows under 1% pick get no trend and must not enter the offset');
+    assert.ok(T.applyStatsPayload(T.sanitizeStatsPayload(pay({Ahri:row(54,9),Lux:row(50,1)},{Ahri:row(50,9),Lux:row(50,1)})),'t'));
+    assert.ok(Math.abs(T.trendOffset()-3.6)<1e-9,'v20: the offset is pick-weighted (4@9 and 0@1 → 3.6)');
+    assert.ok(Math.abs(T.trendOf(T.byEn['Ahri'],'mid')-0.4)<1e-9);
+  }
+  assert.equal(E.TREND_BADGE,1,'v20: one trend threshold');
+  assert.ok(!/s\.trend<=-1\.5\)/.test(html)&&!/t<=-1\?' ▼'/.test(html)&&!/s\.trend>=0\.75\?'up'/.test(html),
+    'v20: every trend cut-off must use TREND_BADGE');
+  assert.ok(/\$\{META_SNAPSHOT\.prevPatch\} 대비 \$\{s\.trend>0\?'▲'/.test(html),'v20: the card chip must name the patch it compares with');
+  assert.ok(/판 전체가 같이 움직인/.test(html),'v20: the chip tooltip must disclose the field offset');
+
+  /* --- 밴 추천의 '내 주력'은 엔진이 쓰는 숙련값으로 --- */
+  {
+    const B=fresh(); const S=B.byEn['Shen'], G=B.byEn['Galio'];
+    B.live.pool[S.id]={comfort:80};
+    for(let i=0;i<6;i++)B.live.matches.push(B.migrateMatch({lane:'top',pick:S.id,won:false,ally:[],enemy:[],t:NOW-(20-i)*1e6}));
+    for(let i=0;i<12;i++)B.live.matches.push(B.migrateMatch({lane:'mid',pick:G.id,won:true,perf:'good',ally:[],enemy:[],t:NOW-(13-i)*1e6}));
+    B.computeFam();
+    const mains=B.myMains().map(c=>c.en);
+    assert.ok(!mains.includes('Shen'),'v20: a champion with 6 recorded losses is not a "main" just because the pool says 80');
+    assert.ok(mains.includes('Galio'),'v20: a champion the engine rates ≥60 from results is a main even with no pool entry');
+    // 챔폭을 바꾸면 자기 채점 키가 바뀌어야 한다(캐시가 옛 챔폭으로 남는 사고)
+    const k1=B.selfCheckKey(); B.live.pool[G.id]={comfort:70}; const k2=B.selfCheckKey();
+    assert.notEqual(k1,k2,'v20: editing the pool must invalidate the self-check cache key');
+  }
+
+  /* --- 분석 탭: 능력 창, 양측 꼬리, 성과 정의 --- */
+  {
+    const C=fresh(); const A=C.byEn['Ahri'];
+    for(let i=0;i<10;i++)C.live.matches.push(C.migrateMatch({lane:'mid',pick:A.id,won:i%2===0,modelVersion:'7.0.0',ally:[],enemy:[],t:NOW-(40-i)*1e6}));
+    for(let i=0;i<10;i++)C.live.matches.push(C.migrateMatch({lane:'mid',pick:A.id,won:i%2===0,modelVersion:'8.4.0',teamIssue:(i===1||i===3)?1:undefined,ally:[],enemy:[],t:NOW-(20-i)*1e6}));
+    C.computeFam();
+    const M=C.analysisModel();
+    assert.deepEqual([M.teamIssue.n,M.teamIssue.capable,M.teamIssue.all,M.teamIssue.rest],[2,10,20,8],
+      'v20: the team-issue share must be taken over games that could carry the flag (v8.1+)');
+  }
+  {
+    const D=fresh(); const A=D.byEn['Ahri'];
+    const wins=[...Array(30)].map((_,i)=>i%2===0).concat([true,true,false,false,false,false,false,false,false,false]);
+    wins.forEach((w,i)=>D.live.matches.push(D.migrateMatch({lane:'mid',pick:A.id,won:w,ally:[],enemy:[],t:NOW-(50-i)*1e6})));
+    D.computeFam();
+    const M=D.analysisModel();
+    const binomAtMost=(k,n,p)=>{let s=0;for(let i=0;i<=k;i++){let c=1;for(let j=0;j<i;j++)c=c*(n-j)/(j+1);s+=c*Math.pow(p,i)*Math.pow(1-p,n-i);}return s;};
+    const base=Math.max(0.35,Math.min(0.65,17/40)), lo=binomAtMost(2,10,base), hi=1-binomAtMost(1,10,base);
+    assert.ok(Math.abs(M.last10P-Math.min(1,2*Math.min(lo,hi)))<1e-9,'v20: the banner probability must be two-sided like the diagnosis card');
+  }
+  assert.ok(/f\.gsum\+=PERF\[m\.perf\]\.v;/.test(html)&&/성과 \$\{Math\.round\(fm\.gsum\/fm\.graded\*100\)\}/.test(html)
+    &&/성과 \$\{Math\.round\(r\.p\/r\.g\*100\)\}/.test(html)&&/avg:graded\.length\?graded\.reduce\(\(a,m\)=>a\+PERF\[m\.perf\]\.v,0\)/.test(html),
+    'v20: "성과" must be one definition everywhere — the mean of entered grades, without the win/loss blend');
+  {
+    const F=fresh(); const A=F.byEn['Ahri'];
+    [{won:true,perf:'mvp'},{won:false},{won:false,perf:'bad'}].forEach((o,i)=>F.live.matches.push(F.migrateMatch(Object.assign({lane:'mid',pick:A.id,ally:[],enemy:[],t:NOW-(9-i)*1e6},o))));
+    F.computeFam();
+    const f=F.live.famMap[A.id];   // famMap 은 computeFam 때 새 객체로 바뀐다 — 라이브 바인딩으로 본다
+    assert.equal(f.graded,2); assert.ok(Math.abs(f.gsum-(F.PERF.mvp.v+F.PERF.bad.v))<1e-9,'v20: gsum is the sum of raw grades');
+  }
+  // 같은 가족, 같은 보정 — 라인 항목 이중 보정과 패치 항목 무보정이 함께 사라져야 한다
+  assert.ok(!/selP\(laneShift\.p,lanesSeen\.length\)/.test(html),'v20: the lane item must not be pre-corrected');
+  assert.ok(/const fam=items\.length\+\(laneShift\?Math\.max\(0,lanesSeen\.length-1\):0\);/.test(html)
+    &&/items\.forEach\(x=>\{x\.p=selP\(x\.p,fam\);/.test(html),'v20: one family size for p and need, patch row included');
+  assert.ok(!/if\(x\.isWinrate\)return;/.test(html),'v20: the patch row is one of the searched hypotheses');
+  // 기록 탭: top3 이전 판은 '이탈'이 아니라 분류 불가
+  assert.ok(/\?'pre':\(m\.top!=null&&m\.pick===m\.top\)\?'f'/.test(html)&&/추천 기록 전/.test(html),
+    'v20: games recorded before top3 existed must not be counted as deviations');
+  // 순응도 카드의 문장은 계산에서 나온다
+  assert.ok(/scoreTop1:mean\(snap\(top1\),m=>m\.scoreSnapshot\.total\),scoreDevi:mean\(snap\(devi\)/.test(html),
+    'v20: the adherence card must compute the score comparison it states');
+  assert.ok(!/이 앱의 유일한 단정형 조언/.test(html),'v20: no hard-coded README conclusions in cards');
+  // 메타 중심 모드 문구가 score() 와 맞는지
+  assert.ok(!/숙련 제외'/.test(html)&&!/숙련도는 메타 중심 모드에서 제외/.test(html)&&!/메타 중심 모드에서는 사용하지 않습니다/.test(html),
+    'v20: meta mode applies comfort at 35–85% — the copy must not say it is excluded');
+  assert.ok(/W\.comfort\*\(0\.35\+0\.5\*evidence\)/.test(html),'v20: (anchor) the 35–85% rule the copy now describes');
+  // 통제 불가 / 첫 픽 / 스파크라인 문구
+  assert.ok(!/챔피언 평가에서 제외됩니다/.test(html)&&!/챔피언 평가에서 제외돼/.test(html),'v20: a team-issue loss is neutral (0.5), not excluded');
+  assert.ok(/vs 2~3판째 \$\{Math\.round\(fpf\.early\.w/.test(html),'v20: the first-pick badge must name the bucket it compares with');
+  assert.ok(/<span>최근 \$\{a\.n\}판<\/span>/.test(html),'v20: sparkline axis must show the real count');
+  // 배지 포화
+  assert.ok(/const uniqTop=key=>/.test(html)&&/topConfidence!=null&&s\.confidence===topConfidence/.test(html)
+    &&/const topConfidence=uniqTop\('confidence'\);/.test(html)&&/const topCounter=uniqTop\('counterAxis'\);/.test(html),
+    'v20: 안전픽/카운터픽 only for a unique leader');
+  // '성과'라는 이름으로 승패 섞인 perfValue 평균을 찍는 곳이 남아 있으면 안 된다(기록 탭 통계 카드 포함)
+  assert.ok(!/reduce\(\(a,m\)=>a\+perfValue\(m\),0\)/.test(html),'v20: no on-screen "성과" average may use the outcome-blended perfValue');
+  assert.ok(/g\.reduce\(\(a,m\)=>a\+PERF\[m\.perf\]\.v,0\)\/g\.length\*100\)\}<small>\/100 \(\$\{g\.length\}판 · 등급만\)/.test(html),
+    'v20: the records-tab average uses grades only and says so');
+  // 가져오기 되돌리기는 빼기
+  assert.ok(/const undoImport=s\.reason==='import';/.test(html)&&/const kept=matches\.filter\(m=>m\.t>since\);/.test(html),
+    'v20: rolling back an import must remove the imported games and keep later ones');
+  // 자동 백업은 첫 저장 뒤에만 '켜짐'
+  assert.ok(!/autoBackupHandle=h;autoBackupState='ready';/.test(html)&&/const ok=await autoBackupWrite\(false\);/.test(html),
+    'v20: auto-backup must not report success before the first write succeeded');
+  assert.ok(/_skipAutoBackupOnce=true;/.test(html)&&/if\(_skipAutoBackupOnce\)\{_skipAutoBackupOnce=false;return;\}/.test(html),
+    'v20: clearing all games must not overwrite the backup file with an empty list');
+  assert.ok(/if\(matches\.length\)\{try\{await window\.storage\.set\('wr_seeded','1'\);\}catch\(e\)\{\} return false;\}/.test(html),
+    'v20: a device with records is marked seeded so a cleared history is not resurrected');
+  // 탐색 부하: 못 읽은 픽은 새 챔이 아니다
+  {
+    const X=fresh(); const A=X.byEn['Ahri'];
+    for(let i=0;i<12;i++)X.live.matches.push(X.migrateMatch({lane:'mid',pick:A.id,won:true,ally:[],enemy:[],t:NOW-(30-i)*1e6}));
+    X.computeFam(); const l0=X.computeExplorationLoad();
+    X.live.matches.push(X.migrateMatch({lane:'mid',pick:'Ghost',won:true,ally:[],enemy:[],t:NOW-1e6}));
+    X.computeFam(); assert.equal(X.computeExplorationLoad(),l0,'v20: an unresolved pick must not raise the exploration load');
+  }
+  // 필요 판수는 p 와 같은 양측 검정에서 나온다(한쪽 꼬리로 바꾸면 46판처럼 2.7배 작게 나온다)
+  {
+    const g=E.gamesToDecide(27,50,23,50,1);
+    assert.ok(Math.abs(g-1127)/1127<0.03,`v20: two-sided games-to-decide anchor (got ${g}, expect ≈1127)`);
+  }
+}
+
+/* [v20] 파이프라인: 구간별 기준선, 단조 보호, 모르는 챔의 행 보존, by-patch 성장 */
+{
+  const {patchBaseline}=await import('../scripts/trend-baseline.mjs');
+  const row=(win,pick=5)=>({win,pick,ban:1});
+  const arc=(patch,updated,br)=>({patch,updated,brackets:Object.fromEntries(Object.entries(br).map(([k,st])=>[k,{stats:st}]))});
+  const A=[
+    arc('7.2e','2026-09-17',{diamond:{A:{mid:row(40)}},challenger:{A:{mid:row(60)}}}),
+    arc('7.2e','2026-09-18',{diamond:{A:{mid:row(42)}},challenger:{A:{mid:row(62)}}}),
+    arc('7.2e','2026-09-19',{diamond:{A:{mid:row(50)}}}),
+    arc('7.2e','2026-09-20',{diamond:{A:{mid:row(52)}}}),
+    arc('7.2e','2026-09-21',{diamond:{A:{mid:row(54)}}}),
+    arc('7.3','2026-09-22',{diamond:{A:{mid:row(99)}},challenger:{A:{mid:row(99)}}}),
+  ];
+  const b=patchBaseline(A,'7.3');
+  assert.equal(b.patch,'7.2e'); assert.equal(b.brackets.diamond.days,3); assert.equal(b.brackets.diamond.stats.A.mid.win,52);
+  assert.ok(b.brackets.challenger,'v20: a bracket missing from the last days must still get a baseline from the days that have it');
+  assert.deepEqual([b.brackets.challenger.days,b.brackets.challenger.from,b.brackets.challenger.updated,b.brackets.challenger.stats.A.mid.win],
+    [2,'2026-09-17','2026-09-18',61]);
+  assert.ok(latest.prev&&latest.prev.brackets.challenger&&latest.prev.brackets.apex,'v20: shipped baseline must cover every bracket that has previous-patch data');
+  const fetchSrc=fs.readFileSync(new URL('../scripts/fetch-stats.mjs',import.meta.url),'utf8');
+  assert.ok(/if\(!rebuild&&newestArchived&&updated<newestArchived\)\{/.test(fetchSrc),'v20: an older upstream "updated" must not rewind the data');
+  assert.ok(/const knownOnly=\(stats,known\)=>/.test(fetchSrc)&&/stats:knownOnly\(b\.stats,known\)/.test(fetchSrc),
+    'v20: outputs are filtered to known champions while the archive keeps unknown rows');
+  const yml=fs.readFileSync(new URL('../.github/workflows/update-stats.yml',import.meta.url),'utf8');
+  assert.ok(/git rebase origin\/main/.test(yml)&&/upload-artifact/.test(yml)&&/fetch-depth: 0/.test(yml),
+    'v20: a rejected push must retry after rebasing and keep the snapshot as an artifact');
 }
 
 

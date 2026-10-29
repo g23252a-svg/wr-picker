@@ -703,10 +703,10 @@ button:disabled{cursor:not-allowed;opacity:.38}
       <button class="tibtn" id="teamIssueBtn" aria-pressed="false" onclick="toggleTeamIssue()"
         title="트롤·잠수·역할 미준수 등 내가 통제할 수 없던 판">⚠ 팀 문제</button>
       <button class="iconbtn" onclick="closePerfRow()">완료</button>
-      <span class="pfhint">건너뛰어도 됩니다 · 팀운과 무관하게 <b>내 픽이 맞았는지</b>를 학습합니다 · <b>팀 문제</b>로 표시한 패배는 챔피언 평가에서 제외됩니다</span>
+      <span class="pfhint">건너뛰어도 됩니다 · 팀운과 무관하게 <b>내 픽이 맞았는지</b>를 학습합니다 · <b>팀 문제</b>로 표시한 패배는 챔피언 평가에서 중립(0.5)으로 계산됩니다</span>
     </div>
   </div>
-  <p class="footer-note">통계는 판단 보조 정보이며 승리를 보장하지 않습니다. 중국 서버 Diamond+ 일일 통계를 사용하고 저표본 역할은 보수적으로 보정하며, 직전 스냅샷 대비 추세를 소폭 반영합니다.</p>
+  <p class="footer-note">통계는 판단 보조 정보이며 승리를 보장하지 않습니다. 중국 서버 랭크 구간별 일일 통계(기본 Diamond+)를 사용하고 저표본 역할은 보수적으로 보정합니다. 직전 패치 대비 변화는 표시만 하고 점수에는 넣지 않습니다.</p>
 </section>
 </main>
 
@@ -964,9 +964,16 @@ function stableChampId(name){
   return (h>>>0)||1;
 }
 const DB = C.map((r,i)=>{const al=ALIAS[r[1]]||[];return {id:stableChampId(r[1]),legacyId:i,key:r[1].toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,''),kr:r[0],en:r[1],lanes:LANEMAP[r[1]]||r[2],cls:r[3],dmg:r[4],rng:r[5],tags:r[6],tier:r[7],cho:getChosung(r[0]),aliases:al,aliasCho:al.map(getChosung)};});
-const byId = Object.fromEntries(DB.map(c=>[c.id,c]));
-const byKey = Object.fromEntries(DB.map(c=>[c.key,c]));
-const byEn = Object.fromEntries(DB.map(c=>[c.en,c]));
+/* [v20] 조회표는 프로토타입 없는 객체로 만든다. 평범한 {} 는 byEn['constructor'] 나
+   byEn['__proto__'] 가 참이라, 원격 통계에 'constructor' 라는 챔피언 이름이 오면
+   '아는 챔' 검사를 통과해 행으로 들어오고 밴 추천에 이름 없는 버튼(addBan(undefined))이
+   생겼다. 원격·가져오기 데이터의 키로 조회하는 곳은 전부 hasOwn 으로 묻는다. */
+const hasOwn=(o,k)=>o!=null&&Object.prototype.hasOwnProperty.call(o,k);
+const nullMap=pairs=>{const o=Object.create(null);for(const [k,v] of pairs)o[k]=v;return o;};
+const esc=v=>String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const byId = nullMap(DB.map(c=>[c.id,c]));
+const byKey = nullMap(DB.map(c=>[c.key,c]));
+const byEn = nullMap(DB.map(c=>[c.en,c]));
 const legacyIdToStable = Object.fromEntries(DB.map(c=>[c.legacyId,c.id]));
 if(new Set(DB.map(c=>c.id)).size!==DB.length) throw new Error('Champion stable ID collision');
 
@@ -981,8 +988,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='19.0.0';
-const MODEL_VERSION='19.0.0-asof-replay';
+const APP_VERSION='20.0.0';
+const MODEL_VERSION='20.0.0-honest-tables';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -1006,6 +1013,7 @@ function buildMeta(m){
     cadence:m.cadence||'daily',
     prevPatch:pb?m.prevPatch:null,prevCapturedAt:pb?(m.prevCapturedAt||null):null,
     prevFrom:pb?(m.prevFrom||null):null,prevDays:pb?(m.prevDays||null):null,
+    prevPatchAny:m.prevPatchAny||null,bracketFallback:!!m.bracketFallback,
     origin:m.origin||'bundled'
   });
 }
@@ -1031,6 +1039,9 @@ const FAMILIAR_BAND=3;
    움직였다(0.5482 → 0.5483). 이 숫자는 '이번 패치에 무엇이 바뀌었나'라는 사실이지
    '앞으로 오를 것'이라는 예측이 아니다. */
 const MOMENTUM_K=0;
+/* [v20] 추세 표시의 문턱 하나. v19 는 네 군데가 제각각이었다(배지 +1/−1.5, 검색창 ±1,
+   요약줄 ±1, 색 ±0.75) — 같은 값이 검색창에선 ▼, 카드엔 배지 없음으로 나왔다. */
+const TREND_BADGE=1;
 /* [v10] 라인 상성 기여분의 상한. 팀 단위 상성은 v9에서 ±22로 잘렸는데 라인
    상성은 상한이 없어 실사용에서 +37까지 나왔다(자세한 근거는 score() 안 주석). */
 const LANE_MATCHUP_CAP=16;
@@ -1052,7 +1063,7 @@ let undoStack=[],redoStack=[];
 let pool={};   // stable champion id -> {comfort:0-100}
 let weights={comfort:80, tier:45, team:100, counter:100, recMode:'meta', wv:3, goal:'allround', autoAxis:true, familiarFirst:false};
 let matches=[];
-let lastCands=[];
+let lastCands=[], lastFamiliarBumped=null;
 let famMap={};
 /* 개인 성과 등급. 승패는 팀 단위 결과라 표본이 작을 때 거의 노이즈다.
    "졌지만 내가 SVP"는 픽이 나에게 맞았다는 강한 증거이므로 승패와 분리해 기록한다. */
@@ -1110,9 +1121,9 @@ function perfValue(m){
    다시 쌓아야 하는데, 두 곳이 각자 계산하면 채점과 추천이 어긋난다. */
 function foldMatch(map,m){
   if(m.pick==null||!byId[m.pick])return;
-  const f=map[m.pick]||(map[m.pick]={n:0,w:0,p:0,graded:0,skipped:0,lane:{}});
+  const f=map[m.pick]||(map[m.pick]={n:0,w:0,p:0,graded:0,gsum:0,skipped:0,lane:{}});
   f.n++; if(m.won)f.w++;
-  if(PERF[m.perf])f.graded++;
+  if(PERF[m.perf]){f.graded++;f.gsum+=PERF[m.perf].v;}   // [v20] 화면의 '성과' = 등급만의 평균
   /* 팀 문제로 표시된 패배는 챔피언 평가에서 중립 처리한다.
      (이긴 판은 그대로 반영 — 승리는 어떻게 얻었든 성과다) */
   const v=(isUncontrolled(m)&&!m.won)?0.5:perfValue(m);
@@ -1137,6 +1148,7 @@ let explorationLoad=0;
 function computeExplorationLoad(){
   const seen={}, window=Math.max(0,matches.length-10), started=new Set();
   matches.forEach((m,i)=>{
+    if(m.pick==null)return;                          // [v20] 못 읽은 픽은 '새 챔 시도'가 아니다
     const before=seen[m.pick]||0;
     if(i>=window&&before<=1)started.add(m.pick);     // 최근 10판 중 사실상 첫 시도
     seen[m.pick]=before+1;
@@ -1242,26 +1254,39 @@ function migratePool(raw){
    화면에는 "중복 건너뜀"으로 보고됐다. 숫자·ISO 문자열을 모두 받고,
    정말 알 수 없을 때만 서로 겹치지 않는 값을 준다. */
 let _tSeq=0;
+/* [v20] 범위도 본다. t=1e20 같은 값은 숫자로는 유한해서 통과했는데, 그 판이 기록에 들어오면
+   new Date(t).toISOString() 이 던지면서 자기 채점·분석 탭·드래프트 화면이 전부 멈췄다. */
+const T_MIN=946684800000;                        // 2000-01-01
 function matchTime(raw){
+  const hi=Date.now()+86400000;
   const n=Number(raw);
-  if(Number.isFinite(n)&&n>0)return n;
+  if(Number.isFinite(n)&&n>T_MIN&&n<hi)return n;
   const p=Date.parse(raw);
-  if(Number.isFinite(p))return p;
+  if(Number.isFinite(p)&&p>T_MIN&&p<hi)return p;
   return Date.now()+(_tSeq++);
 }
+const PATCH_RE=/^[0-9A-Za-z.]{1,12}$/, MODELVER_RE=/^\d{1,3}\.\d{1,3}\.\d{1,3}[A-Za-z0-9.\-]{0,24}$/, BRACKET_RE=/^[a-z]{3,16}$/;
+const okStr=(v,re)=>typeof v==='string'&&re.test(v)?v:undefined;
 function migrateMatch(m){
   if(!m||typeof m!=='object')return null;
   const lane=LANEKR[m.lane]?m.lane:'mid';
   /* 챔피언이 이름 변경·삭제되어 ID를 못 찾아도 판을 버리지 않는다.
      예전에는 여기서 null을 반환해 그 판이 영구히 사라졌다. 원본 값을 pickRaw로
      보존하면 나중에 DB가 복구됐을 때 되살릴 수 있고, 최소한 판수는 지켜진다. */
-  const pick=toStableId(m.pick);
+  /* [v20] pickRaw 가 있으면 먼저 그걸로 되살려 본다 — DB 가 복구된 뒤 실제로 되살아나는
+     경로가 v7.3 이후 한 번도 없었다. 그리고 이미 pick:null 로 이행된 기록의 pickRaw 는
+     다음 부팅에서 지워지고 있었다(아래). */
+  const pick=toStableId(m.pick)??toStableId(m.pickRaw);
   const top=toStableId(m.top);
   const laneMark=toStableId(m.laneMark);
   const t=matchTime(m.t);
   const kda=(m.kda&&['k','d','a'].every(x=>Number.isFinite(Number(m.kda[x]))))
     ? {k:clamp(Number(m.kda.k),0,99),d:clamp(Number(m.kda.d),0,99),a:clamp(Number(m.kda.a),0,99)} : null;
-  const out=Object.assign({},m,{
+  /* [v20] 아는 필드만 명시적으로 옮긴다. Object.assign({},m,…) 은 백업 파일의 아무 키나
+     (수 MB 쓰레기 필드, HTML 이 든 modelVersion) 그대로 저장소에 들였고, 기록 탭이 그걸
+     innerHTML 로 찍었다. 백업 파일은 기기를 건너다니고 손으로 고쳐질 수 있는 유일한
+     사용자 데이터다 — 통계 payload 와 같은 신뢰 경계 밖으로 본다. */
+  const out={
     schema:SCHEMA_VERSION,t,lane,pick,top,
     top3:normalizeIdList(m.top3,3),ally:normalizeIdList(m.ally,4),enemy:normalizeIdList(m.enemy,5),
     laneMark:laneMark!=null?laneMark:null,won:!!m.won,
@@ -1271,9 +1296,22 @@ function migrateMatch(m){
     lanerConf:Number.isFinite(Number(m.lanerConf))?clamp(Number(m.lanerConf),0,1):0,
     perf:PERF[m.perf]?m.perf:null,kda,
     teamIssue:m.teamIssue?1:undefined
-  });
-  // 해석 불가한 픽은 원본을 보존해 둔다(복구 가능 + 판수 유지).
-  if(pick==null&&m.pick!=null)out.pickRaw=m.pick; else delete out.pickRaw;
+  };
+  const patch=okStr(m.patch,PATCH_RE), sourcePatch=okStr(m.sourcePatch,PATCH_RE), modelVersion=okStr(m.modelVersion,MODELVER_RE), bracket=okStr(m.bracket,BRACKET_RE);
+  if(patch)out.patch=patch; if(sourcePatch)out.sourcePatch=sourcePatch; if(modelVersion)out.modelVersion=modelVersion;
+  if(bracket)out.bracket=bracket;                  // [v20] 그 판을 기록할 때 앱이 쓰던 랭크 구간
+  if(m.familiarFirst)out.familiarFirst=1;
+  if(m.scoreSnapshot&&typeof m.scoreSnapshot==='object'){
+    const ss={};let any=false;
+    for(const k of ['total','meta','team','counter','comfort','confidence']){const v=Number(m.scoreSnapshot[k]);if(Number.isFinite(v)){ss[k]=clamp(Math.round(v),0,100);any=true;}}
+    out.scoreSnapshot=any?ss:null;
+  }else out.scoreSnapshot=null;
+  // 해석 불가한 픽은 원본을 보존해 둔다(복구 가능 + 판수 유지). 화면에 나가므로 길이·문자를 제한한다.
+  const raw=m.pick!=null?m.pick:m.pickRaw;
+  if(pick==null&&raw!=null){
+    if(typeof raw==='number'&&Number.isFinite(raw))out.pickRaw=raw;
+    else if(typeof raw==='string'&&/^[A-Za-z0-9가-힣' .&_-]{1,40}$/.test(raw))out.pickRaw=raw;
+  }
   return out;
 }
 /* 전적 병합: 같은 판(timestamp 기준)은 한 번만. 기존 기록은 절대 사라지지 않는다. */
@@ -1295,7 +1333,10 @@ function mergeMatches(current,incoming){
   return {merged:[...byT.values()].sort((a,b)=>a.t-b.t),added};
 }
 function sanitizeWeights(raw){
-  const next=Object.assign({comfort:80,tier:45,team:100,counter:100,recMode:'meta',wv:3,goal:'allround',familiarFirst:false},raw||{});
+  const next={comfort:80,tier:45,team:100,counter:100,recMode:'meta',wv:3,goal:'allround',familiarFirst:false};
+  // [v20] 아는 키만 받는다. Object.assign 은 저장값의 "__proto__" 키를 프로토타입 교체로 실행했다.
+  const src=(raw&&typeof raw==='object')?raw:{};
+  for(const k of ['comfort','tier','team','counter','recMode','wv','goal','familiarFirst','autoFam','autoAxis'])if(hasOwn(src,k))next[k]=src[k];
   next.familiarFirst=!!next.familiarFirst;
   ['comfort','tier','team','counter'].forEach(k=>next[k]=clamp(Number(next[k])||0,0,120));
   if(!['meta','weighted','poolonly'].includes(next.recMode))next.recMode='meta';
@@ -1324,7 +1365,10 @@ async function saveStore(){
 /* 기록이 하나도 없는 새 기기에서만 시드 전적을 1회 적재한다.
    기존 기록이 있으면 절대 건드리지 않는다(덮어쓰기 사고 방지). */
 async function seedHistoryIfEmpty(){
-  if(matches.length)return false;                 // 기록이 있으면 절대 건드리지 않는다
+  /* [v20] 기록이 있는 기기도 '시드 완료'로 표시해 둔다. 안 그러면 시드 도입 전부터 쓰던
+     기기에서 '전적 전체 삭제'를 한 뒤 다시 열 때 앱이 새 기기로 보고 시드 전적을 도로
+     불러왔다 — 사용자가 지운 걸 앱이 되살리는 셈이고, 자동 백업 파일까지 그 내용으로 덮였다. */
+  if(matches.length){try{await window.storage.set('wr_seeded','1');}catch(e){} return false;}
   if(loadFailed)return false;                     // [v11] 못 읽은 것과 없는 것은 다르다
   try{const flag=await window.storage.get('wr_seeded');if(flag&&flag.value)return false;}catch(e){}
   try{
@@ -1388,7 +1432,7 @@ async function downloadCorrupt(){
   }catch(e){toast('원본을 읽지 못했습니다');}
 }
 function ackLoadFailure(){loadFailed=null;renderStorageWarn();saveMatches();toast('확인했습니다 — 이제 정상 저장합니다');}
-let autoBackupAt=null, saveFailed=false;
+let autoBackupAt=null, saveFailed=false, _skipAutoBackupOnce=false;
 async function saveMatches(){
   /* 저장 실패를 삼키면 사용자는 기록이 남은 줄 알고 계속 플레이한다.
      실패하면 상태를 표시하고, 자동 백업 파일 쪽이라도 살린다. */
@@ -1404,6 +1448,7 @@ async function saveMatches(){
      지금 메모리에 든 기록이 손상 후 살려낸 일부일 수 있어, 그대로 쓰면
      멀쩡하던 백업까지 줄어든다. 사용자가 확인(ackLoadFailure)한 뒤에 재개한다. */
   if(loadFailed)return;
+  if(_skipAutoBackupOnce){_skipAutoBackupOnce=false;return;}   // [v20] 전체 삭제 직후 한 번
   // 기록이 늘 때마다 지정한 파일에도 동기화한다(설정돼 있을 때만).
   if(typeof autoBackupWrite==='function'&&autoBackupHandle){
     if(await autoBackupWrite(true))autoBackupAt=new Date().toISOString();
@@ -1781,8 +1826,10 @@ function applyStatsPayload(payload,origin){
     bracket:bracket.label||'Diamond+',rows:bracket.rows||0,champions:bracket.champions||0,
     source:payload.url||META_SNAPSHOT.source,sourceNote:payload.source||'',cadence:'daily',
     prevPatch:prev?payload.prev.patch:null,
-    prevCapturedAt:prev?payload.prev.updated:null,
-    prevFrom:prev?(payload.prev.from||null):null,prevDays:prev?(payload.prev.days||null):null,
+    prevPatchAny:payload.prev?payload.prev.patch:null,   // [v20] 직전 패치는 있는데 이 구간 기준선만 없는 경우를 가른다
+    bracketFallback:key!==statsBracket,                  // [v20] 고른 구간이 이번 통계에 없어 Diamond+ 로 대신한 경우
+    prevCapturedAt:prev?(prev.updated||payload.prev.updated):null,
+    prevFrom:prev?(prev.from||payload.prev.from||null):null,prevDays:prev?(prev.days||payload.prev.days||null):null,
     origin
   });
   /* [v11] ROLE_STATS 자체가 바뀌는 지점은 여기다. 세대 번호를 여기서 올려야
@@ -1826,7 +1873,7 @@ function sanitizeStatsTable(raw,seenUnknown){
 }
 function sanitizeStatsPayload(raw){
   if(!raw||typeof raw!=='object')return null;
-  if(!/^\d{4}-\d{2}-\d{2}$/.test(raw.updated||''))return null;
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(raw.updated||'')||!Number.isFinite(Date.parse(raw.updated)))return null;
   if(!/^[0-9A-Za-z.]{1,12}$/.test(raw.patch||''))return null;
   const brackets={}; const unknown=new Set();
   for(const [k,b] of Object.entries(raw.brackets||{})){
@@ -1858,7 +1905,12 @@ function sanitizeStatsPayload(raw){
     for(const [k,b] of Object.entries(p.brackets||{})){
       if(!/^[a-z]{3,16}$/.test(k)||!b)continue;
       const stats=sanitizeStatsTable(b.stats);
-      if(Object.keys(stats).length)pb[k]={stats};
+      if(Object.keys(stats).length){
+        pb[k]={stats};
+        if(/^\d{4}-\d{2}-\d{2}$/.test(b.from||''))pb[k].from=b.from;
+        if(/^\d{4}-\d{2}-\d{2}$/.test(b.updated||''))pb[k].updated=b.updated;
+        if(Number.isInteger(b.days)&&b.days>=1&&b.days<=7)pb[k].days=b.days;
+      }
     }
     if(Object.keys(pb).length){
       out.prev={patch:p.patch,updated:p.updated,brackets:pb};
@@ -1890,16 +1942,17 @@ const GUIDE_BASE='https://www.wildriftfire.com/guide/';
 async function loadGuides(){
   try{
     const cached=await window.storage.get('wr_guides');
-    if(cached&&cached.value){const g=JSON.parse(cached.value);if(g&&g.champions){GUIDES=g.champions;bumpEngineData();}}
+    if(cached&&cached.value){const g=sanitizeGuides(JSON.parse(cached.value));if(g){GUIDES=g;bumpEngineData();}}
   }catch(e){}
   try{
     const res=await fetch('./data/guides.json',{cache:'no-cache'});
     if(!res.ok)return;
-    const g=await res.json();
-    if(g&&g.champions&&Object.keys(g.champions).length){
-      GUIDES=g.champions;
+    const g=sanitizeGuides(await res.json());
+    if(g){
+      GUIDES=g;
       bumpEngineData();                           // [v10] 가이드 상성이 점수를 바꾼다
-      try{await window.storage.set('wr_guides',JSON.stringify(g));}catch(e){}
+      // 캐시에도 정제한 것만 둔다 — 쓰지 않는 영어 원문을 빼면 230KB 가 1/4 로 준다.
+      try{await window.storage.set('wr_guides',JSON.stringify({champions:g}));}catch(e){}
       if(document.getElementById('results'))render();
     }
   }catch(e){}
@@ -1918,6 +1971,29 @@ function guideUrl(c){
    같은 라인 자료면 원래대로 ±14, 다른 라인 자료면 ±5로 낮춘다. 버리지는 않는다 —
    그 챔에 대한 정보이긴 하고, 라인이 달라도 방향이 유지되는 상성이 많다. */
 const GUIDE_LANE={solo:'top',jungle:'jug',mid:'mid',duo:'adc',support:'sup'};
+/* [v20] 가이드도 신뢰 경계 밖이다(CDN → 저장소 캐시 → sw 프리캐시). v19 까지는 받은
+   그대로 GUIDES 에 넣고 전술 패널이 innerHTML 과 href 로 찍었다 — 서버 파일 한 줄이면
+   카드를 열 때마다 스크립트가 돌고, 캐시돼서 오프라인에서도 계속 돌았다.
+   쓰는 필드만, 형식을 검사해서, 길이를 잘라 받는다. 화면에 찍을 때는 esc() 를 한 번 더 건다. */
+const GUIDE_SLUG_RE=/^[a-z0-9-]{2,40}$/;
+function sanitizeGuides(raw){
+  const src=raw&&typeof raw==='object'&&raw.champions&&typeof raw.champions==='object'?raw.champions:null;
+  if(!src)return null;
+  const str=(v,n)=>typeof v==='string'?v.replace(/[<>]/g,'').slice(0,n):null;
+  const strs=(a,n,k)=>Array.isArray(a)?a.map(x=>str(x,n)).filter(Boolean).slice(0,k):[];
+  const rel=a=>Array.isArray(a)?a.map(x=>x&&typeof x==='object'&&GUIDE_SLUG_RE.test(String(x.slug||''))
+      ?(GUIDE_LANE[x.lane]?{slug:String(x.slug),lane:String(x.lane)}:{slug:String(x.slug)}):null).filter(Boolean).slice(0,12):[];
+  const out=Object.create(null);
+  for(const [en,g] of Object.entries(src)){
+    if(!hasOwn(byEn,en)||!g||typeof g!=='object')continue;
+    const o={counteredBy:rel(g.counteredBy),synergy:rel(g.synergy),summaryKo:strs(g.summaryKo,120,8),
+      chapters:Array.isArray(g.chapters)?g.chapters.map(ch=>ch&&typeof ch==='object'
+        ?{t:str(ch.t,40)||'',tKo:str(ch.tKo,40)||'',ko:strs(ch.ko,120,8)}:null).filter(Boolean).slice(0,8):[]};
+    if(GUIDE_SLUG_RE.test(String(g.slug||'')))o.slug=String(g.slug);
+    out[en]=o;
+  }
+  return Object.keys(out).length?out:null;
+}
 function guideRelWeight(g,slug,lane){
   const hits=(g.counteredBy||[]).filter(x=>x.slug===slug);
   if(!hits.length)return 0;
@@ -1983,7 +2059,7 @@ function sanitizeByPatch(raw){
     for(const [k,t] of Object.entries(v.brackets||{})){
       if(!/^[a-z]{3,16}$/.test(k)||!t||typeof t!=='object')continue;
       // 압축 행 [승률,픽률,밴률,주라인?] → 앱 행 형식으로 펼친 뒤 같은 정제기를 거친다.
-      const wide={};
+      const wide=Object.create(null);
       for(const [name,roles] of Object.entries(t)){
         if(!roles||typeof roles!=='object')continue;
         const r={};
@@ -2018,16 +2094,30 @@ async function loadStatsByPatch(){
 /* 그 판을 고를 때 앱이 쓰던 통계. 기록된 patch 가 표에 있으면 그 패치, 없으면(패치를
    기록하기 전의 옛 판) 날짜로 그 무렵 패치를, 그보다 오래됐으면 가장 오래된 패치를 쓴다.
    표를 아직 못 받았으면 null — 호출부가 오늘 통계로 채점하고 그 사실을 화면에 밝힌다. */
+/* [v20] 어떤 표를 골랐는지(how)까지 돌려준다. v19 는 표를 바꿔 끼웠다는 사실만 asOf:1 로
+   남겨서, 날짜로 추정한 패치든 구간이 없어 Diamond+ 로 대신한 것이든 전부 "그 판 당시
+   패치의 통계" 라고 적었다. 구간은 그 판을 기록할 때 앱이 쓰던 구간(m.bracket, 옛 기록은
+   Diamond+)이다 — 지금 보고 있는 구간이 아니다. 7월 판을 10월에 고른 Legendary 표로
+   채점하면 그것도 '그 판엔 없던 정보'다.
+     exact   기록된 패치 + 기록된 구간의 표
+     bracket 패치는 맞지만 그 구간 표가 없어 Diamond+ 로 대신
+     date    패치가 기록돼 있지 않아 날짜로 고른 패치
+     before  첫 아카이브보다 앞선 판 — 가장 오래된 표로 대신 */
 function statsForMatch(m){
   if(!STATS_BY_PATCH||!m)return null;
-  let p=(m.patch&&STATS_BY_PATCH[m.patch])?m.patch:null;
+  let p=(typeof m.patch==='string'&&hasOwn(STATS_BY_PATCH,m.patch))?m.patch:null, how='exact';
   if(!p){
-    const d=new Date(m.t).toISOString().slice(0,10);
+    how='date';
+    const dt=new Date(m.t), d=isNaN(dt)?null:dt.toISOString().slice(0,10);
     p=_byPatchOrder[0];
-    for(const q of _byPatchOrder)if(STATS_BY_PATCH[q].from<=d)p=q;
+    if(d){for(const q of _byPatchOrder)if(STATS_BY_PATCH[q].from<=d)p=q; if(STATS_BY_PATCH[p].from>d)how='before';}
   }
-  const e=STATS_BY_PATCH[p];
-  return (e&&(e.brackets[appliedBracket]||e.brackets.diamond))||null;
+  const e=STATS_BY_PATCH[p]; if(!e)return null;
+  const want=okStr(m.bracket,BRACKET_RE)||'diamond';
+  const bk=hasOwn(e.brackets,want)?want:(hasOwn(e.brackets,'diamond')?'diamond':null);
+  if(!bk)return null;
+  if(bk!==want&&how==='exact')how='bracket';
+  return {tbl:e.brackets[bk],patch:p,bracket:bk,how};
 }
 async function setBracket(k){
   if(k===appliedBracket&&k===statsBracket)return;
@@ -2045,8 +2135,11 @@ async function setBracket(k){
 /* ============ BAN ADVICE ============
  * 위협 점수 = 표본 보정 승률 + 픽/밴 존재감([v19] 추세 가산은 뺐다 — MOMENTUM_K). 여기에 개인화 두 겹:
  * 내 라인에서 만나는 챔은 가중, 내 주력을 카운터치는 챔은 가산. */
+/* [v20] score() 와 같은 숙련값(effectiveComfort)을 쓴다. 수동 등록값을 먼저 보던 v19 까지는
+   4판 넘게 해보고 못한 챔(쉔 1승 4패, 적용 46)이 '내 주력'으로 남아 밴 추천에서 보호되고
+   '내 주력 쉔 카운터' 가산을 받았으며, 실제 주력은 보호되지 않았다. */
 function myMains(){
-  return DB.map(c=>({c,comfort:(pool[c.id]&&pool[c.id].comfort)||famComfort(c.id)}))
+  return DB.map(c=>({c,comfort:effectiveComfort(c.id,null).value}))
     .filter(x=>x.comfort>=60).sort((a,b)=>b.comfort-a.comfort).slice(0,4).map(x=>x.c);
 }
 function banSuggestions(){
@@ -2455,10 +2548,14 @@ function firstPickFact(){
   _fpfVal=(gap>0&&p<=SIG_P)?{first:F,early:Ea,gap,p}:null;
   return _fpfVal;
 }
+/* [v20] 챔폭(수동 숙련)도 키에 넣는다. score() 는 pool 을 읽는데 키는 전적·가중치만 봐서,
+   설정에서 챔폭을 바꿔도 축별 성적표·자동 보정·보정표가 다음 판을 기록할 때까지 옛 값으로
+   남았다(실측: 챔폭 비우면 271판 중 52판의 재채점 점수가 0.5 이상 움직이는데 화면은 그대로). */
+function poolSig(){let h=0,n=0;for(const k in pool){n++;h=(h*31+(Number(k)%9973)*17+((pool[k]&&pool[k].comfort)|0))|0;}return n+':'+h;}
 function selfCheckKey(){
   const last=matches.length?matches[matches.length-1].t:0;
   return matches.length+'|'+last+'|'+_engineDataVersion+'|'+weights.recMode+'|'
-    +[weights.comfort,weights.tier,weights.team,weights.counter].join(',');
+    +[weights.comfort,weights.tier,weights.team,weights.counter].join(',')+'|'+poolSig();
 }
 /* 과거 전 판을 지금 엔진으로 다시 채점한다. useTrust=false면 축 보정을 끈 원본 축이다.
    [v19] 통계는 '오늘'이 아니라 그 판 당시 패치의 것으로 바꿔 끼운다(statsForMatch). */
@@ -2479,17 +2576,17 @@ function replayPass(useTrust){
         explorationLoad=new Set(flags.slice(-10).filter(f=>f.started).map(f=>f.id)).size;
         state={lane:m.lane,ally:(m.ally||[]).slice(),enemy:(m.enemy||[]).slice(),
                bans:[],laneMark:m.laneMark!=null?m.laneMark:null};
-        const hist=statsForMatch(m), tbl=hist||savedStats;
+        const hist=statsForMatch(m), tbl=hist?hist.tbl:savedStats;
         if(tbl!==ROLE_STATS){
           ROLE_STATS=tbl; ROLE_STATS_PREV=hist?{}:savedPrev;
           _asgKey=null;   // 상대 라인 배정도 통계(laneFit)에 기대므로 표가 바뀌면 다시 푼다
         }
         const s=score(c);
-        out.push({m,won:!!m.won,asOf:hist?1:0,total:s.total,base:s.base,tier:s.cTier,
+        out.push({m,won:!!m.won,asOf:hist?hist.how:'today',laner:s.laner,lanerConf:s.lanerConf,total:s.total,base:s.base,tier:s.cTier,
           team:s.teamAxis,counter:s.counterAxis,
           hasAlly:state.ally.length>0,hasEnemy:state.enemy.length>0});
       }
-      flags.push({id:m.pick,started:((acc[m.pick]&&acc[m.pick].n)||0)<=1});
+      if(c)flags.push({id:m.pick,started:((acc[m.pick]&&acc[m.pick].n)||0)<=1});
       foldMatch(acc,m);
     });
   }finally{
@@ -2612,14 +2709,14 @@ function tacticsPanel(c,s,i){
       ${tips.length?`<div class="tacsec"><span class="tach">이 판</span>
         <ul>${tips.map(t=>`<li>${t}</li>`).join('')}</ul></div>`:''}
       ${g&&g.summaryKo&&g.summaryKo.length?`<div class="tacsec"><span class="tach">이 챔은</span>
-        <ul>${g.summaryKo.map(x=>`<li>${x}</li>`).join('')}</ul></div>`:''}
+        <ul>${g.summaryKo.map(x=>`<li>${esc(x)}</li>`).join('')}</ul></div>`:''}
       ${g&&g.chapters&&g.chapters.some(ch=>ch.ko&&ch.ko.length)?`<div class="tacsec"><span class="tach">운영</span>
         ${g.chapters.filter(ch=>ch.ko&&ch.ko.length).map(ch=>
-          `<p><b>${ch.tKo||ch.t}</b> ${ch.ko.join(' · ')}</p>`).join('')}</div>`:''}
+          `<p><b>${esc(ch.tKo||ch.t)}</b> ${ch.ko.map(esc).join(' · ')}</p>`).join('')}</div>`:''}
       ${counters.length||syn.length?`<div class="tacsec"><span class="tach">상성</span>
         ${counters.length?`<p><b class="cw">주의</b> ${counters.join(', ')}</p>`:''}
         ${syn.length?`<p><b class="sw">궁합</b> ${syn.join(', ')}</p>`:''}</div>`:''}
-      ${url?`<a class="taclink" href="${url}" target="_blank" rel="noopener noreferrer">
+      ${url?`<a class="taclink" href="${esc(url)}" target="_blank" rel="noopener noreferrer">
         스킬 순서·아이템·콤보 전체 가이드 ↗</a>`:''}
       ${!g?`<p class="tacnote">가이드 원문을 아직 불러오지 못했습니다. 이 판 분석만 표시합니다.</p>`:''}
     </div>`;
@@ -2761,16 +2858,18 @@ function renderAppMeta(){
   const pl=document.getElementById('patchLabel');if(pl)pl.textContent='Patch '+META_SNAPSHOT.targetPatch;
   const status=document.getElementById('dataStatus');
   const age=snapshotAgeDays(), freshness=age<=2?['fresh','최신']:age<=7?['aging',`${age}일 전`]:['stale',`${age}일 전 · 갱신 필요`];
-  const prevTxt=META_SNAPSHOT.prevPatch?` · 추세 기준 직전 패치 ${META_SNAPSHOT.prevPatch}(${META_SNAPSHOT.prevDays>1&&META_SNAPSHOT.prevFrom?`${META_SNAPSHOT.prevFrom.slice(5)}~${META_SNAPSHOT.prevCapturedAt.slice(5)} ${META_SNAPSHOT.prevDays}일 평균`:META_SNAPSHOT.prevCapturedAt})`:' · 추세 없음(직전 패치 기록 없음)';
+  const prevTxt=META_SNAPSHOT.prevPatch?` · 추세 기준 직전 패치 ${META_SNAPSHOT.prevPatch}(${META_SNAPSHOT.prevDays>1&&META_SNAPSHOT.prevFrom?`${META_SNAPSHOT.prevFrom.slice(5)}~${META_SNAPSHOT.prevCapturedAt.slice(5)} ${META_SNAPSHOT.prevDays}일 평균`:META_SNAPSHOT.prevCapturedAt})`:(META_SNAPSHOT.prevPatchAny?` · 추세 없음(직전 패치 ${META_SNAPSHOT.prevPatchAny}에 ${META_SNAPSHOT.bracket} 기준선 없음)`:' · 추세 없음(직전 패치 기록 없음)');
+  const fallbackTxt=META_SNAPSHOT.bracketFallback?` · <span class="unk" title="저장된 선호 구간이 이번 통계에 없어 Diamond+ 를 대신 보여줍니다">선택한 구간 없음 → Diamond+</span>`:'';
   const originTxt=META_SNAPSHOT.origin==='bundled'?' · <span title="네트워크 갱신 전 번들 스냅샷">번들</span>':'';
   /* [v16] 통계엔 왔는데 앱이 모르는 챔 — 게임에 신챔이 나왔다는 뜻이다.
      예전엔 조용히 버려서, 고를 수도 상대팀에 넣을 수도 없는 이유를 알 길이 없었다. */
   const unknownTxt=statsUnknown.length
     ? ` · <span class="unk" title="이 챔들은 통계엔 있지만 앱 챔피언 목록에 아직 없어 추천·기록·상대 입력에서 빠집니다: ${statsUnknown.join(', ')}">앱이 모르는 챔 ${statsUnknown.length}종</span>`
     : '';
-  if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>패치 ${META_SNAPSHOT.targetPatch} · ${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt}${prevTxt}${originTxt}${unknownTxt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
+  if(status)status.innerHTML=`<span class="${freshness[0]}">${freshness[1]}</span><span><b>패치 ${META_SNAPSHOT.targetPatch} · ${META_SNAPSHOT.region} ${META_SNAPSHOT.bracket}</b> · 역할 통계 ${META_SNAPSHOT.rows}행 / ${META_SNAPSHOT.champions}챔프 · ${META_SNAPSHOT.capturedAt}${prevTxt}${fallbackTxt}${originTxt}${unknownTxt} · <a href="${META_SNAPSHOT.source}" target="_blank" rel="noopener noreferrer">출처</a></span>`;
   const legend=document.getElementById('metaLegend');
-  if(legend)legend.innerHTML=`<b>승</b> 표본 보정 메타 + <b>팀</b> 조합 + <b>카</b> 상성${weights.recMode==='meta'?'':' + <b>숙</b> 숙련'} · 픽률은 신뢰도, 밴률은 가용성 위험으로 해석`;
+  // [v20] 메타 중심에서도 숙련은 35~85% 로 들어간다 — '숙'을 빼고 적던 범례가 거짓이었다.
+  if(legend)legend.innerHTML=`<b>승</b> 표본 보정 메타 + <b>팀</b> 조합 + <b>카</b> 상성 + <b>숙</b> 숙련${weights.recMode==='meta'?'(근거만큼 35~85%)':''} · 픽률은 신뢰도, 밴률은 가용성 위험으로 해석`;
   // 랭크 구간 선택기 — payload가 있고 구간이 2개 이상일 때만 노출.
   // DOM API로만 조립한다(원격 유래 문자열을 innerHTML/onclick에 넣지 않음).
   // 재렌더로 버튼이 교체되므로, 누르던 버튼의 키를 기억해 포커스를 복원한다.
@@ -2799,7 +2898,7 @@ function render(){
   const owned=anyOwned();
   const mode=weights.recMode||'meta';
   document.getElementById('modeLbl').innerHTML =
-    mode==='meta'     ? '기준: <b>메타 중심</b> · 숙련 제외' :
+    mode==='meta'     ? '기준: <b>메타 중심</b> · 숙련은 근거만큼(35~85%) 반영' :
     mode==='poolonly' ? '기준: <b>내 챔폭만</b>' :
                         '기준: <b>숙련 가중</b> · 내 주력 우대';
   const picked=new Set([...state.ally,...state.enemy,...state.bans]);
@@ -2829,13 +2928,18 @@ function render(){
     const top=best.s.total;
     const band=cands.filter(x=>top-x.s.total<=FAMILIAR_BAND);
     if(band.length>1){
-      band.sort((x,y)=>playCount(y.c.id)-playCount(x.c.id)||y.s.total-x.s.total);
+      /* [v20] '손에 익은' 은 이 라인에서다. 전체 판수로 정렬하던 v18 은 미드 18판·서폿 8판
+         3승인 갈리오를 서폿 9판 6승인 소나 위로 올렸다 — 엔진 자신의 라인 분리 원칙
+         (famComfort, v9.1)과 어긋난다. 이 라인 판수가 같을 때만 전체 판수를 본다. */
+      const laneN=id=>{const f=famMap[id];return (f&&f.lane&&f.lane[state.lane]&&f.lane[state.lane].n)||0;};
+      band.sort((x,y)=>laneN(y.c.id)-laneN(x.c.id)||playCount(y.c.id)-playCount(x.c.id)||y.s.total-x.s.total);
       cands.splice(0,band.length,...band);
       // 순서를 바꿨으면 그 사실과 감수한 점수 손해를 화면에 드러낸다.
       if(cands[0].c.id!==best.c.id)
-        familiarBumped={over:best.c.kr,cost:best.s.total-cands[0].s.total,games:playCount(cands[0].c.id)};
+        familiarBumped={over:best.c.kr,cost:best.s.total-cands[0].s.total,games:laneN(cands[0].c.id),total:playCount(cands[0].c.id)};
     }
   }
+  lastFamiliarBumped=familiarBumped;   // [v20] 기록 시 '실제로 재정렬된 판' 만 표시하려고
   lastCands=cands;
   const summary=document.getElementById('decisionSummary');
   if(summary&&cands.length){
@@ -2846,7 +2950,7 @@ function render(){
     if(safe.c.id!==primary.c.id)alternates.push(`안전 대안 <b>${safe.c.kr}</b>`);
     if(counter&&counter.c.id!==primary.c.id&&(!safe||counter.c.id!==safe.c.id))alternates.push(`카운터 대안 <b>${counter.c.kr}</b>`);
     summary.className='decision-summary';
-    summary.innerHTML=`<div><div class="eyebrow">지금 픽</div><div class="pick">${primary.c.kr}</div></div><div class="signal"><b>${Math.round(primary.s.total)}점 · 신뢰 ${primary.s.confidence}%</b><br>${evidenceText(primary.s)}${primary.s.metaKnown?` · 보정 승률 ${primary.s.adjustedWR.toFixed(2)}%`:''}${primary.s.trend!=null&&Math.abs(primary.s.trend)>=1?` · 직전 패치 대비 ${primary.s.trend>0?'+':''}${primary.s.trend.toFixed(2)}%p`:''}${primary.s.cBan>=15?' · 밴 위험 높음':''}</div>${alternates.length?`<div class="alts">${alternates.join(' &nbsp;·&nbsp; ')}</div>`:''}`;
+    summary.innerHTML=`<div><div class="eyebrow">지금 픽</div><div class="pick">${primary.c.kr}</div></div><div class="signal"><b>${Math.round(primary.s.total)}점 · 신뢰 ${primary.s.confidence}%</b><br>${evidenceText(primary.s)}${primary.s.metaKnown?` · 보정 승률 ${primary.s.adjustedWR.toFixed(2)}%`:''}${primary.s.trend!=null&&Math.abs(primary.s.trend)>=TREND_BADGE?` · ${META_SNAPSHOT.prevPatch||'직전 패치'} 대비 ${primary.s.trend>0?'+':''}${primary.s.trend.toFixed(2)}%p(판 평균 제외)`:''}${primary.s.cBan>=15?' · 밴 위험 높음':''}</div>${alternates.length?`<div class="alts">${alternates.join(' &nbsp;·&nbsp; ')}</div>`:''}`;
   }else if(summary){summary.className='';summary.innerHTML='';}
   renderLogBar();
   const box=document.getElementById('results');
@@ -2859,22 +2963,25 @@ function render(){
       : s.metaKnown&&s.statReliability<.8?`저픽률 표본 보정 ${Math.round(s.statReliability*100)}% 적용`:`아군·상대 픽을 넣으면 조합과 카운터 근거가 추가됩니다`;
     const tagstr = c.tags.slice(0,3).join('·');
     let badge='';
-    const topCounter=Math.max(...cands.map(x=>x.s.counterAxis));
-    const topConfidence=Math.max(...cands.map(x=>x.s.confidence));
+    /* [v20] 단독 1위일 때만 준다. 신뢰도는 95 에서 포화해 꽉 찬 드래프트에서는 8장 중 7장이
+       '안전픽'이었다(271개 드래프트 중 102개) — 전부에게 붙는 배지는 정보가 아니다. */
+    const uniqTop=key=>{const v=cands.map(x=>x.s[key]),mx=Math.max(...v);return v.filter(x=>x===mx).length===1?mx:null;};
+    const topCounter=uniqTop('counterAxis');
+    const topConfidence=uniqTop('confidence');
     const topComfort=Math.max(...cands.map(x=>x.s.base));
     if(i===0)badge+=familiarBumped
-      ? `<span class="bd-type fam" title="점수는 ${familiarBumped.over}가 ${familiarBumped.cost.toFixed(1)}점 높지만, 손에 익은 픽 우선이 켜져 있어 ${familiarBumped.games}판 해본 이 챔을 위로 올렸습니다">손에 익은 픽 · −${familiarBumped.cost.toFixed(1)}점</span>`
+      ? `<span class="bd-type fam" title="점수는 ${familiarBumped.over}가 ${familiarBumped.cost.toFixed(1)}점 높지만, 손에 익은 픽 우선이 켜져 있어 이 라인에서 ${familiarBumped.games}판(전체 ${familiarBumped.total}판) 해본 이 챔을 위로 올렸습니다">손에 익은 픽 · −${familiarBumped.cost.toFixed(1)}점</span>`
       : `<span class="bd-type">종합 1순위</span>`;
-    else if(s.counterAxis===topCounter&&state.enemy.length)badge+=`<span class="bd-type counter">카운터픽</span>`;
-    else if(s.confidence===topConfidence)badge+=`<span class="bd-type safe">안전픽</span>`;
+    else if(topCounter!=null&&s.counterAxis===topCounter&&state.enemy.length)badge+=`<span class="bd-type counter">카운터픽</span>`;
+    else if(topConfidence!=null&&s.confidence===topConfidence)badge+=`<span class="bd-type safe">안전픽</span>`;
     else if(mode!=='meta'&&s.base===topComfort)badge+=`<span class="bd-type mastery">숙련픽</span>`;
     if(s.metaKnown&&s.statReliability>=.85)badge+=`<span class="bd-type evidence">표본 탄탄</span>`;
     if(s.metaKnown&&s.cBan>=15)badge+=`<span class="bd-type banrisk">밴 주의</span>`;
     /* [v19] '상승세/하락세'는 앞으로도 그렇다는 말이라 뺐다 — 추세는 앞날을 예측하지
        못했다(MOMENTUM_K). 직전 패치보다 다른 챔들 대비 올랐/내렸다는 사실만 적는다. */
     const vsPrev=META_SNAPSHOT.prevPatch?`${META_SNAPSHOT.prevPatch} 대비 `:'';
-    if(s.trend!=null&&s.trend>=1)badge+=`<span class="bd-type rising" title="직전 패치(${META_SNAPSHOT.prevPatch}) 마지막 며칠 평균보다 다른 챔들 대비 ${s.trend.toFixed(2)}%p 높습니다. 앞으로 더 오른다는 뜻은 아닙니다.">${vsPrev}상승</span>`;
-    else if(s.trend!=null&&s.trend<=-1.5)badge+=`<span class="bd-type falling" title="직전 패치(${META_SNAPSHOT.prevPatch}) 마지막 며칠 평균보다 다른 챔들 대비 ${Math.abs(s.trend).toFixed(2)}%p 낮습니다. 앞으로 더 떨어진다는 뜻은 아닙니다.">${vsPrev}하락</span>`;
+    if(s.trend!=null&&s.trend>=TREND_BADGE)badge+=`<span class="bd-type rising" title="직전 패치(${META_SNAPSHOT.prevPatch}) 마지막 며칠 평균보다 다른 챔들 대비 ${s.trend.toFixed(2)}%p 높습니다. 앞으로 더 오른다는 뜻은 아닙니다.">${vsPrev}상승</span>`;
+    else if(s.trend!=null&&s.trend<=-TREND_BADGE)badge+=`<span class="bd-type falling" title="직전 패치(${META_SNAPSHOT.prevPatch}) 마지막 며칠 평균보다 다른 챔들 대비 ${Math.abs(s.trend).toFixed(2)}%p 낮습니다. 앞으로 더 떨어진다는 뜻은 아닙니다.">${vsPrev}하락</span>`;
     // mastery badge only meaningful in weighted mode with a pool set
     if(s.offRole) badge+=`<span class="bd-role">통계 없음</span>`;
     const fm=famMap[c.id];
@@ -2883,7 +2990,10 @@ function render(){
          케넨은 미드 8판 25% / 탑 7판 43%로 갈리는데, 뭉뚱그린 '15판 5승'은
          어느 라인이 문제인지 감추고 숙련 점수와도 어긋나 보인다. */
       const lf=fm.lane&&fm.lane[state.lane];
-      const g=fm.graded?` · 성과 ${Math.round(fm.p/fm.n*100)}`:'';
+      /* [v20] '성과'는 등급을 매긴 판의 등급 평균이다. v19 까지 카드는 승패가 섞인 perfValue 를
+         전체 판수로 나눠 '성과 55'라 적었고, 기록 탭은 또 다른 식으로 '성과 47'을 적었다 —
+         같은 챔에 같은 이름의 숫자가 셋이었다. */
+      const g=fm.graded?` · 성과 ${Math.round(fm.gsum/fm.graded*100)}<span style="opacity:.6">(${fm.graded}판)</span>`:'';
       badge+=(lf&&lf.n>=3&&lf.n<fm.n)
         ? `<span class="bd-fam">★${LANEKR[state.lane]} ${lf.n}판 ${lf.w}승 <span style="opacity:.6">(전체 ${fm.n}판)</span></span>`
         : `<span class="bd-fam">★내챔 ${fm.n}판 ${fm.w}승${g}</span>`;
@@ -2893,7 +3003,7 @@ function render(){
     else if(s.firstPick){
       const fpf=firstPickFact();
       badge+=fpf
-        ? `<span class="bd-first hot" title="내 전적 — 처음 잡는 챔 ${fpf.first.w}승 ${fpf.first.n-fpf.first.w}패, 2~3판째 ${fpf.early.w}승 ${fpf.early.n-fpf.early.w}패 (우연일 확률 ${fpf.p<0.01?'1% 미만':Math.round(fpf.p*100)+'%'})${s.familiarity<0?` · 지금 새 챔 ${explorationLoad}종 진행중`:''}">첫 픽 · 내 첫 픽 승률 ${Math.round(fpf.first.w/fpf.first.n*100)}% <small>vs 익숙한 챔 ${Math.round(fpf.early.w/fpf.early.n*100)}%</small></span>`
+        ? `<span class="bd-first hot" title="내 전적 — 처음 잡는 챔 ${fpf.first.w}승 ${fpf.first.n-fpf.first.w}패, 2~3판째 ${fpf.early.w}승 ${fpf.early.n-fpf.early.w}패 (우연일 확률 ${fpf.p<0.01?'1% 미만':Math.round(fpf.p*100)+'%'})${s.familiarity<0?` · 지금 새 챔 ${explorationLoad}종 진행중`:''}">첫 픽 · 내 첫 픽 승률 ${Math.round(fpf.first.w/fpf.first.n*100)}% <small>vs 2~3판째 ${Math.round(fpf.early.w/fpf.early.n*100)}%</small></span>`
         : s.familiarity<0
         ? `<span class="bd-first" title="새로 시작한 챔이 이미 ${explorationLoad}종 — 한 번에 하나씩 늘리는 편이 유리합니다">첫 픽 · 탐색 ${explorationLoad}종 진행중</span>`
         : `<span class="bd-first">첫 픽</span>`;
@@ -2916,7 +3026,7 @@ function render(){
       <div class="rmid">
         <div class="rname">${c.kr}${badge}</div>
         <div class="rmeta">${LANEKR[state.lane]} · ${CLSKR[c.cls]} · ${c.dmg} · <span class="tg">${tagstr}</span></div>
-        <div class="resultstats"><span>승률 ${wrTxt}</span>${s.metaKnown?`<span>보정 ${s.adjustedWR.toFixed(2)}%</span>${s.trend!=null?`<span class="${s.trend>=0.75?'up':s.trend<=-0.75?'down':''}">직전 패치 ${s.trend>0?'▲':s.trend<0?'▼':'－'}${Math.abs(s.trend).toFixed(2)}%p</span>`:''}<span>픽 ${s.cPick.toFixed(2)}%</span><span class="${s.cBan>=10?'hot':''}">밴 ${s.cBan.toFixed(2)}%</span><span class="evidence">표본 ${Math.round(s.statReliability*100)}%</span>`:''}</div>
+        <div class="resultstats"><span>승률 ${wrTxt}</span>${s.metaKnown?`<span>보정 ${s.adjustedWR.toFixed(2)}%</span>${s.trend!=null?`<span class="${s.trend>=TREND_BADGE?'up':s.trend<=-TREND_BADGE?'down':''}" title="직전 패치(${META_SNAPSHOT.prevPatch}) 마지막 며칠 평균 대비. 판 전체가 같이 움직인 ${trendOffset()>=0?'+':''}${trendOffset().toFixed(2)}%p는 뺐습니다(원 변화 ${(s.trend+trendOffset())>0?'+':''}${(s.trend+trendOffset()).toFixed(2)}%p)">${META_SNAPSHOT.prevPatch} 대비 ${s.trend>0?'▲':s.trend<0?'▼':'－'}${Math.abs(s.trend).toFixed(2)}%p</span>`:''}<span>픽 ${s.cPick.toFixed(2)}%</span><span class="${s.cBan>=10?'hot':''}">밴 ${s.cBan.toFixed(2)}%</span><span class="evidence">표본 ${Math.round(s.statReliability*100)}%</span>`:''}</div>
         <div class="rwhy">${why}</div>
         ${tacticsPanel(c,s,i)}
       </div>
@@ -2993,7 +3103,7 @@ function renderDD(){
   dd.innerHTML=hintHead+ddList.map((c,i)=>
     `<button id="ddopt${i}" role="option" aria-selected="${i===ddActive}" class="ddrow ${i===0?'first':''} ${i===ddActive?'active':''}" onclick="quickAdd(${c.id})" onmousemove="setDDActive(${i})">
       <span class="ddn">${c.kr}${c.aliases.length?`<span class="ddalias">${c.aliases[0]}</span>`:''}</span>
-      <span class="ddm">${CLSKR[c.cls]} · ${lanesOf(c).map(l=>lm[l]).join('/')} · ${hasMeta(c)?wrOf(c).toFixed(1)+'%'+(t=>t==null?'':t>=1?' ▲':t<=-1?' ▼':'')(trendOf(c)):'통계 없음'}</span>
+      <span class="ddm">${CLSKR[c.cls]} · ${lanesOf(c).map(l=>lm[l]).join('/')} · ${hasMeta(c)?wrOf(c).toFixed(1)+'%'+(t=>t==null?'':t>=TREND_BADGE?' ▲':t<=-TREND_BADGE?' ▼':'')(trendOf(c)):'통계 없음'}</span>
     </button>`).join('');
 }
 function setDDActive(i){if(i===ddActive)return;ddActive=i;renderDD();}
@@ -3073,7 +3183,7 @@ function renderCfg(){
       </div>
       <div class="poolnote" style="margin-top:7px"><b>전 포지션 숙련</b>: 라인을 줄이라는 조언을 하지 않고, 라인마다 주력을 좁히는 쪽으로 안내합니다. <b>승률 우선</b>: 잘 되는 라인에 집중하라고 안내합니다. 추천 점수 계산은 두 경우 모두 동일하며, <b>분석 탭의 조언만</b> 달라집니다.</div>
     </div>
-    <div class="grp"><div class="gl">가중치 ${m==='meta'?'<span style="color:var(--dimmer);font-weight:500">(숙련도는 메타 중심 모드에서 제외)</span>':''}</div>
+    <div class="grp"><div class="gl">가중치 ${m==='meta'?'<span style="color:var(--dimmer);font-weight:500">(메타 중심에서는 숙련 슬라이더를 근거가 적을수록 줄여 35~85%만 반영)</span>':''}</div>
       ${wRow('comfort','숙련도')}${wRow('tier','승률(참조)')}${wRow('team','팀 시너지')}${wRow('counter','상성/스킬')}
       ${(()=>{
         /* [v10] 축별 자동 보정 — 못 맞히는 축의 발언권을 깎는다.
@@ -3091,7 +3201,7 @@ function renderCfg(){
       })()}
     </div>
     <div class="grp"><div class="gl">내 챔폭 (라인별 숙련도)</div>
-      <div class="poolnote"><b>메타 중심 모드에서는 사용하지 않습니다.</b> 손에 익은 챔피언만 올려두세요(50=평균, 70+=주력). 숙련도는 승률이 아니라 조작 자신감입니다.</div>
+      <div class="poolnote"><b>메타 중심 모드에서도 반영됩니다</b> — 다만 4판 넘게 해본 챔은 이 값 대신 실측 성과를 씁니다. 손에 익은 챔피언만 올려두세요(50=평균, 70+=주력). 숙련도는 승률이 아니라 조작 자신감입니다.</div>
       ${(()=>{const cnt={};matches.forEach(m=>{cnt[m.pick]=cnt[m.pick]||{n:0,w:0};cnt[m.pick].n++;if(m.won)cnt[m.pick].w++;});
         const sg=Object.entries(cnt).filter(([id])=>byId[+id]&&!(pool[+id]&&pool[+id].comfort>0)).sort((a,b)=>b[1].n-a[1].n).slice(0,5)
           .map(([id,r])=>`<button onclick="quickPool(${id})" style="margin:2px 4px 2px 0;padding:4px 9px;border:1px solid var(--cyan);border-radius:6px;background:none;color:var(--cyan);font-size:12px">+ ${byId[+id].kr} <span style="opacity:.6">${r.n}판 ${r.w}승</span></button>`).join('');
@@ -3232,7 +3342,7 @@ function logMatch(won){
     top3:lastCands.slice(0,3).map(o=>o.c.id),
     /* [v18] 이 판의 top3 가 '손에 익은 픽 우선'으로 재정렬된 것인지. 안 남기면
        v17 순응도 분석("1순위를 따랐나")에서 1순위의 뜻이 말없이 바뀐다. */
-    familiarFirst:weights.familiarFirst?1:undefined,scoreSnapshot:chosen?{total:Math.round(chosen.s.total),meta:Math.round(chosen.s.cTier),team:Math.round(chosen.s.teamAxis),counter:Math.round(chosen.s.counterAxis),comfort:Math.round(chosen.s.base),confidence:chosen.s.confidence}:null,won:!!won,
+    bracket:appliedBracket,familiarFirst:lastFamiliarBumped?1:undefined,scoreSnapshot:chosen?{total:Math.round(chosen.s.total),meta:Math.round(chosen.s.cTier),team:Math.round(chosen.s.teamAxis),counter:Math.round(chosen.s.counterAxis),comfort:Math.round(chosen.s.base),confidence:chosen.s.confidence}:null,won:!!won,
     /* 라인 상대는 지정값이 없으면 엔진이 배정한 상대를 남긴다. 나중에 "상성 판정이
        맞았나"를 되짚으려면 그때 무엇을 상대로 보고 계산했는지가 기록돼 있어야 한다. */
     lanerAuto:(()=>{const o=laneOpponent(currentAssign(),state.lane);return o.c?o.c.id:null;})(),
@@ -3320,11 +3430,20 @@ function barRow(label,w,n,{weak=false,note=''}={}){
     <span class="bt"><span class="bf ${cls}" style="width:${Math.max(2,p)}%"></span></span>
     <span class="bv">${n?p+'%':'—'}<small>${n}판${note?' '+note:''}</small></span></div>`;
 }
+/* 기록된 modelVersion 으로 '그 판을 만든 앱이 이 필드를 알았는가'를 판정한다.
+   [v20] 진단 블록 안에 있던 것을 끌어올렸다 — 통제 불가 카드도 같은 창을 써야 한다. */
+const verNum=v=>{const x=/^(\d+)\.(\d+)\.(\d+)/.exec(v||'');return x?(+x[1])*1e6+(+x[2])*1e3+(+x[3]):0;};
+const TEAM_ISSUE_SINCE=verNum('8.1.0');
+const canFlagTeam=m=>verNum(m.modelVersion)>=TEAM_ISSUE_SINCE;
 function analysisModel(){
   const M=matches.slice().sort((a,b)=>a.t-b.t);
   const n=M.length, w=M.filter(m=>m.won).length, base=n?w/n:0.5;
   const out={n,w,base,notes:[],insights:[]};
   if(!n)return out;
+  /* [v20] 그 판의 라인 상대 확신도 — 사용자가 🎯 로 지정했으면 1, 아니면 자기 채점이 그 판 당시
+     통계로 배정한 값(replayPass 행). 픽을 못 읽어 채점 행이 없는 판은 0. */
+  const RP=new Map(replayPass(false).map(r=>[r.m,r]));
+  const oppConf=m=>(m.laneMark!=null&&(m.enemy||[]).includes(m.laneMark))?1:((RP.get(m)&&RP.get(m).lanerConf)||0);
 
   // 최근 폼: 10판 블록 + 최근 10판이 통계적으로 유의한 부진인지
   out.blocks=[];
@@ -3337,7 +3456,9 @@ function analysisModel(){
     const p=Math.max(0.35,Math.min(0.65,base)), n=last10.length;
     const lo=binomAtMost(l10w,n,p);                 // 이 정도로 못할 확률
     const hi=1-binomAtMost(l10w-1,n,p);             // 이 정도로 잘할 확률
-    out.last10P=Math.min(lo,hi);
+    /* [v20] 양측 꼬리로 센다(2×min). 한쪽 꼬리만 보던 v19 까지는 같은 10판을 두고 배너는
+       '이례적으로 나쁩니다(4%)', 바로 아래 진단 카드는 '분산입니다(27%)' 라고 말했다. */
+    out.last10P=Math.min(1,2*Math.min(lo,hi));
     out.last10Dir=lo<=hi?'down':'up';
   }else{out.last10P=null;out.last10Dir=null;}
 
@@ -3388,9 +3509,12 @@ function analysisModel(){
 
   /* 통제 불가 판: 자기 신고라 편향될 수 있으므로 비율을 그대로 보여준다.
      "내 탓 아님"이 40%를 넘으면 그 자체가 점검 신호다. */
-  const ti=M.filter(isUncontrolled);
+  /* [v20] 분모는 '표시할 수 있던 판'(v8.1 이후 기록)이다. 전체 판수로 나누던 v19 까지는
+     버튼이 없던 130판이 '그 외'에 섞여 비율이 반으로 희석됐다 — v12.1 과 같은 종류의
+     능력 창 오류다. */
+  const cap=M.filter(canFlagTeam), ti=cap.filter(isUncontrolled);
   out.teamIssue={n:ti.length,w:ti.filter(m=>m.won).length,
-    rest:M.length-ti.length,restW:M.filter(m=>!isUncontrolled(m)&&m.won).length};
+    rest:cap.length-ti.length,restW:cap.filter(m=>!isUncontrolled(m)&&m.won).length,capable:cap.length,all:M.length};
 
   /* 원딜 라인 변수: 아군에 서폿류(엔첸터·탱커)가 있었는지로 본다.
      자기 신고가 아니라 드래프트 입력에서 나오는 객관 지표다. */
@@ -3418,7 +3542,10 @@ function analysisModel(){
 
   // 성과(MVP/SVP) 기록분
   const graded=M.filter(m=>PERF[m.perf]);
-  out.perf={n:graded.length,avg:graded.length?graded.reduce((a,m)=>a+perfValue(m),0)/graded.length:0,
+  /* [v20] 등급만 평균한다. perfValue() 는 설계상 승패(0.74/0.26)를 섞으므로 그걸 '팀운과 분리된
+     신호'라고 부르면 거짓이다 — 실측으로 perfValue 의 분산 82%가 승패였고, 진 판의 MVP(0.54)가
+     이긴 판의 부진(0.74)보다 낮게 나왔다. 진단 블록은 v13 부터 같은 이유로 등급만 썼다. */
+  out.perf={n:graded.length,avg:graded.length?graded.reduce((a,m)=>a+PERF[m.perf].v,0)/graded.length:0,
     carried:graded.filter(m=>!m.won&&(m.perf==='svp'||m.perf==='mvp')).length,
     threw:graded.filter(m=>m.won&&m.perf==='bad').length};
 
@@ -3474,7 +3601,11 @@ function analysisModel(){
       const seenAt={}, playedBefore=new Map();
       M.forEach(m=>{playedBefore.set(m,seenAt[m.pick]||0);seenAt[m.pick]=(seenAt[m.pick]||0)+1;});
       const mean=(A,f)=>A.length?A.reduce((s,m)=>s+f(m),0)/A.length:null;
+      const snap=A=>A.filter(m=>m.scoreSnapshot&&Number.isFinite(m.scoreSnapshot.total));
       out.adhere={
+        /* [v20] 카드가 말하던 '이탈한 판의 픽은 엔진 점수가 더 낮았다'(59.0 vs 61.4)는 README v17
+           의 숫자를 문장에 박아 둔 것이었다 — 계산하지 않았다. 지금 사용자의 기록으로 잰다. */
+        scoreTop1:mean(snap(top1),m=>m.scoreSnapshot.total),scoreDevi:mean(snap(devi),m=>m.scoreSnapshot.total),
         /* [v18] '손에 익은 픽 우선'이 켜진 판은 top3[0] 이 최고점이 아니라
            재정렬된 픽이다. 섞여 있으면 '1순위를 따랐나'의 뜻이 판마다 달라지므로
            그 판수를 세어 카드에 밝힌다. */
@@ -3497,7 +3628,11 @@ function analysisModel(){
   out.autoAxis=weights.autoAxis!==false;
   /* [v19] 몇 판을 그 판 당시 패치의 통계로 채점했는지. 0 이면 패치별 통계를 아직
      못 받은 것이고, 그때 메타 축 값은 오늘 통계로 잰 것이라 실제보다 좋게 나올 수 있다. */
-  {const R=replayPass(false);out.asOf={n:R.length,k:R.filter(r=>r.asOf).length};}
+  {const R=replayPass(false), c=k=>R.filter(r=>r.asOf===k).length;
+   /* [v20] 표를 어떻게 골랐는지 종류별로 센다. v19 는 바꿔 끼웠다는 사실만 세어, 날짜로 추정한
+      패치든 구간이 없어 Diamond+ 로 대신한 것이든 '그 판 당시 패치의 통계'라고 적었다. */
+   out.asOf={n:R.length,exact:c('exact'),bracket:c('bracket'),date:c('date'),before:c('before'),today:c('today'),
+     k:R.length-c('today')};}
 
   /* ============ [v12] 최근 부진 진단 ============
    * "요새 왜 지지?"에 앱이 답하지 못했다. 지금까지는 최근 10판이 정상 변동인지만
@@ -3546,11 +3681,7 @@ function analysisModel(){
         p:propDiffP(a.k,a.n,b.k,b.n),need:gamesToDecide(a.k,a.n,b.k,b.n,1),worse:worse(a.r,b.r),
         window:eligible?R2.length+B2.length:null};
     };
-    /* 기록된 modelVersion 으로 '그 판을 만든 앱이 이 필드를 알았는가'를 판정한다. */
-    const verNum=v=>{const x=/^(\d+)\.(\d+)\.(\d+)/.exec(v||'');
-      return x?(+x[1])*1e6+(+x[2])*1e3+(+x[3]):0;};
-    const TEAM_ISSUE_SINCE=verNum('8.1.0');
-    const canFlagTeam=m=>verNum(m.modelVersion)>=TEAM_ISSUE_SINCE;
+    // 기록된 modelVersion 으로 '그 판을 만든 앱이 이 필드를 알았는가'를 판정한다(verNum/canFlagTeam — 모듈 상단).
     // 그 시점 기준 '처음 잡는 챔'인지 — 사후편향 없이 앞에서부터 센다.
     const seenAt={}; const firstFlag=new Map();
     M.forEach(m=>{firstFlag.set(m,(seenAt[m.pick]||0)===0);seenAt[m.pick]=(seenAt[m.pick]||0)+1;});
@@ -3558,13 +3689,11 @@ function analysisModel(){
     const SESSION_GAP=3*3600e3; let sT=null,sN=0; const ordFlag=new Map();
     M.forEach(m=>{if(sT==null||m.t-sT>SESSION_GAP)sN=0;sT=m.t;ordFlag.set(m,sN++);});
     // 라인 상대를 알고 있었는지 — 지금 엔진으로 다시 배정해서 센다.
+    /* [v20] 상대 배정은 자기 채점(replayPass)이 그 판 당시 패치 표로 이미 풀어 둔 값을 쓴다.
+       오늘 통계로 다시 배정하던 v19 까지는 같은 판의 상대가 성적표와 진단에서 달랐다(11/264판).
+       '알고 시작한' 은 확정(0.75 이상)만 — 3% 짜리 추정을 안 것으로 치지 않는다. */
     const lanerKnown=new Map();
-    M.forEach(m=>{
-      if(!(m.enemy||[]).length){lanerKnown.set(m,false);return;}
-      const conf=m.laneMark!=null&&m.enemy.includes(m.laneMark)
-        ? 1 : laneOpponent(assignEnemyLanes(m.enemy,m.lane,m.laneMark),m.lane).conf;
-      lanerKnown.set(m,conf>0);
-    });
+    M.forEach(m=>{lanerKnown.set(m,!!(m.enemy||[]).length&&oppConf(m)>=0.75);});
     const items=[
       cmp('처음 잡는 챔 비율',m=>firstFlag.get(m),'behavior',(a,b)=>a>b,
         '새 챔이 늘면 단기 승률은 떨어진다 — 늘리는 건 좋지만 한 번에 하나씩'),
@@ -3585,7 +3714,7 @@ function analysisModel(){
         const on=M.filter(m=>m.patch===newest), off=M.filter(m=>m.patch&&m.patch!==newest);
         if(on.length>=6&&off.length>=20){
           const ow=on.filter(m=>m.won).length, fw=off.filter(m=>m.won).length;
-          items.push({label:`현재 패치(${newest}) 이후`,kind:'env',
+          items.push({label:`현재 패치(${esc(newest)}) 이후 — ${on.length}판 vs 이전 패치 ${off.length}판`,kind:'env',
             note:'패치가 바뀌면 챔 강약이 같이 바뀐다 — 이 낙폭은 내가 만든 게 아닐 수 있다',
             recent:{k:ow,n:on.length,r:ow/on.length},
             base:{k:fw,n:off.length,r:fw/off.length},
@@ -3615,13 +3744,15 @@ function analysisModel(){
         : `${LANEKR[L]}을 예전보다 덜 하고 있습니다`;
       return c;
     }).filter(Boolean).sort((a,b)=>Math.abs(b.delta)-Math.abs(a.delta))[0];
-    if(laneShift){laneShift.p=selP(laneShift.p,lanesSeen.length);
-      laneShift.need=gamesToDecide(laneShift.recent.k,laneShift.recent.n,laneShift.base.k,laneShift.base.n,lanesSeen.length);
-      items.push(laneShift);}
-    // 여러 항목을 한꺼번에 뒤지므로 다중 비교를 보정한다.
-    items.forEach(x=>{if(x.isWinrate)return;
-      x.p=selP(x.p,items.length);
-      x.need=gamesToDecide(x.recent.k,x.recent.n,x.base.k,x.base.n,items.length);});
+    if(laneShift)items.push(laneShift);
+    /* 여러 항목을 한꺼번에 뒤지므로 다중 비교를 보정한다.
+       [v20] 가족은 하나다: 항목 수 + 라인 탐색에서 본 나머지 라인 수. v19 까지는 라인 항목을
+       라인 수로 한 번, 항목 수로 또 한 번(×35) 보정하면서 '필요 판수'는 ×7 로 계산해 두 숫자가
+       서로 다른 검정에서 나왔고, 패치 항목은 보정을 아예 건너뛰어 우연한 4% 가 '달라진 것'으로
+       올라갔다(271판 중 14개 시점). */
+    const fam=items.length+(laneShift?Math.max(0,lanesSeen.length-1):0);
+    items.forEach(x=>{x.p=selP(x.p,fam);
+      x.need=gamesToDecide(x.recent.k,x.recent.n,x.base.k,x.base.n,fam);});
     /* [v13] 승률만 보면 "왜 지는지"의 절반을 놓친다. 이 앱은 v7부터 판마다
        개인 성과 등급을 받아왔는데, 그 이유가 정확히 '팀운과 내 플레이를 가르기'
        위해서였다. 그런데 진단 카드는 승률만 봤다.
@@ -3689,8 +3820,7 @@ function analysisModel(){
   const oppB={sure:{n:0,w:0},guess:{n:0,w:0},none:{n:0,w:0}};
   M.forEach(m=>{
     if(!(m.enemy||[]).length)return;
-    const conf=m.laneMark!=null&&m.enemy.includes(m.laneMark)
-      ? 1 : laneOpponent(assignEnemyLanes(m.enemy,m.lane,m.laneMark),m.lane).conf;
+    const conf=oppConf(m);
     const b=conf>=0.75?oppB.sure:conf>0?oppB.guess:oppB.none;
     b.n++; if(m.won)b.w++;
   });
@@ -3989,8 +4119,8 @@ function renderAnalysis(){
     <div class="dxh"><span class="dxt">10판 단위 승률 추이</span><span class="dxn">${a.n}판 · 전체 ${P(a.base)}%</span></div>
     <div class="spark">${a.blocks.map(b=>{const r=b.w/b.n;
       return `<div class="${r>=0.6?'hi':r<0.4?'lo':''}" style="height:${Math.max(6,r/maxBlock*100)}%" title="${b.from}-${b.to}판 ${P(r)}%"></div>`;}).join('')}</div>
-    <div class="sparkx"><span>${a.blocks[0].from}판</span><span>최근 ${a.blocks[a.blocks.length-1].to}판</span></div>
-    <div class="dxs">막대 하나가 10판입니다. 위아래로 흔들리는 게 정상이며, 한두 블록의 하락은 실력 변화가 아닙니다.</div></div>`:'';
+    <div class="sparkx"><span>${a.blocks[0].from}판</span><span>최근 ${a.n}판</span></div>
+    <div class="dxs">막대 하나가 10판입니다. 위아래로 흔들리는 게 정상이며, 한두 블록의 하락은 실력 변화가 아닙니다.${a.blocks[a.blocks.length-1].to<a.n?` 마지막 ${a.n-a.blocks[a.blocks.length-1].to}판은 블록이 안 차서 막대에 없습니다.`:''}</div></div>`:'';
 
   const inputCard=`<div class="dx">
     <div class="dxh"><span class="dxt">앱 입력 성실도 → 승률</span><span class="dxn">상대 픽 입력 개수별</span></div>
@@ -4016,10 +4146,15 @@ function renderAnalysis(){
           ? `<b>추천을 벗어났을 때가 더 좋았습니다</b> — 1순위 <b>${r(A.top1)}%</b>(${A.top1.n}판) vs 이탈 <b>${r(A.devi)}%</b>(${A.devi.n}판), 우연일 확률 <b>${pTx}</b>.`
           : `추천대로 고른 쪽이 더 좋았습니다 — 1순위 <b>${r(A.top1)}%</b> vs 이탈 <b>${r(A.devi)}%</b>, 우연일 확률 <b>${pTx}</b>.`)
         : `1순위 <b>${r(A.top1)}%</b>(${A.top1.n}판) vs 이탈 <b>${r(A.devi)}%</b>(${A.devi.n}판). 이 차이는 <b>우연일 확률 ${pTx}</b>로, 아직 어느 쪽이 낫다고 말할 수 없습니다.${needTxt(A.need)}`}
-      ${solid&&deviBetter?`<br><span style="color:var(--dimmer)">다만 이걸 "앱을 무시하라"로 읽으면 안 됩니다. 이탈은 <b>이유가 있을 때만</b> 하는 행동이라 표본이 한쪽으로 기울어 있고(${A.devi.n}판), 실제로 이탈한 판의 픽은 <b>엔진 점수가 더 낮았습니다</b>. 대신 달랐던 건 하나입니다 —</span>`:''}
+      ${solid&&deviBetter?`<br><span style="color:var(--dimmer)">다만 이걸 "앱을 무시하라"로 읽으면 안 됩니다. 이탈은 <b>이유가 있을 때만</b> 하는 행동이라 표본이 한쪽으로 기울어 있고(${A.devi.n}판)${
+          A.scoreTop1!=null&&A.scoreDevi!=null
+            ? (A.scoreDevi<A.scoreTop1
+                ? `, 실제로 이탈한 판의 픽은 <b>엔진 점수가 더 낮았습니다</b>(${A.scoreDevi.toFixed(1)} vs 1순위 ${A.scoreTop1.toFixed(1)}) — 더 좋은 픽을 고른 게 아닙니다`
+                : `, 이탈한 판의 픽은 엔진 점수도 <b>더 높았습니다</b>(${A.scoreDevi.toFixed(1)} vs 1순위 ${A.scoreTop1.toFixed(1)})`)
+            : ''}.</span>`:''}
       ${A.famTop1!=null?`<div class="fr" style="margin-top:6px"><span>그 챔으로 해본 판수</span><span>1순위 <b>${A.famTop1.toFixed(1)}판</b> · 이탈 <b>${A.famDevi.toFixed(1)}판</b></span></div>`:''}
       <span style="color:var(--dimmer);font-size:11px">${A.famDevi>A.famTop1
-        ? `추천을 벗어날 때 <b>더 손에 익은 챔</b>으로 갔습니다. 기계보다 손이 이긴 쪽에 가깝고, 이 앱의 유일한 단정형 조언(처음 잡는 챔 줄이기)과도 같은 방향입니다.`
+        ? `추천을 벗어날 때 <b>더 손에 익은 챔</b>으로 갔습니다 — 기계보다 손이 이긴 쪽에 가깝습니다.${(a.insights||[]).some(x=>/처음 잡는 챔/.test(x.t||'')&&x.p!=null&&x.p<=SIG_P)?' 분석의 "처음 잡는 챔을 줄이세요"와 같은 방향입니다.':''}`
         : `추천을 벗어날 때 손에 익은 정도는 비슷했습니다.`}</span>
       </div></div>`;
   })():'';
@@ -4055,8 +4190,15 @@ function renderAnalysis(){
       ${(()=>{const q=a.asOf;if(!q||!q.n)return '';
         /* [v19] 무엇으로 채점했는지 밝힌다. 오늘 통계로 옛 판을 채점하면 메타 축이 실제보다
            좋아 보인다(실사용 271판: 오늘 통계 0.54 vs 그 판 당시 통계 0.50). */
-        if(q.k===q.n)return `<div class="dxs" style="margin-top:0">${q.n}판 모두 <b>그 판 당시 패치의 통계</b>로 채점했습니다 — 오늘 승률로 옛 판을 채점하지 않습니다.</div>`;
-        if(q.k>0)return `<div class="dxs" style="margin-top:0">${q.n}판 중 <b>${q.k}판</b>은 그 판 당시 패치의 통계로, 나머지 ${q.n-q.k}판은 오늘 통계로 채점했습니다.</div>`;
+        if(q.exact===q.n)return `<div class="dxs" style="margin-top:0">${q.n}판 모두 <b>기록된 패치·구간의 통계</b>로 채점했습니다 — 오늘 승률로 옛 판을 채점하지 않습니다.</div>`;
+        if(q.k>0){
+          const parts=[`<b>${q.exact}판</b>은 기록된 패치·구간 표`];
+          if(q.date)parts.push(`<b>${q.date}판</b>은 패치를 기록하기 전이라 날짜로 고른 패치의 표`);
+          if(q.before)parts.push(`<b>${q.before}판</b>은 첫 통계보다 앞선 판이라 가장 오래된 표`);
+          if(q.bracket)parts.push(`<b>${q.bracket}판</b>은 그 패치에 기록된 구간 표가 없어 Diamond+ 표`);
+          if(q.today)parts.push(`<b>${q.today}판</b>은 오늘 통계`);
+          return `<div class="dxs" style="margin-top:0">${q.n}판 중 ${parts.join(', ')}로 채점했습니다. 추정한 표는 그 판에 없던 정보일 수 있습니다.</div>`;
+        }
         return `<div class="dxs asofwarn" style="margin-top:0">패치별 통계를 아직 받지 못해 <b>오늘(${META_SNAPSHOT.targetPatch}) 통계로 옛 판을 채점</b>했습니다. 이 경우 <b>메타 축이 실제보다 좋게</b> 나옵니다(실사용 271판: 0.54 vs 당시 통계 0.50).</div>`;})()}
       ${ax.map(x=>{
         const good=x.conclusive&&x.auc>0.5, bad=x.conclusive&&x.auc<0.5;
@@ -4146,15 +4288,15 @@ function renderAnalysis(){
     if(!t||!t.n)return `<div class="dx">
       <div class="dxh"><span class="dxt">통제 불가 판</span><span class="dxn">미기록</span></div>
       <div class="dxs">트롤·잠수·역할 미준수로 진 판은 기록할 때 <b>⚠ 팀 문제</b>를 눌러두세요.
-        그 패배는 챔피언 평가에서 제외돼, 멀쩡한 픽이 부당하게 깎이지 않습니다.</div></div>`;
+        그 패배는 챔피언 평가에서 승패 대신 <b>중립(0.5)</b>으로 계산돼, 멀쩡한 픽이 부당하게 깎이지 않습니다.</div></div>`;
     const rate=t.n/(t.n+t.rest);
     return `<div class="dx">
-      <div class="dxh"><span class="dxt">통제 불가 판</span><span class="dxn">${t.n} / ${t.n+t.rest}판</span></div>
+      <div class="dxh"><span class="dxt">통제 불가 판</span><span class="dxn">${t.n} / ${t.capable}판${t.capable<t.all?` (표시 가능했던 판만)`:''}</span></div>
       ${barRow('팀 문제 표시',t.w,t.n)}
       ${barRow('그 외',t.restW,t.rest)}
       <div class="dxs">${rate>=0.4
         ? `전체의 <b>${Math.round(rate*100)}%</b>를 팀 문제로 표시했습니다. 비율이 높으면 판단이 한쪽으로 기운 것일 수 있으니, 정말 손쓸 수 없던 판만 남기는 게 학습에 정확합니다.`
-        : `표시한 패배는 챔피언 평가에서 제외됩니다. 승리는 어떻게 얻었든 그대로 반영합니다.`}</div></div>`;
+        : `표시한 패배는 챔피언 평가에서 승패 대신 <b>중립(0.5)</b>으로 계산됩니다(판수에는 들어갑니다). 승리는 어떻게 얻었든 그대로 반영합니다.`}</div></div>`;
   })();
 
   /* [v11] 교란을 숨기지 않는다. '서폿류 없음'은 대체로 '아군을 덜 입력한 판'이다. */
@@ -4177,7 +4319,7 @@ function renderAnalysis(){
 
   const perfCard=a.perf.n?`<div class="dx">
     <div class="dxh"><span class="dxt">내 개인 성과</span><span class="dxn">${a.perf.n}판 기록됨</span></div>
-    <div class="dxs">평균 성과 <b>${Math.round(a.perf.avg*100)}/100</b>
+    <div class="dxs">평균 성과 <b>${Math.round(a.perf.avg*100)}/100</b> <span style="color:var(--dimmer)">(등급만, 승패 제외)</span>
       · 졌지만 내가 최우수 <b>${a.perf.carried}판</b>${a.perf.threw?` · 이겼지만 부진 <b>${a.perf.threw}판</b>`:''}<br>
       성과는 팀운과 분리된 신호라 승패보다 적은 표본으로도 픽 적합도를 판단합니다.</div></div>`
     :`<div class="dx"><div class="dxh"><span class="dxt">내 개인 성과</span><span class="dxn">미기록</span></div>
@@ -4212,8 +4354,11 @@ function renderLogRecords(){
     return;
   }
   const n=matches.length, w=matches.filter(m=>m.won).length;
-  // 픽 분류: 1위 추종 / 톱3 내 / 이탈 (구기록은 top3 없음 → 이탈 처리)
-  const clsOf=m=>(m.top!=null&&m.pick===m.top)?'f':((Array.isArray(m.top3)&&m.top3.includes(m.pick))?'t3':'off');
+  /* 픽 분류: 1위 추종 / 톱3 내 / 이탈. [v20] top3 를 기록하기 전의 판(22판)은 '기록 전'으로
+     따로 센다 — 그 판이 톱3 안이었는지는 알 수 없는데 v19 까지는 이탈로 밀어 넣어, 분석 탭의
+     순응도 카드(top3 기록된 판만)와 두 탭의 숫자가 달랐다(250/13 vs 234/15). */
+  const clsOf=m=>!(Array.isArray(m.top3)&&m.top3.length)?'pre':(m.top!=null&&m.pick===m.top)?'f':(m.top3.includes(m.pick)?'t3':'off');
+  const pre=matches.filter(m=>clsOf(m)==='pre');
   const foll=matches.filter(m=>clsOf(m)==='f'), fw=foll.filter(m=>m.won).length;
   const t3m=matches.filter(m=>clsOf(m)==='t3'), tw=t3m.filter(m=>m.won).length;
   const off=matches.filter(m=>clsOf(m)==='off'), ow=off.filter(m=>m.won).length;
@@ -4227,9 +4372,9 @@ function renderLogRecords(){
   // 챔별 (성과 평균 포함 — 승패보다 표본 효율이 좋다)
   const byCh={};
   matches.forEach(m=>{const k=m.pick; if(!byCh[k])byCh[k]={w:0,n:0,p:0,g:0}; const r=byCh[k];
-    r.n++; if(m.won)r.w++; r.p+=perfValue(m); if(PERF[m.perf])r.g++;});
+    r.n++; if(m.won)r.w++; if(PERF[m.perf]){r.g++;r.p+=PERF[m.perf].v;}});   // [v20] 등급만의 평균(카드·성과 카드와 같은 정의)
   const champRows=Object.entries(byCh).sort((a,b)=>b[1].n-a[1].n).map(([id,r])=>
-    `<div class="champrow"><span class="nm">${champName(+id)} <span style="color:var(--dim)">${r.n}판${r.g?` · 성과 ${Math.round(r.p/r.n*100)}`:''}</span></span>`
+    `<div class="champrow"><span class="nm">${champName(+id)} <span style="color:var(--dim)">${r.n}판${r.g?` · 성과 ${Math.round(r.p/r.g*100)}(${r.g}판)`:''}</span></span>`
     +`<span class="rec2 ${r.w/r.n>=0.5?'win':'loss'}">${r.w}승 ${r.n-r.w}패 · ${pct(r.w,r.n)}%</span></div>`).join('');
 
   /* ── 엔진 버전별: "패치 후 나빠졌나"를 인상이 아니라 데이터로 확인 ── */
@@ -4237,7 +4382,7 @@ function renderLogRecords(){
   matches.forEach(m=>{const k=m.modelVersion||'(초기)'; if(!byVer[k])byVer[k]={n:0,w:0,first:m.t};
     byVer[k].n++; if(m.won)byVer[k].w++; if(m.t<byVer[k].first)byVer[k].first=m.t;});
   const verRows=Object.entries(byVer).sort((a,b)=>a[1].first-b[1].first).map(([k,r])=>
-    `<div class="champrow"><span class="nm">${k} <span style="color:var(--dim)">${r.n}판</span></span>`
+    `<div class="champrow"><span class="nm">${esc(k)} <span style="color:var(--dim)">${r.n}판</span></span>`
     +`<span class="rec2 ${r.w/r.n>=0.5?'win':'loss'}">${pct(r.w,r.n)}%</span></div>`).join('');
 
   // 최근 기록
@@ -4257,12 +4402,13 @@ function renderLogRecords(){
       <div class="statcard"><div class="k">승률</div><div class="v ${pct(w,n)>=50?'win':'loss'}">${pct(w,n)}<small>%</small></div></div>
       <div class="statcard"><div class="k">추천 1위 따라간 판</div><div class="v ${pct(fw,foll.length)>=50?'win':'loss'}">${pct(fw,foll.length)}<small>% (${foll.length}판)</small></div></div>
       <div class="statcard"><div class="k">톱3 내 픽</div><div class="v ${pct(tw,t3m.length)>=50?'win':'loss'}">${pct(tw,t3m.length)}<small>% (${t3m.length}판)</small></div></div>
+      ${pre.length?`<div class="statcard"><div class="k">추천 기록 전</div><div class="v">${pre.length}<small>판 · 분류 불가</small></div></div>`:''}
       <div class="statcard"><div class="k">이탈 픽</div><div class="v ${pct(ow,off.length)>=50?'win':'loss'}">${pct(ow,off.length)}<small>% (${off.length}판)</small></div></div>
       <div class="statcard"><div class="k">최근 10판</div><div class="v ${pct(r10w,r10.length)>=50?'win':'loss'}">${pct(r10w,r10.length)}<small>% (${r10.length}판)</small></div></div>
       ${(()=>{const g=matches.filter(m=>PERF[m.perf]);
         if(!g.length)return `<div class="statcard" style="grid-column:1/-1"><div class="k">내 성과 기록</div><div class="v" style="font-size:13px;font-weight:600;color:var(--dim);line-height:1.5">아직 없음 — 기록할 때 <b style="color:var(--gold-soft)">MVP·SVP</b>를 같이 눌러두면<br>팀운과 분리해서 내 픽이 맞았는지 학습합니다</div></div>`;
         const carry=g.filter(m=>!m.won&&(m.perf==='svp'||m.perf==='mvp')).length;
-        return `<div class="statcard"><div class="k">평균 성과</div><div class="v">${Math.round(g.reduce((a,m)=>a+perfValue(m),0)/g.length*100)}<small>/100 (${g.length}판)</small></div></div>`
+        return `<div class="statcard"><div class="k">평균 성과</div><div class="v">${Math.round(g.reduce((a,m)=>a+PERF[m.perf].v,0)/g.length*100)}<small>/100 (${g.length}판 · 등급만)</small></div></div>`
           +`<div class="statcard"><div class="k">졌지만 내가 최우수</div><div class="v">${carry}<small>판</small></div></div>`;})()}
     </div>
     <div class="logsec">라인별</div>${laneRows}
@@ -4280,7 +4426,7 @@ function backupPayload(){
 function exportData(){
   const payload=backupPayload();
   const blob=new Blob([payload],{type:'application/json'}),url=URL.createObjectURL(blob),a=document.createElement('a');
-  a.href=url;a.download=`wr-picker-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('백업 파일을 저장했습니다');
+  a.href=url;a.download=`wr-picker-backup-${new Date().toISOString().slice(0,10)}.json`;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),60000);toast(`백업 다운로드 요청: ${matches.length}판 · ${Math.max(1,Math.round(payload.length/1024))}KB`);
 }
 async function copyBackup(){
   try{await navigator.clipboard.writeText(backupPayload());toast('백업 JSON을 복사했습니다');}
@@ -4321,10 +4467,20 @@ async function enableAutoBackup(){
       suggestedName:'wr-picker-backup.json',
       types:[{description:'WR Picker 백업',accept:{'application/json':['.json']}}]
     });
-    autoBackupHandle=h;autoBackupState='ready';
-    await idbPut(h);
-    await autoBackupWrite(true);
-    toast('자동 백업을 켰습니다');
+    /* [v20] 파일 선택기는 그 자리에서 0바이트 파일을 만든다. 첫 저장이 성공했을 때만 '켜짐'
+       이라고 말한다 — v19 까지는 저장이 실패해도(권한 거부, IndexedDB 차단) '켰습니다' 가 떴고,
+       사용자 손에는 빈 wr-picker-backup.json 만 남았다. 이 앱에서 0바이트 백업이 나오는
+       유일한 경로가 여기였다. */
+    autoBackupHandle=h;
+    let persisted=true;
+    try{await idbPut(h);}catch(e){persisted=false;}
+    const ok=await autoBackupWrite(false);
+    if(ok){
+      autoBackupAt=new Date().toISOString();
+      toast(persisted?'자동 백업을 켰습니다 · 첫 저장 완료':'자동 백업을 켰지만 이 브라우저는 파일 연결을 기억하지 못합니다 — 다음 실행 때 다시 지정해야 합니다');
+    }else{
+      toast(`자동 백업 첫 저장 실패: ${autoBackupError||'알 수 없는 오류'} — 파일은 비어 있습니다`);
+    }
   }catch(e){ if(e&&e.name!=='AbortError')toast('자동 백업 설정 실패'); }
   renderLog();
 }
@@ -4405,7 +4561,7 @@ function autoBackupBox(){
 /* [v11] 스냅샷 슬롯이 하나뿐이라, 데이터를 지우지 않는 '복원(합치기)'이
    바로 직전 '전체삭제'의 스냅샷을 덮어써 정작 되돌려야 할 것을 잃게 만들었다.
    삭제 계열은 따로 보관하고, 되돌릴 때는 둘 중 더 많은 판을 담은 쪽을 고른다. */
-const ROLLBACK_KEYS={clear:'wr_rollback_clear',restore:'wr_rollback'};
+const ROLLBACK_KEYS={clear:'wr_rollback_clear',restore:'wr_rollback',undo:'wr_rollback_undo'};
 async function snapshotBeforeDestructive(reason){
   const key=ROLLBACK_KEYS[reason]||ROLLBACK_KEYS.restore;
   try{
@@ -4428,12 +4584,26 @@ async function rollbackRestore(){
   try{
     const s=await bestRollback();
     if(!s){toast('되돌릴 스냅샷이 없습니다');return;}
-    if(!confirm(`${s.at.slice(0,16).replace('T',' ')} 시점의 ${s.count}판으로 되돌립니다.\n지금 기록과 합쳐집니다. 계속할까요?`))return;
-    const {merged,added}=mergeMatches(matches,s.matches.map(migrateMatch).filter(Boolean));
-    matches=merged;
+    /* [v20] 가져오기(복원) 되돌리기는 '빼기'다. 병합만 하던 v19 까지는 잘못된 파일을
+       가져온 뒤 되돌려도 0판이 복구되고 가져온 판은 그대로 남았다 — 화면은
+       '직전 상태로 복구' 라고 적고 있었다. 가져온 뒤에 새로 기록한 판은 남긴다. */
+    const undoImport=s.reason==='import';
+    const since=Date.parse(s.at)||0;
+    if(!confirm(`${s.at.slice(0,16).replace('T',' ')} 시점의 ${s.count}판으로 되돌립니다.\n${undoImport?'그때 가져온 판은 빠지고, 그 뒤에 기록한 판은 남습니다. 지금 상태도 스냅샷으로 남습니다.':'지금 기록과 합쳐집니다.'} 계속할까요?`))return;
+    const before=matches.length;
+    const snap=s.matches.map(migrateMatch).filter(Boolean);
+    let added;
+    if(undoImport){
+      await snapshotBeforeDestructive('undo');
+      const kept=matches.filter(m=>m.t>since);
+      matches=mergeMatches(snap,kept).merged;
+      added=matches.length-before;
+    }else{
+      const r=mergeMatches(matches,snap);matches=r.merged;added=r.added;
+    }
     if(s.pool&&Object.keys(s.pool).length&&!Object.keys(pool).length)pool=migratePool(s.pool);
     computeFam();await Promise.all([saveMatches(),saveStore()]);
-    renderLog();render();toast(`되돌리기 완료: ${added}판 복구 (총 ${matches.length}판)`);
+    renderLog();render();toast(undoImport?`되돌리기 완료: 가져온 ${Math.max(0,-added)}판 제거 (총 ${matches.length}판)`:`되돌리기 완료: ${added}판 복구 (총 ${matches.length}판)`);
   }catch(e){toast('되돌리기 실패');}
 }
 function importData(){
@@ -4463,9 +4633,13 @@ function importData(){
 }
 function delMatch(t){matches=matches.filter(m=>m.t!==t);computeFam();saveMatches();renderLog();render();}
 async function clearMatches(){
-  if(!confirm(`전적 ${matches.length}판을 전부 삭제할까요?\n삭제 직전 상태는 스냅샷으로 남아 "되돌리기"로 복구할 수 있습니다.`))return;
+  if(!confirm(`전적 ${matches.length}판을 전부 삭제할까요?\n삭제 직전 상태는 스냅샷으로 남아 "되돌리기"로 복구할 수 있습니다.${autoBackupHandle?'\n자동 백업 파일은 이번엔 덮어쓰지 않습니다(다음 기록부터 다시 동기화).':''}`))return;
   if(!confirm('한 번 더 확인합니다. 정말 삭제할까요?'))return;
   await snapshotBeforeDestructive('clear');
+  /* [v20] 비운 목록을 자동 백업 파일에 쓰지 않는다 — 백업이 지켜야 할 바로 그 행동이
+     백업을 지우고 있었다. 삭제 자체는 시드 재적재도 막는다(seedHistoryIfEmpty). */
+  _skipAutoBackupOnce=true;
+  try{await window.storage.set('wr_seeded','1');}catch(e){}
   matches=[];computeFam();await saveMatches();renderLog();render();
   toast('삭제했습니다 · 되돌리기로 복구 가능');
 }
