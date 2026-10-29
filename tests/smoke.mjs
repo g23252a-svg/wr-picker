@@ -1489,4 +1489,37 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
 }
 
 
+/* [v21.1] scripts/trend-report.mjs — "새 패치에서 달라졌나"를 답하는 보고서.
+   앱 배지와 같은 기준선(직전 패치 마지막 3일)·같은 보정(픽 가중 평균)을 쓰고,
+   3일 미만이거나 직전 패치의 하루 폭 안이면 변화라고 말하지 않는다. */
+{
+  const {trendReport,fieldOffset,averageStats,noiseTable,formatReport}=await import('../scripts/trend-report.mjs');
+  const row=(win,pick=5,ban=1)=>({win,pick,ban});
+  const arc=(patch,updated,stats)=>({patch,updated,brackets:{diamond:{stats}}});
+  const prev=[[50,50],[50.6,50.2],[49.4,49.8]].map(([a,b],i)=>arc('7.3c',`2026-10-2${i+2}`,{A:{top:row(a)},B:{mid:row(b)}}));
+  const cur=(days)=>days.map(([a,b],i)=>arc('7.3d',`2026-10-3${i}`,{A:{top:row(a)},B:{mid:row(b)}}));
+  // 보정 = 픽 가중 평균 변화 (A −3, B +0.1, 같은 픽률 → −1.45)
+  assert.equal(+fieldOffset(averageStats(cur([[47,50.1]]).map(a=>a.brackets.diamond.stats)),averageStats(prev.map(a=>a.brackets.diamond.stats))).toFixed(2),-1.45);
+  // 노이즈: 행별 SD·범위와 pooled SD
+  const nz=noiseTable(prev.map(a=>a.brackets.diamond.stats));
+  assert.equal(+nz.per.A.top.sd.toFixed(2),0.6); assert.equal(nz.per.A.top.min,49.4); assert.equal(+nz.pooledSd.toFixed(2),0.45);
+  // 3일 미만이면 아무리 커도 판정하지 않는다
+  let rep=trendReport([...prev,...cur([[47,50.1],[47,50.1]])],['A','B']);
+  assert.equal(rep.prevPatch,'7.3c'); assert.equal(rep.days.length,2);
+  assert.ok(/2일 — 3일 미만/.test(rep.rows[0].verdict),'trend-report: two archives is not a trend');
+  // 3일: A 는 띠(±1.2) 밖이고 범위 밖 → 하락. B 는 보정 변화가 띠보다 커도 7.3c 하루 폭 안 → 변화 아님
+  rep=trendReport([...prev,...cur([[47,50.1],[47,50.1],[47,50.1]])],['A','B']);
+  const A=rep.rows.find(r=>r.name==='A'), Bm=rep.rows.find(r=>r.name==='B');
+  assert.equal(A.delta.win,-3); assert.equal(A.centered,-1.55); assert.equal(A.band,1.2); assert.ok(A.outsideRange);
+  assert.equal(A.verdict,'노이즈 밖 — 하락'); assert.equal(A.pct,0);
+  assert.ok(!Bm.outsideRange&&/노이즈 안/.test(Bm.verdict),'trend-report: inside the previous patch daily range is not a change');
+  // 픽률 1% 미만은 보류. 직전 패치가 없으면 보고서가 아니라 오류 문장
+  const low=trendReport([...prev,...cur([[47,50.1],[47,50.1],[47,50.1]]).map(a=>{a.brackets.diamond.stats.A.top.pick=0.5;return a;})],['A']);
+  assert.ok(/픽률 1% 미만/.test(low.rows[0].verdict));
+  assert.ok(/직전 패치/.test(trendReport(cur([[47,50.1]]),['A']).error));
+  const txt=formatReport(rep,n=>n==='A'?'에이(A)':n);
+  assert.ok(/패치 추세 — 7\.3d \(아카이브 3일/.test(txt)&&/에이\(A\) top  승률 50\.00 → 47\.00 \(-3\.00, 보정 -1\.55\)/.test(txt)&&/판정: 노이즈 밖 — 하락/.test(txt),'trend-report: the text says what it measured');
+}
+
+
 console.log(`WR Picker smoke tests passed: ${champions.length} champions, ${rows.length} role rows.`);
