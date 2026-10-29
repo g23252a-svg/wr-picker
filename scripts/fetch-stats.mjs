@@ -79,13 +79,19 @@ function championNames(){
   return new Set(Function(`return ${html.slice(s,e)}`)().map(row=>row[1]));
 }
 
+/* [v20] 앱 DB 에 없는 챔의 행도 아카이브에는 남긴다. 버리던 v19 까지는 신챔의 출시 첫
+   패치 통계가 DB 에 추가되기 전까지 영구히 사라졌다. latest.json 과 stats.js 는 여전히
+   아는 챔만 담는다(knownOnly). 이름은 그대로 저장소에 들어가므로 형식을 제한한다. */
 function normaliseBracket(rows,known,unknown,slugs){
   const stats={};
   for(const r of rows){
     const name=RENAME[r.champion]||r.champion;
     const role=ROLE[r.role];
     if(!role){unknown.add(`role:${r.role}`);continue;}
-    if(!known.has(name)){unknown.add(`champion:${r.champion}`);continue;}
+    if(!known.has(name)){
+      unknown.add(`champion:${r.champion}`);
+      if(!/^[A-Za-z' .&]{2,24}$/.test(String(name)))continue;
+    }
     // 가이드 URL slug는 업스트림이 알려주는 값을 그대로 쓴다.
     // 이름에서 유추하면 틀린다(예: Nunu & Willump → nunu-amp-willump).
     if(slugs&&r.slug&&/^[a-z0-9-]{2,40}$/.test(r.slug))slugs[name]=r.slug;
@@ -98,6 +104,7 @@ function normaliseBracket(rows,known,unknown,slugs){
 }
 
 function countRows(stats){return Object.values(stats).reduce((n,roles)=>n+Object.keys(roles).length,0);}
+const knownOnly=(stats,known)=>Object.fromEntries(Object.entries(stats).filter(([name])=>known.has(name)));
 
 /* ---------- 4. serialise ---------- */
 const fmtRoles=roles=>'{'+Object.entries(roles)
@@ -146,6 +153,7 @@ ${prev?fmtStats(prev):''}
    추세 기준선 계산 방식이 바뀌었을 때 다음 정기 실행을 기다리지 않으려고 둔다. */
 const rebuild=args.includes('--rebuild');
 const unknown=new Set();
+const known=championNames();
 let payload,brackets,slugs;
 if(rebuild){
   const newest=fs.readdirSync(HISTORY_DIR).filter(f=>f.endsWith('.json')).sort().pop();
@@ -158,7 +166,6 @@ if(rebuild){
 }else{
   const html=await loadPage();
   payload=extractPayload(html);
-  const known=championNames();
   brackets={};
   slugs={};                                       // 챔피언 → 가이드 URL slug (업스트림 제공값)
   for(const [key,b] of Object.entries(payload.brackets)){
@@ -183,6 +190,16 @@ for(const [key,b] of Object.entries(brackets)){
 fs.mkdirSync(HISTORY_DIR,{recursive:true});
 const archivePath=path.join(HISTORY_DIR,`${updated}.json`);
 const archive={patch:payload.patch,updated,source:payload.source,brackets};
+/* [v20] 업스트림 'updated' 가 거꾸로 가면(오래된 CDN 페이지, 롤백) 아무것도 쓰지 않는다.
+   v19 까지는 더 새 아카이브를 by-patch 에서 빼고 latest/stats.js 를 과거로 되돌린 채 커밋했다. */
+const newestArchived=fs.readdirSync(HISTORY_DIR).filter(f=>/^\d{4}-\d{2}-\d{2}\.json$/.test(f)).map(f=>f.slice(0,10)).sort().pop()||null;
+if(!rebuild&&newestArchived&&updated<newestArchived){
+  console.log(`upstream updated ${updated} is older than the newest archive ${newestArchived} — nothing written`);
+  process.exit(0);
+}
+// 앱에 내보내는 표는 아는 챔만. 아카이브(위)는 모르는 챔의 행도 그대로 둔다.
+const outBrackets={};
+for(const [k,b] of Object.entries(brackets))outBrackets[k]={label:b.label,stats:knownOnly(b.stats,known)};
 
 const olderArchives=fs.readdirSync(HISTORY_DIR).filter(f=>f.endsWith('.json'))
   .map(f=>f.replace(/\.json$/,'')).filter(d=>d<updated).sort()
@@ -191,22 +208,23 @@ const olderArchives=fs.readdirSync(HISTORY_DIR).filter(f=>f.endsWith('.json'))
 /* [v19] 기준선은 '어제'가 아니라 '직전 패치의 마지막 며칠'이다 — 이유는
    trend-baseline.mjs 머리말. 직전 패치가 없으면 추세를 비운다(전날로 대신하지 않는다). */
 const base=patchBaseline(olderArchives,payload.patch);
+if(base)for(const b of Object.values(base.brackets))b.stats=knownOnly(b.stats,known);
 const prevStats=base?base.brackets.diamond.stats:null;
 const prevPatch=base?base.patch:null;
 const prevUpdated=base?base.updated:null;
 
-const diamond=brackets.diamond;
+const diamond=outBrackets.diamond;
 const statsJs=renderStatsJs({
   patch:payload.patch,updated,label:diamond.label,stats:diamond.stats,
   prev:prevStats,prevPatch,prevUpdated,prevFrom:base?base.from:null,prevDays:base?base.days:null,sourceNote:payload.source,
-  brackets:Object.entries(brackets).map(([k,b])=>({key:k,label:b.label,rows:countRows(b.stats)}))
+  brackets:Object.entries(outBrackets).map(([k,b])=>({key:k,label:b.label,rows:countRows(b.stats)}))
 });
 
 const latest={
   patch:payload.patch,updated,source:payload.source,url:SOURCE_URL,
   generatedFrom:'scripts/fetch-stats.mjs',
   slugs,                                          // 가이드 수집기와 앱 링크가 함께 쓴다
-  brackets:Object.fromEntries(Object.entries(brackets).map(([k,b])=>[k,{
+  brackets:Object.fromEntries(Object.entries(outBrackets).map(([k,b])=>[k,{
     label:b.label,rows:countRows(b.stats),champions:Object.keys(b.stats).length,stats:b.stats
   }])),
   // Trend baseline travels with the data so the app can compute deltas for whichever
@@ -215,7 +233,7 @@ const latest={
 };
 
 /* ---------- report ---------- */
-const summary=Object.entries(brackets)
+const summary=Object.entries(outBrackets)
   .map(([k,b])=>`${b.label} ${countRows(b.stats)}행/${Object.keys(b.stats).length}챔프`).join(' · ');
 console.log(`patch ${payload.patch} · updated ${updated}`);
 console.log(summary);

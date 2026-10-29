@@ -19,6 +19,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # [v20] 푸시 거절 시 origin/main 위로 리베이스하려면 히스토리가 필요하다
 
       - uses: actions/setup-node@v4
         with:
@@ -59,4 +61,26 @@ jobs:
           git add data stats.js
           git commit -F commit-msg.txt
           rm -f commit-msg.txt
-          git push
+          # [v20] 푸시가 한 번 거절되면 그날 아카이브가 영영 사라졌다(2026-09-22, 10-03 실제 발생:
+          # 사람이 main 에 머지한 직후 봇이 밀렸다). 리베이스 후 몇 번 더 시도한다.
+          for i in 1 2 3 4; do
+            git push && exit 0
+            echo "push failed (attempt $i) — rebasing onto origin/main and retrying"
+            sleep $((i*10))
+            git fetch origin main
+            git rebase origin/main || { git rebase --abort; exit 1; }
+          done
+          echo "::error title=Snapshot not committed::push kept failing — today's archive is attached as a workflow artifact"
+          exit 1
+
+      - name: Keep today's snapshot if the push failed
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stats-snapshot-${{ github.run_id }}
+          path: |
+            data/history/*.json
+            data/latest.json
+            data/by-patch.json
+            stats.js
+          retention-days: 30
