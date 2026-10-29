@@ -44,8 +44,11 @@ jobs:
 
       - name: Commit when the snapshot changed
         run: |
-          if [ -z "$(git status --porcelain)" ]; then
+          # [v20] 추적되는 산출물만 본다. 전체 porcelain 은 untracked 인 fetch.log 때문에 늘 비어 있지
+          # 않아서, 업스트림이 그대로인 날(2026-10-27)에도 빈 커밋을 시도하다 실패로 끝났다.
+          if [ -z "$(git status --porcelain -- data stats.js)" ]; then
             echo "no upstream change — nothing to commit"
+            rm -f fetch.log
             exit 0
           fi
           patch=$(node -p "require('./data/latest.json').patch")
