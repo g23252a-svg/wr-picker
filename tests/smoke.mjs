@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='21.0.0'"));
+assert.ok(html.includes("const APP_VERSION='21.1.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -1519,6 +1519,49 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(/직전 패치/.test(trendReport(cur([[47,50.1]]),['A']).error));
   const txt=formatReport(rep,n=>n==='A'?'에이(A)':n);
   assert.ok(/패치 추세 — 7\.3d \(아카이브 3일/.test(txt)&&/에이\(A\) top  승률 50\.00 → 47\.00 \(-3\.00, 보정 -1\.55\)/.test(txt)&&/판정: 노이즈 밖 — 하락/.test(txt),'trend-report: the text says what it measured');
+}
+
+
+/* [v21.1] '맨날 같은 챔' — 표시만 바꾸고 점수는 그대로. 동률권·자료 없음·상성만 본 줄. */
+{
+  const {loadEngine}=await import('./engine.mjs');
+  const E=loadEngine(); await new Promise(r=>setTimeout(r,30));
+  const st=E.state, M=E.byEn['Malphite'];
+  // 자료 없음: 탱커 vs 전사, 가이드·유명 상성 없음, 추정 항목 모두 0 → 'none' 과 문구, 점수 기여 0
+  st.lane='top'; st.ally=[]; st.enemy=[E.byEn['Darius'].id]; st.bans=[]; st.laneMark=E.byEn['Darius'].id;
+  let s=E.score(M);
+  assert.equal(s.lanerEvidence,'none','v21.1: tank vs fighter with no data is "no data", not neutral');
+  assert.ok(s.cNotes.some(n=>/라인 상성 자료 없음 — 0점으로 계산/.test(n)),'v21.1: the card says the matchup is unknown');
+  // 유명 상성 표에 있는 쌍은 'data'
+  st.enemy=[E.byEn['Yasuo'].id]; st.laneMark=E.byEn['Yasuo'].id;
+  assert.equal(E.score(M).lanerEvidence,'data');
+  // 상대가 없으면 판단 자체가 없다
+  st.enemy=[]; st.laneMark=null;
+  assert.equal(E.score(M).lanerEvidence,null);
+  // 동률권: 최고점과 TIE_BAND 미만 차이만, 최대 3명, 점수 순
+  assert.equal(E.TIE_BAND,2);
+  const fake=(kr,total,counterAxis=50,extra={})=>({c:{id:kr,kr},s:{total,counterAxis,...extra}});
+  const g=E.tieGroup([fake('B',59.5),fake('A',60),fake('C',58.1),fake('D',57.9),fake('E',59.9)]);
+  assert.deepEqual(Array.from(g,x=>x.c.kr),['A','E','B'],'v21.1: tie group is top-3 within the band, by score');
+  assert.equal(E.tieGroup([fake('A',60),fake('B',57.5)]).length,1,'v21.1: a 2.5-point lead is a real #1');
+  // 손에 익은 픽 우선으로 순서가 바뀌어도 동률권은 점수로 잰다
+  assert.deepEqual(Array.from(E.tieGroup([fake('B',58.5),fake('A',60)]),x=>x.c.kr),['A','B']);
+  // 상성만 본 줄: 적이 없으면 없음, 1순위가 최고면 그렇게, 아니면 최고 상성 챔과 두 값
+  st.enemy=[]; assert.equal(E.counterLine([fake('A',60,55)],fake('A',60,55)),'');
+  st.enemy=[E.byEn['Darius'].id];
+  const P=fake('A',60,52,{laner:{kr:'다리우스'},lanerEvidence:'none'});
+  let t=E.counterLine([P,fake('B',58,70)],P).replace(/<[^>]+>/g,'');
+  assert.ok(/상성만 보면 B \(상성 70 vs 1순위 52\)/.test(t)&&/1순위의 상대 다리우스 상성은 자료 없음\(0점 처리\)/.test(t),'v21.1: counter-only line names the best and flags no-data');
+  t=E.counterLine([fake('A',60,70),fake('B',58,52)],fake('A',60,70)).replace(/<[^>]+>/g,'');
+  assert.ok(/상성만 봐도 A가 가장 유리 \(상성 70\)/.test(t));
+  st.enemy=[]; st.laneMark=null;
+  // 화면 연결: 요약 줄과 카드 배지
+  assert.ok(/const tie=tieGroup\(cands\);/.test(html)&&/사실상 동률/.test(html)&&/아직 픽 정보 없음 — <b>숙련·메타만으로<\/b> 정렬했습니다/.test(html),'v21.1: summary shows ties and the empty-draft note');
+  assert.ok(/const cl=counterLine\(cands,primary\);/.test(html),'v21.1: summary shows the counter-only line');
+  assert.ok(/else if\(tieIds\.has\(c\.id\)\)badge\+=`<span class="bd-type tie"/.test(html),'v21.1: tied cards carry a badge');
+  // 점수 경로에는 동률·상성 줄이 들어가지 않는다
+  const scoreSrc=html.slice(html.indexOf('function score('),html.indexOf('/* [v21.1] 1순위(점수 최고)'));
+  assert.ok(/return \{total,base/.test(scoreSrc)&&!/tieGroup|counterLine|TIE_BAND/.test(scoreSrc),'v21.1: display-only helpers stay out of score()');
 }
 
 

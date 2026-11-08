@@ -11,7 +11,7 @@ export const EXPORTS=['byId','byEn','byKey','C','DB','score','state','pool','wei
  'firstPickFact','propDiffP','gamesToDecide','selP','meanDiffP','normCdf','invNorm','SIG_P','MIN_BUCKET','PERF','LANEKR',
  'sanitizeGuides','myMains','selfCheckKey','poolSig','canFlagTeam','verNum','TREND_BADGE','esc','hasOwn','matchTime','toStableId',
  'mergeMatches','computeExplorationLoad','FAMILIAR_BAND','appliedBracket','setComfort','invalidateSelfCheck','foldMatch',
- 'sanitizePatchNotes','cmpPatch','patchNotesApply','patchNoteOf','adoptPatchNotes','patchNotesMine','banSuggestions','myRegulars'];
+ 'sanitizePatchNotes','cmpPatch','patchNotesApply','patchNoteOf','adoptPatchNotes','patchNotesMine','banSuggestions','myRegulars','tieGroup','counterLine','TIE_BAND'];
 export function loadEngine(opts={}){
   let src=fs.readFileSync(opts.htmlPath||HTML,'utf8').match(/<script>([\s\S]*?)<\/script>\s*<\/body>/)[1];
   if(opts.patch)src=opts.patch(src);

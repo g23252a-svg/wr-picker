@@ -524,6 +524,10 @@ button:disabled{cursor:not-allowed;opacity:.38}
 .decision-summary .eyebrow{font-family:'Rajdhani';font-size:10px;font-weight:700;letter-spacing:.09em;color:var(--cyan-soft);text-transform:uppercase}
 .decision-summary .pick{font-family:'Rajdhani';font-size:24px;font-weight:700;color:var(--gold-soft);line-height:1}
 .decision-summary .signal{font-size:11px;color:var(--dim);line-height:1.45}
+.decision-summary .tieline,.decision-summary .counterline{grid-column:1/-1;font-size:10.5px;color:var(--dim);line-height:1.45}
+.decision-summary .tieline span,.decision-summary .counterline span{color:var(--dimmer)}
+.bd-type.tie{border-color:#6b6b3a;color:#e6d98a}
+.na{color:var(--dimmer);font-style:italic}
 .decision-summary .alts{grid-column:1/-1;border-top:1px solid var(--line);padding-top:7px;margin-top:3px;font-size:10.5px;color:var(--dimmer)}
 .decision-summary .alts b{color:var(--ink)}
 .bd-confidence{display:inline-block;margin-top:4px;font-family:'Rajdhani';font-weight:700;font-size:10px;
@@ -1007,8 +1011,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='21.0.0';
-const MODEL_VERSION='21.0.0-patch-notes';
+const APP_VERSION='21.1.0';
+const MODEL_VERSION='21.1.0-honest-ties';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -1048,6 +1052,11 @@ const FIRST_PICK_MAX_PENALTY=6;
    이탈할 때 감수한 점수 손해가 평균 2.4점(61.4 → 59.0)이라 그 근처로 잡았다.
    이보다 넓히면 '추천'이 아니라 '내 챔폭 정렬'이 된다. */
 const FAMILIAR_BAND=3;
+/* [v21.1] 1순위와 이 점수 안이면 '사실상 동률'로 함께 보여 준다. 336판 재채점에서 1·2위 차
+   중앙값은 0.5~2.1점이었고, 상대 한 명의 상성이 흔히 움직이는 폭(상성 축 ±8)이 총점으로
+   약 ±2.4점이다. 그보다 작은 차이로 매판 같은 챔을 '1순위'라 부르면, 엔진이 구분하지 못하는
+   것을 순위로 말하는 셈이다. 점수와 순서는 그대로 두고 표시만 바꾼다. */
+const TIE_BAND=2;
 /* [v19] 패치 추세의 점수 반영 계수 — 0. 추세는 '보여주기만' 하고 점수에는 안 넣는다.
    v18 까지는 ×1.2 로 더했는데, 그 추세가 실은 '어제 대비'였고 하루 변화는 다음 날
    되돌아간다(회귀계수 −0.27, 11,151쌍). 기준선을 직전 패치로 고친 뒤에도, 패치 기간
@@ -2381,7 +2390,7 @@ function score(cand){
   }
 
   // ---- counter ----
-  let counter=0; let laneSum=0; const cNotes=[]; let laner=null; let lanerFit=0, lanerConf=0;
+  let counter=0; let laneSum=0; const cNotes=[]; let laner=null; let lanerFit=0, lanerConf=0, lanerEvidence=null;
   if(state.enemy.length){
     /* [v9] 상대 라이너는 적 전체를 5라인에 한 번에 배정해서 정한다.
        한 명씩 '이 라인이 주 라인인가'를 묻던 예전 방식은 실사용 146판 중
@@ -2394,6 +2403,7 @@ function score(cand){
     lanerConf=opp.conf;
     laner=opp.conf>0?opp.c:null;
     if(laner){
+      const laneBefore=laneSum;
       const laneK=kitOf(laner); let a=mxAdv(cand.cls,laner.cls)*7; let lReach='';
       const lGuidePos=[], lGuideNeg=[];
       /* [v8.4] 가이드가 명시한 상성이 있으면 그것을 우선한다.
@@ -2474,6 +2484,12 @@ function score(cand){
          고쳐줄 수 있는 유일한 단서이고, 실사용에서 지정률은 3%에 그쳤다. */
       const lhow=state.laneMark===laner.id?'지정':(lanerConf>=0.75?'추정':'추정·불확실');
       const lpfx='상대 '+laner.kr+'('+lhow+'): ';
+      /* [v21.1] '모름'과 '중립'을 구분한다. 가이드 상성(챔당 카운터 3개)과 유명 상성 표에 이 쌍이
+         없고 클래스·사거리·특성 추정도 모두 0이면, 라인 상성 0점은 '팽팽하다'가 아니라 '자료가
+         없다'는 뜻이다. 탱커는 클래스 표에서 전사·탱커 상대가 0이라 이 경우가 특히 많았다(말파이트
+         탑 상대가 있는 판의 67%). 점수는 그대로 두고 그 사실을 적는다. */
+      lanerEvidence=(gm.note||pd)?'data':(laneSum!==laneBefore?'estimate':'none');
+      if(lanerEvidence==='none')cNotes.push(lpfx+'라인 상성 자료 없음 — 0점으로 계산');
       if(lPos.length)cNotes.push(lpfx+lPos.join(', '));
       if(lNeg.length)cNotes.push(lpfx+lNeg.join(', ')+'(-)');
     }
@@ -2588,9 +2604,27 @@ function score(cand){
   if(state.laneMark!=null&&laner)confidence+=10; else confidence+=Math.round(lanerConf*7);
   if(dataAge>3)confidence-=Math.min(20,(dataAge-3)*2);
   confidence=Math.round(clamp(confidence,25,95));
-  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence,games,firstPick,familiarity,cInfo,laner,lanerFit,lanerConf,axisTrust:TR};
+  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence,games,firstPick,familiarity,cInfo,laner,lanerFit,lanerConf,lanerEvidence,axisTrust:TR};
 }
 
+/* [v21.1] 1순위(점수 최고)와 TIE_BAND 안의 후보들. 손에 익은 픽 우선이 순서를 바꿨어도 점수로 잰다. */
+function tieGroup(cands){
+  if(!cands.length)return [];
+  const top=Math.max(...cands.map(x=>x.s.total));
+  return cands.filter(x=>top-x.s.total<TIE_BAND).sort((a,b)=>b.s.total-a.s.total).slice(0,3);
+}
+/* [v21.1] 점수와 별개로 '상성만 보면 누가 유리한가'. 상성 축(라인 상대 + 적 조합 대응)만으로
+   고른다. 이 축의 순위 일치도는 다른 축처럼 0.5와 구분되지 않으므로 추천이 아니라 참고 줄이다. */
+function counterLine(cands,primary){
+  if(!state.enemy.length||!cands.length)return '';
+  const mx=Math.max(...cands.map(x=>x.s.counterAxis));
+  const best=cands.filter(x=>x.s.counterAxis===mx);
+  const p=primary.s, opp=p.laner?esc(p.laner.kr):null;
+  const nodata=opp&&p.lanerEvidence==='none'?` · 1순위의 상대 ${opp} 상성은 <b>자료 없음</b>(0점 처리)`:'';
+  if(best.some(x=>x.c.id===primary.c.id))
+    return `상성만 봐도 <b>${esc(primary.c.kr)}</b>가 가장 유리 (상성 ${Math.round(mx)}${best.length>1?` · ${best.length}명 공동`:''})${nodata}`;
+  return `상성만 보면 <b>${best.slice(0,2).map(x=>esc(x.c.kr)).join(' · ')}</b> (상성 ${Math.round(mx)} vs 1순위 ${Math.round(p.counterAxis)})${nodata} <span>— 참고용, 점수에는 이미 반영돼 있습니다</span>`;
+}
 function anyOwned(){ return Object.values(pool).some(p=>p&&p.comfort>0); }
 
 /* ============ 엔진 자기 검증 (v10) ============
@@ -3041,21 +3075,26 @@ function render(){
   if(summary&&cands.length){
     const primary=cands[0];
     const safe=[...cands].sort((a,b)=>b.s.confidence-a.s.confidence||b.s.total-a.s.total)[0];
-    const counter=state.enemy.length?[...cands].sort((a,b)=>b.s.counterAxis-a.s.counterAxis||b.s.total-a.s.total)[0]:null;
     const alternates=[];
-    if(safe.c.id!==primary.c.id)alternates.push(`안전 대안 <b>${safe.c.kr}</b>`);
-    if(counter&&counter.c.id!==primary.c.id&&(!safe||counter.c.id!==safe.c.id))alternates.push(`카운터 대안 <b>${counter.c.kr}</b>`);
+    if(safe.c.id!==primary.c.id)alternates.push(`안전 대안 <b>${esc(safe.c.kr)}</b>`);
+    const tie=tieGroup(cands);
+    const extra=[];
+    if(tie.length>1)extra.push(`<div class="tieline"><b>사실상 동률</b> — ${tie.map(x=>`<b>${esc(x.c.kr)}</b>`).join(' · ')} <span>(차 ${(tie[0].s.total-tie[tie.length-1].s.total).toFixed(1)}점 · ${TIE_BAND}점 안은 엔진이 구분하지 못합니다. 손에 맞는 쪽을 고르세요)</span></div>`);
+    if(!state.ally.length&&!state.enemy.length)extra.push(`<div class="tieline">아직 픽 정보 없음 — <b>숙련·메타만으로</b> 정렬했습니다. 이 두 값은 패치 동안 거의 안 바뀌어 첫 화면은 매번 같습니다. 아군·상대가 잡히면 다시 보세요.</div>`);
+    const cl=counterLine(cands,primary);
+    if(cl)extra.push(`<div class="counterline">${cl}</div>`);
     summary.className='decision-summary';
-    summary.innerHTML=`<div><div class="eyebrow">지금 픽</div><div class="pick">${primary.c.kr}</div></div><div class="signal"><b>${Math.round(primary.s.total)}점 · 신뢰 ${primary.s.confidence}%</b><br>${evidenceText(primary.s)}${primary.s.metaKnown?` · 보정 승률 ${primary.s.adjustedWR.toFixed(2)}%`:''}${primary.s.trend!=null&&Math.abs(primary.s.trend)>=TREND_BADGE?` · ${META_SNAPSHOT.prevPatch||'직전 패치'} 대비 ${primary.s.trend>0?'+':''}${primary.s.trend.toFixed(2)}%p(판 평균 제외)`:''}${primary.s.cBan>=15?' · 밴 위험 높음':''}</div>${alternates.length?`<div class="alts">${alternates.join(' &nbsp;·&nbsp; ')}</div>`:''}`;
+    summary.innerHTML=`<div><div class="eyebrow">지금 픽</div><div class="pick">${primary.c.kr}</div></div><div class="signal"><b>${Math.round(primary.s.total)}점 · 신뢰 ${primary.s.confidence}%</b><br>${evidenceText(primary.s)}${primary.s.metaKnown?` · 보정 승률 ${primary.s.adjustedWR.toFixed(2)}%`:''}${primary.s.trend!=null&&Math.abs(primary.s.trend)>=TREND_BADGE?` · ${META_SNAPSHOT.prevPatch||'직전 패치'} 대비 ${primary.s.trend>0?'+':''}${primary.s.trend.toFixed(2)}%p(판 평균 제외)`:''}${primary.s.cBan>=15?' · 밴 위험 높음':''}</div>${alternates.length?`<div class="alts">${alternates.join(' &nbsp;·&nbsp; ')}</div>`:''}${extra.join('')}`;
   }else if(summary){summary.className='';summary.innerHTML='';}
   renderLogBar();
   const box=document.getElementById('results');
   if(!cands.length){box.innerHTML=`<div class="empty">이 라인에 등록된 챔피언이 없습니다.<br>설정에서 챔폭을 추가하거나 <b>메타 중심</b> 모드로 바꿔주세요.</div>`;return;}
+  const tieTop=Math.max(...cands.map(x=>x.s.total)), tieIds=new Set(tieGroup(cands).map(x=>x.c.id));
   box.innerHTML=cands.map((o,i)=>{
     const c=o.c,s=o.s;
     const notes=[...s.teamNotes,...s.cNotes];
     const wrTxt = s.metaKnown?`${s.cWR.toFixed(2)}% (${wrLetter(s.cWR)})`:`<span class="meta-missing">역할 통계 없음</span>`;
-    let why = notes.length? notes.map(n=>n.includes('-)')?`<span class="neg">${n}</span>`:`<b>${n}</b>`).join(' · ')
+    let why = notes.length? notes.map(n=>n.includes('자료 없음')?`<span class="na">${n}</span>`:n.includes('-)')?`<span class="neg">${n}</span>`:`<b>${n}</b>`).join(' · ')
       : s.metaKnown&&s.statReliability<.8?`저픽률 표본 보정 ${Math.round(s.statReliability*100)}% 적용`:`아군·상대 픽을 넣으면 조합과 카운터 근거가 추가됩니다`;
     const tagstr = c.tags.slice(0,3).join('·');
     let badge='';
@@ -3068,6 +3107,7 @@ function render(){
     if(i===0)badge+=familiarBumped
       ? `<span class="bd-type fam" title="점수는 ${familiarBumped.over}가 ${familiarBumped.cost.toFixed(1)}점 높지만, 손에 익은 픽 우선이 켜져 있어 이 라인에서 ${familiarBumped.games}판(전체 ${familiarBumped.total}판) 해본 이 챔을 위로 올렸습니다">손에 익은 픽 · −${familiarBumped.cost.toFixed(1)}점</span>`
       : `<span class="bd-type">종합 1순위</span>`;
+    else if(tieIds.has(c.id))badge+=`<span class="bd-type tie" title="1순위와 ${(tieTop-s.total).toFixed(1)}점 차 — ${TIE_BAND}점 안은 엔진이 구분하지 못합니다">동률권 · −${(tieTop-s.total).toFixed(1)}점</span>`;
     else if(topCounter!=null&&s.counterAxis===topCounter&&state.enemy.length)badge+=`<span class="bd-type counter">카운터픽</span>`;
     else if(topConfidence!=null&&s.confidence===topConfidence)badge+=`<span class="bd-type safe">안전픽</span>`;
     else if(mode!=='meta'&&s.base===topComfort)badge+=`<span class="bd-type mastery">숙련픽</span>`;
