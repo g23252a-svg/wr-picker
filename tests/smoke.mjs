@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='21.0.0'"));
+assert.ok(html.includes("const APP_VERSION='21.1.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -1486,6 +1486,82 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(/patchNotesMine\(\)\.map\(x=>esc\(byId\[x\.id\]\.kr\)\+PN_MARK\[x\.dir\]\)/.test(html),'v21: the diagnosis patch row names my changed champions');
   const scoreSrc=html.slice(html.indexOf('function score('),html.indexOf('function score(')+html.slice(html.indexOf('function score(')).indexOf('\n}\n'));
   assert.ok(!/patchNote|PATCH_NOTES/.test(scoreSrc),'v21: the notes must not enter score()');
+}
+
+
+/* [v21.1] scripts/trend-report.mjs — "새 패치에서 달라졌나"를 답하는 보고서.
+   앱 배지와 같은 기준선(직전 패치 마지막 3일)·같은 보정(픽 가중 평균)을 쓰고,
+   3일 미만이거나 직전 패치의 하루 폭 안이면 변화라고 말하지 않는다. */
+{
+  const {trendReport,fieldOffset,averageStats,noiseTable,formatReport}=await import('../scripts/trend-report.mjs');
+  const row=(win,pick=5,ban=1)=>({win,pick,ban});
+  const arc=(patch,updated,stats)=>({patch,updated,brackets:{diamond:{stats}}});
+  const prev=[[50,50],[50.6,50.2],[49.4,49.8]].map(([a,b],i)=>arc('7.3c',`2026-10-2${i+2}`,{A:{top:row(a)},B:{mid:row(b)}}));
+  const cur=(days)=>days.map(([a,b],i)=>arc('7.3d',`2026-10-3${i}`,{A:{top:row(a)},B:{mid:row(b)}}));
+  // 보정 = 픽 가중 평균 변화 (A −3, B +0.1, 같은 픽률 → −1.45)
+  assert.equal(+fieldOffset(averageStats(cur([[47,50.1]]).map(a=>a.brackets.diamond.stats)),averageStats(prev.map(a=>a.brackets.diamond.stats))).toFixed(2),-1.45);
+  // 노이즈: 행별 SD·범위와 pooled SD
+  const nz=noiseTable(prev.map(a=>a.brackets.diamond.stats));
+  assert.equal(+nz.per.A.top.sd.toFixed(2),0.6); assert.equal(nz.per.A.top.min,49.4); assert.equal(+nz.pooledSd.toFixed(2),0.45);
+  // 3일 미만이면 아무리 커도 판정하지 않는다
+  let rep=trendReport([...prev,...cur([[47,50.1],[47,50.1]])],['A','B']);
+  assert.equal(rep.prevPatch,'7.3c'); assert.equal(rep.days.length,2);
+  assert.ok(/2일 — 3일 미만/.test(rep.rows[0].verdict),'trend-report: two archives is not a trend');
+  // 3일: A 는 띠(±1.2) 밖이고 범위 밖 → 하락. B 는 보정 변화가 띠보다 커도 7.3c 하루 폭 안 → 변화 아님
+  rep=trendReport([...prev,...cur([[47,50.1],[47,50.1],[47,50.1]])],['A','B']);
+  const A=rep.rows.find(r=>r.name==='A'), Bm=rep.rows.find(r=>r.name==='B');
+  assert.equal(A.delta.win,-3); assert.equal(A.centered,-1.55); assert.equal(A.band,1.2); assert.ok(A.outsideRange);
+  assert.equal(A.verdict,'노이즈 밖 — 하락'); assert.equal(A.pct,0);
+  assert.ok(!Bm.outsideRange&&/노이즈 안/.test(Bm.verdict),'trend-report: inside the previous patch daily range is not a change');
+  // 픽률 1% 미만은 보류. 직전 패치가 없으면 보고서가 아니라 오류 문장
+  const low=trendReport([...prev,...cur([[47,50.1],[47,50.1],[47,50.1]]).map(a=>{a.brackets.diamond.stats.A.top.pick=0.5;return a;})],['A']);
+  assert.ok(/픽률 1% 미만/.test(low.rows[0].verdict));
+  assert.ok(/직전 패치/.test(trendReport(cur([[47,50.1]]),['A']).error));
+  const txt=formatReport(rep,n=>n==='A'?'에이(A)':n);
+  assert.ok(/패치 추세 — 7\.3d \(아카이브 3일/.test(txt)&&/에이\(A\) top  승률 50\.00 → 47\.00 \(-3\.00, 보정 -1\.55\)/.test(txt)&&/판정: 노이즈 밖 — 하락/.test(txt),'trend-report: the text says what it measured');
+}
+
+
+/* [v21.1] '맨날 같은 챔' — 표시만 바꾸고 점수는 그대로. 동률권·자료 없음·상성만 본 줄. */
+{
+  const {loadEngine}=await import('./engine.mjs');
+  const E=loadEngine(); await new Promise(r=>setTimeout(r,30));
+  const st=E.state, M=E.byEn['Malphite'];
+  // 자료 없음: 탱커 vs 전사, 가이드·유명 상성 없음, 추정 항목 모두 0 → 'none' 과 문구, 점수 기여 0
+  st.lane='top'; st.ally=[]; st.enemy=[E.byEn['Darius'].id]; st.bans=[]; st.laneMark=E.byEn['Darius'].id;
+  let s=E.score(M);
+  assert.equal(s.lanerEvidence,'none','v21.1: tank vs fighter with no data is "no data", not neutral');
+  assert.ok(s.cNotes.some(n=>/라인 상성 자료 없음 — 0점으로 계산/.test(n)),'v21.1: the card says the matchup is unknown');
+  // 유명 상성 표에 있는 쌍은 'data'
+  st.enemy=[E.byEn['Yasuo'].id]; st.laneMark=E.byEn['Yasuo'].id;
+  assert.equal(E.score(M).lanerEvidence,'data');
+  // 상대가 없으면 판단 자체가 없다
+  st.enemy=[]; st.laneMark=null;
+  assert.equal(E.score(M).lanerEvidence,null);
+  // 동률권: 최고점과 TIE_BAND 미만 차이만, 최대 3명, 점수 순
+  assert.equal(E.TIE_BAND,2);
+  const fake=(kr,total,counterAxis=50,extra={})=>({c:{id:kr,kr},s:{total,counterAxis,...extra}});
+  const g=E.tieGroup([fake('B',59.5),fake('A',60),fake('C',58.1),fake('D',57.9),fake('E',59.9)]);
+  assert.deepEqual(Array.from(g,x=>x.c.kr),['A','E','B'],'v21.1: tie group is top-3 within the band, by score');
+  assert.equal(E.tieGroup([fake('A',60),fake('B',57.5)]).length,1,'v21.1: a 2.5-point lead is a real #1');
+  // 손에 익은 픽 우선으로 순서가 바뀌어도 동률권은 점수로 잰다
+  assert.deepEqual(Array.from(E.tieGroup([fake('B',58.5),fake('A',60)]),x=>x.c.kr),['A','B']);
+  // 상성만 본 줄: 적이 없으면 없음, 1순위가 최고면 그렇게, 아니면 최고 상성 챔과 두 값
+  st.enemy=[]; assert.equal(E.counterLine([fake('A',60,55)],fake('A',60,55)),'');
+  st.enemy=[E.byEn['Darius'].id];
+  const P=fake('A',60,52,{laner:{kr:'다리우스'},lanerEvidence:'none'});
+  let t=E.counterLine([P,fake('B',58,70)],P).replace(/<[^>]+>/g,'');
+  assert.ok(/상성만 보면 B \(상성 70 vs 1순위 52\)/.test(t)&&/1순위의 상대 다리우스 상성은 자료 없음\(0점 처리\)/.test(t),'v21.1: counter-only line names the best and flags no-data');
+  t=E.counterLine([fake('A',60,70),fake('B',58,52)],fake('A',60,70)).replace(/<[^>]+>/g,'');
+  assert.ok(/상성만 봐도 A가 가장 유리 \(상성 70\)/.test(t));
+  st.enemy=[]; st.laneMark=null;
+  // 화면 연결: 요약 줄과 카드 배지
+  assert.ok(/const tie=tieGroup\(cands\);/.test(html)&&/사실상 동률/.test(html)&&/아직 픽 정보 없음 — <b>숙련·메타만으로<\/b> 정렬했습니다/.test(html),'v21.1: summary shows ties and the empty-draft note');
+  assert.ok(/const cl=counterLine\(cands,primary\);/.test(html),'v21.1: summary shows the counter-only line');
+  assert.ok(/else if\(tieIds\.has\(c\.id\)\)badge\+=`<span class="bd-type tie"/.test(html),'v21.1: tied cards carry a badge');
+  // 점수 경로에는 동률·상성 줄이 들어가지 않는다
+  const scoreSrc=html.slice(html.indexOf('function score('),html.indexOf('/* [v21.1] 1순위(점수 최고)'));
+  assert.ok(/return \{total,base/.test(scoreSrc)&&!/tieGroup|counterLine|TIE_BAND/.test(scoreSrc),'v21.1: display-only helpers stay out of score()');
 }
 
 
