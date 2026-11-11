@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='21.2.0'"));
+assert.ok(html.includes("const APP_VERSION='22.0.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -1455,8 +1455,10 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(notes.champions.length>=1&&notes.champions.every(c=>E.hasOwn(E.byEn,c.en)),'v21: every champion in the notes must exist in the DB');
   assert.ok(notes.champions.every(c=>['buff','nerf','adjust'].includes(c.dir)),'v21: dir enum');
   assert.ok(new Set(notes.champions.map(c=>c.en)).size===notes.champions.length,'v21: no duplicate champions');
-  assert.ok(cmpOk(notes.patch,meta.patch),'v21: the shipped notes must not be older than the shipped stats patch');
-  function cmpOk(a,b){return E.cmpPatch(a,b)>=0;}
+  /* [v22] 여기서 '배포된 노트가 통계 패치보다 오래되면 실패'를 검사했었다. 그 검사가 봇을 죽였다:
+     통계가 7.3e 로 넘어간 11-04 부터 8일 동안 매일 npm test 가 떨어져 스냅샷이 한 장도 커밋되지
+     않았다(노트는 사람이 손으로 올리고 통계는 매일 자동으로 넘어간다). 앱은 오래된 노트를 스스로
+     숨기므로(patchNotesApply) 그건 실패가 아니라 정상 상태다 — 아래에서 '숨긴다'를 실행으로 확인한다. */
   assert.ok(sw.includes("'./data/patch-notes.json'"),'v21: patch notes must be precached for offline');
   // 순서 비교
   assert.ok(E.cmpPatch('7.3d','7.3c')>0&&E.cmpPatch('7.4','7.3d')>0&&E.cmpPatch('8.0','7.9z')>0&&E.cmpPatch('7.3','7.3')===0&&E.cmpPatch('7.3','7.3a')<0,'v21: patch ordering');
@@ -1600,6 +1602,38 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   assert.ok(/1순위의 상대 야스오 상성은 자료 없이 추정한 값/.test(p0),'v21.2: counter line flags an estimated matchup: '+p0);
   assert.ok(/const fa=familiarAlt\(cands,primary\);/.test(html)&&/첫 판 · −\$\{LANE_FIRST_PENALTY\}점/.test(html),'v21.2: summary line and lane-first badge are wired');
   M.length=0; E.computeFam(); E.invalidateSelfCheck(); st.enemy=[]; st.laneMark=null;
+}
+
+
+/* [v22] 화면 문구의 전적 숫자는 전적에서 센다(고정 숫자 금지). 7.3f 노트 파일. */
+{
+  const {loadEngine}=await import('./engine.mjs');
+  const E=loadEngine(); await new Promise(r=>setTimeout(r,30));
+  const M=E.live.matches; M.length=0; E.invalidateSelfCheck();
+  assert.equal(E.laneMainSentence(),'','v22: no history, no claim'); assert.equal(E.laneFirstSentence(),'');
+  const ids=E.DB.slice(0,40).map(c=>c.id); let t=1790000000000;
+  const mk=(lane,pick,won)=>M.push(E.migrateMatch({schema:5,t:(t+=1e6),lane,pick,top:pick,top3:[],ally:[],enemy:[],won}));
+  // 주력 2챔 × 15판(20승), 비주력 30챔 × 1판(9승)
+  for(let i=0;i<15;i++){mk('mid',ids[0],i<10);mk('top',ids[1],i<10);}
+  for(let i=0;i<30;i++)mk('jug',ids[2+i],i<9);
+  E.invalidateSelfCheck();
+  const f=E.laneFacts();
+  assert.deepEqual([f.main.w,f.main.n,f.off.w,f.off.n],[20,30,9,30],'v22: lane main/off counts');
+  assert.deepEqual([f.first.w,f.first.n,f.early.w,f.early.n],[11,32,4,4],'v22: lane first/early counts');
+  assert.ok(/5판 이상 챔 67%\(30판\), 그 미만 30%\(30판\)/.test(E.laneMainSentence()),'v22: sentence shows counted numbers: '+E.laneMainSentence());
+  assert.equal(E.laneFirstSentence(),'','v22: under 20 games in a bucket, the sentence is dropped');
+  assert.ok(!/그 미만 42%|첫 판 42% vs/.test(html.replace(/\/\*[\s\S]*?\*\//g,'')),'v22: no hard-coded win rates in UI strings');
+  M.length=0; E.invalidateSelfCheck();
+  // 배포된 전적과 노트
+  const seed=JSON.parse(fs.readFileSync(new URL('../data/seed-history.json',import.meta.url),'utf8'));
+  assert.equal(seed.matches.length,363); assert.equal(seed.matches.filter(m=>m.won).length,188);
+  assert.equal(seed.matches.map(E.migrateMatch).filter(Boolean).length,363,'v22: every seeded match survives migration');
+  const notes=JSON.parse(fs.readFileSync(new URL('../data/patch-notes.json',import.meta.url),'utf8'));
+  const p=E.sanitizePatchNotes(notes);
+  assert.equal(p.patch,'7.3f'); assert.equal(p.champions.length,notes.champions.length,'v22: every 7.3f champion is in the DB');
+  assert.equal(p.items.length,10); assert.equal(p.systems.length,3); assert.ok(p.source);
+  assert.equal(p.champions.find(c=>c.en==='Yasuo').dir,'buff'); assert.equal(p.champions.find(c=>c.en==='Kalista').dir,'nerf');
+  assert.ok(notes.champions.every(c=>c.note.length<=200)&&[...notes.items,...notes.systems].every(x=>x.note.length<=200),'v22: no note is silently truncated');
 }
 
 
