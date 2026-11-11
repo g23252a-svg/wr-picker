@@ -1011,8 +1011,8 @@ const CLSKR={tank:'탱커',fighter:'전사',assassin:'암살자',mage:'마법사
 const LANEKR={top:'탑',jug:'정글',mid:'미드',adc:'원딜',sup:'서폿'};
 
 /* ============ STATE ============ */
-const APP_VERSION='21.1.0';
-const MODEL_VERSION='21.1.0-honest-ties';
+const APP_VERSION='21.2.0';
+const MODEL_VERSION='21.2.0-lane-first';
 const SCHEMA_VERSION=5;
 /* 데이터 원본: 앱 셸에 번들된 stats.js는 오프라인 폴백이고, 실제로는 매일 갱신되는
    data/latest.json을 우선 사용한다. 모바일 앱으로 패키징할 때는 절대 URL로 바꾼다. */
@@ -1057,6 +1057,12 @@ const FAMILIAR_BAND=3;
    약 ±2.4점이다. 그보다 작은 차이로 매판 같은 챔을 '1순위'라 부르면, 엔진이 구분하지 못하는
    것을 순위로 말하는 셈이다. 점수와 순서는 그대로 두고 표시만 바꾼다. */
 const TIE_BAND=2;
+/* [v21.2] 이 라인에서 처음 잡는 챔의 감점. 정글만 14판 한 워윅이 탑 1순위로 나왔고(상대 야스오),
+   그 판을 졌다. 숙련 축은 다른 라인 성적을 이 라인 숙련으로 그대로 쳐 주고 있었다.
+   실측 336판: 그 라인 첫 판 42%(28/66) vs 그 라인 2~3판째 59%(47/79), 두 비율 p≈0.04.
+   챔 자체가 처음인 판(41%)과 챔은 해봤지만 라인이 처음인 판(47%, 15판)이 같은 쪽이다.
+   그래서 '첫 픽'을 라인 기준으로도 본다 — 감점은 기존 첫 픽 감점의 한 단계(3점)로 고정한다. */
+const LANE_FIRST_PENALTY=3;
 /* [v19] 패치 추세의 점수 반영 계수 — 0. 추세는 '보여주기만' 하고 점수에는 안 넣는다.
    v18 까지는 ×1.2 로 더했는데, 그 추세가 실은 '어제 대비'였고 하루 변화는 다음 날
    되돌아간다(회귀계수 −0.27, 11,151쌍). 기준선을 직전 패치로 고친 뒤에도, 패치 기간
@@ -2483,13 +2489,17 @@ function score(cand){
       /* 배정 근거가 약하면 그 사실을 문장에 그대로 적는다. 사용자가 🎯로
          고쳐줄 수 있는 유일한 단서이고, 실사용에서 지정률은 3%에 그쳤다. */
       const lhow=state.laneMark===laner.id?'지정':(lanerConf>=0.75?'추정':'추정·불확실');
-      const lpfx='상대 '+laner.kr+'('+lhow+'): ';
+      let lpfx='상대 '+laner.kr+'('+lhow+'): ';
       /* [v21.1] '모름'과 '중립'을 구분한다. 가이드 상성(챔당 카운터 3개)과 유명 상성 표에 이 쌍이
          없고 클래스·사거리·특성 추정도 모두 0이면, 라인 상성 0점은 '팽팽하다'가 아니라 '자료가
          없다'는 뜻이다. 탱커는 클래스 표에서 전사·탱커 상대가 0이라 이 경우가 특히 많았다(말파이트
          탑 상대가 있는 판의 67%). 점수는 그대로 두고 그 사실을 적는다. */
       lanerEvidence=(gm.note||pd)?'data':(laneSum!==laneBefore?'estimate':'none');
       if(lanerEvidence==='none')cNotes.push(lpfx+'라인 상성 자료 없음 — 0점으로 계산');
+      /* [v21.2] 가이드·유명 상성에 없는 쌍의 '우위'는 클래스·사거리·특성으로 추정한 것이다.
+         실측 336판에서 추정 '유리'(+5 이상) 49%(43/87) vs '비슷' 53% — 승패를 가르지 못했다.
+         그래서 문장 앞에 '추정'이라고 적는다. */
+      if(lanerEvidence==='estimate')lpfx='상대 '+laner.kr+'('+lhow+') <i>자료 없이 추정</i>: ';
       if(lPos.length)cNotes.push(lpfx+lPos.join(', '));
       if(lNeg.length)cNotes.push(lpfx+lNeg.join(', ')+'(-)');
     }
@@ -2585,7 +2595,9 @@ function score(cand){
      신규 픽은 여전히 올라온다. */
   const games=playCount(cand.id);
   const firstPick = games===0 && !cInfo.manual;
-  const familiarity = firstPick ? -Math.min(FIRST_PICK_MAX_PENALTY,Math.max(0,explorationLoad-1)*3) : 0;
+  const laneFirst = games>0 && !(cInfo.laneN>0);          // [v21.2] 챔은 해봤지만 이 라인은 처음
+  const familiarity = firstPick ? -Math.min(FIRST_PICK_MAX_PENALTY,Math.max(0,explorationLoad-1)*3)
+                    : laneFirst ? -LANE_FIRST_PENALTY : 0;
   const teamAxis=clamp(50+team,0,100);
   const counterAxis=clamp(50+counter,0,100);
   const tierW=W.tier*TR.tier;
@@ -2604,7 +2616,7 @@ function score(cand){
   if(state.laneMark!=null&&laner)confidence+=10; else confidence+=Math.round(lanerConf*7);
   if(dataAge>3)confidence-=Math.min(20,(dataAge-3)*2);
   confidence=Math.round(clamp(confidence,25,95));
-  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence,games,firstPick,familiarity,cInfo,laner,lanerFit,lanerConf,lanerEvidence,axisTrust:TR};
+  return {total,base,cTier,rawMeta,cWR,cPick,cBan,adjustedWR,statReliability,metaKnown,dataAge,trend,momentum,team,counter,teamAxis,counterAxis,teamNotes,cNotes,comfort,hasComfort,comfortAuto,offPool:!hasComfort,cwUsed:cw,offRole,confidence,games,firstPick,laneFirst,familiarity,cInfo,laner,lanerFit,lanerConf,lanerEvidence,axisTrust:TR};
 }
 
 /* [v21.1] 1순위(점수 최고)와 TIE_BAND 안의 후보들. 손에 익은 픽 우선이 순서를 바꿨어도 점수로 잰다. */
@@ -2620,10 +2632,28 @@ function counterLine(cands,primary){
   const mx=Math.max(...cands.map(x=>x.s.counterAxis));
   const best=cands.filter(x=>x.s.counterAxis===mx);
   const p=primary.s, opp=p.laner?esc(p.laner.kr):null;
-  const nodata=opp&&p.lanerEvidence==='none'?` · 1순위의 상대 ${opp} 상성은 <b>자료 없음</b>(0점 처리)`:'';
+  const nodata=opp&&p.lanerEvidence==='none'?` · 1순위의 상대 ${opp} 상성은 <b>자료 없음</b>(0점 처리)`
+    :opp&&p.lanerEvidence==='estimate'?` · 1순위의 상대 ${opp} 상성은 <b>자료 없이 추정</b>한 값`:'';
   if(best.some(x=>x.c.id===primary.c.id))
     return `상성만 봐도 <b>${esc(primary.c.kr)}</b>가 가장 유리 (상성 ${Math.round(mx)}${best.length>1?` · ${best.length}명 공동`:''})${nodata}`;
   return `상성만 보면 <b>${best.slice(0,2).map(x=>esc(x.c.kr)).join(' · ')}</b> (상성 ${Math.round(mx)} vs 1순위 ${Math.round(p.counterAxis)})${nodata} <span>— 참고용, 점수에는 이미 반영돼 있습니다</span>`;
+}
+/* [v21.2] 1순위가 이 라인에서 5판 미만이면, 이 라인에서 5판 이상 해본 후보 중 점수가 가장 높은
+   챔을 '익숙한 대안'으로 함께 보여 준다. 실측 357판: 그 라인 5판 이상 챔 55%(153/280) vs
+   그 미만 42%(32/77), p≈0.04 — 정글·원딜·서폿에서 특히 크다. 순서와 점수는 그대로 둔다.
+   발단: 상대 탑 야스오에 워윅(탑 1판)이 1순위였고, 상성 자료가 있고 탑 23판인 말파이트는
+   2.6점 아래 5위였다. 워윅의 상성 83점은 전부 자료 없는 추정이었다. */
+const LANE_MAIN_GAMES=5;
+function laneRecord(id,lane){const f=famMap[id];const L=f&&f.lane&&f.lane[lane];return L?{n:L.n,w:L.w}:{n:0,w:0};}
+function familiarAlt(cands,primary){
+  const lane=state.lane, pr=laneRecord(primary.c.id,lane);
+  if(pr.n>=LANE_MAIN_GAMES)return '';
+  // 대안은 그 라인에서 실제로 절반 이상 이긴 챔만 — 7판 3승인 챔을 '익숙하다'고 권하지 않는다.
+  const alt=cands.find(x=>{if(x.c.id===primary.c.id)return false;const r=laneRecord(x.c.id,lane);return r.n>=LANE_MAIN_GAMES&&r.w*2>=r.n;});
+  const head=`<b>${esc(primary.c.kr)}</b>는 ${LANEKR[lane]}에서 ${pr.n?pr.n+'판뿐':'처음'}입니다. 내 전적은 그 라인 ${LANE_MAIN_GAMES}판 이상 챔 55%, 그 미만 42%.`;
+  if(!alt)return head+' <span>이 화면에 익숙한 대안은 없습니다</span>';
+  const ar=laneRecord(alt.c.id,lane);
+  return `${head} 익숙한 대안 <b>${esc(alt.c.kr)}</b>(${LANEKR[lane]} ${ar.n}판 ${ar.w}승) · ${(primary.s.total-alt.s.total).toFixed(1)}점 차${alt.s.lanerEvidence==='data'?' · 상성 자료 있음':''}`;
 }
 function anyOwned(){ return Object.values(pool).some(p=>p&&p.comfort>0); }
 
@@ -3081,6 +3111,8 @@ function render(){
     const extra=[];
     if(tie.length>1)extra.push(`<div class="tieline"><b>사실상 동률</b> — ${tie.map(x=>`<b>${esc(x.c.kr)}</b>`).join(' · ')} <span>(차 ${(tie[0].s.total-tie[tie.length-1].s.total).toFixed(1)}점 · ${TIE_BAND}점 안은 엔진이 구분하지 못합니다. 손에 맞는 쪽을 고르세요)</span></div>`);
     if(!state.ally.length&&!state.enemy.length)extra.push(`<div class="tieline">아직 픽 정보 없음 — <b>숙련·메타만으로</b> 정렬했습니다. 이 두 값은 패치 동안 거의 안 바뀌어 첫 화면은 매번 같습니다. 아군·상대가 잡히면 다시 보세요.</div>`);
+    const fa=familiarAlt(cands,primary);
+    if(fa)extra.push(`<div class="tieline">${fa}</div>`);
     const cl=counterLine(cands,primary);
     if(cl)extra.push(`<div class="counterline">${cl}</div>`);
     summary.className='decision-summary';
@@ -3139,6 +3171,7 @@ function render(){
     }
     /* [v9.1] 첫 픽 배지에 '왜 지금은 미루는 게 나은지'를 붙인다. 감점이 붙는데
        이유가 안 보이면 사용자는 엔진이 고장났다고 느낀다. */
+    if(s.laneFirst)badge+=`<span class="bd-first hot" title="이 챔은 ${s.games}판 해봤지만 ${LANEKR[state.lane]}에서는 처음입니다. 내 전적: 그 라인 첫 판 42% vs 2~3판째 59%. ${LANE_FIRST_PENALTY}점 감점했습니다.">${LANEKR[state.lane]} 첫 판 · −${LANE_FIRST_PENALTY}점</span>`;
     else if(s.firstPick){
       const fpf=firstPickFact();
       badge+=fpf

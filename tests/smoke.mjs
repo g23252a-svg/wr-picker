@@ -84,7 +84,7 @@ const ids=[...html.matchAll(/\sid="([^"]+)"/g)].map(m=>m[1]).filter(id=>!id.incl
 assert.equal(new Set(ids).size,ids.length,'duplicate static HTML id');
 assert.ok(!/user-scalable\s*=\s*no|maximum-scale\s*=\s*1/i.test(html),'viewport disables zoom');
 assert.ok(html.includes('aria-live="polite"'));
-assert.ok(html.includes("const APP_VERSION='21.1.0'"));
+assert.ok(html.includes("const APP_VERSION='21.2.0'"));
 assert.ok(html.includes('function reliabilityOf(pick)'));
 assert.ok(html.includes('function trendOf(c'));
 assert.ok(html.includes('async function refreshStats()'),'runtime stat refresh missing');
@@ -1562,6 +1562,44 @@ for(const rel of Object.values(guides.champions).flatMap(g=>[].concat(g.countere
   // 점수 경로에는 동률·상성 줄이 들어가지 않는다
   const scoreSrc=html.slice(html.indexOf('function score('),html.indexOf('/* [v21.1] 1순위(점수 최고)'));
   assert.ok(/return \{total,base/.test(scoreSrc)&&!/tieGroup|counterLine|TIE_BAND/.test(scoreSrc),'v21.1: display-only helpers stay out of score()');
+}
+
+
+/* [v21.2] 상대 탑 야스오에 워윅(정글 챔) 1순위 — 라인 첫 판 감점, 추정 상성 표기, 익숙한 대안. */
+{
+  const {loadEngine}=await import('./engine.mjs');
+  const E=loadEngine(); await new Promise(r=>setTimeout(r,30));
+  const W=E.byEn['Warwick'], Mal=E.byEn['Malphite'], Y=E.byEn['Yasuo'], st=E.state;
+  const mk=(lane,pick,won,i)=>E.migrateMatch({schema:5,t:1790000000000+i*1e6,lane,pick,top:pick,top3:[],ally:[],enemy:[],won});
+  const M=E.live.matches; M.length=0;
+  for(let i=0;i<6;i++)M.push(mk('jug',W.id,i%2===0,i));
+  for(let i=0;i<6;i++)M.push(mk('top',Mal.id,i<4,10+i));
+  E.computeFam(); E.invalidateSelfCheck();
+  st.lane='top'; st.ally=[]; st.enemy=[Y.id]; st.bans=[]; st.laneMark=Y.id;
+  let s=E.score(W);
+  assert.ok(s.laneFirst&&!s.firstPick,'v21.2: six jungle games do not make a top laner');
+  assert.equal(s.familiarity,-E.LANE_FIRST_PENALTY);
+  assert.equal(s.lanerEvidence,'estimate');
+  assert.ok(s.cNotes.some(n=>/자료 없이 추정/.test(n)),'v21.2: estimate-only matchup notes say so');
+  const sm=E.score(Mal);
+  assert.ok(!sm.laneFirst&&sm.familiarity===0&&sm.lanerEvidence==='data');
+  assert.ok(!sm.cNotes.some(n=>/자료 없이 추정/.test(n)));
+  st.lane='jug'; assert.ok(!E.score(W).laneFirst,'v21.2: no penalty in the lane actually played'); st.lane='top';
+  // 익숙한 대안: 1순위가 이 라인 5판 미만일 때만, 이 라인 5판 이상인 최고 점수 후보
+  const row=(c)=>({c,s:E.score(c)});
+  let t=E.familiarAlt([row(W),row(Mal)],row(W)).replace(/<[^>]+>/g,'');
+  assert.ok(/워윅는 탑에서 처음입니다/.test(t)&&/익숙한 대안 말파이트\(탑 6판 4승\)/.test(t)&&/상성 자료 있음/.test(t),'v21.2: familiar alternative is surfaced: '+t);
+  assert.equal(E.familiarAlt([row(Mal),row(W)],row(Mal)),'','v21.2: a lane main needs no alternative');
+  assert.ok(/이 화면에 익숙한 대안은 없습니다/.test(E.familiarAlt([row(W)],row(W))));
+  { // 그 라인에서 지는 챔은 대안이 아니다
+    const K=E.byEn['Kennen']; for(let i=0;i<7;i++)M.push(mk('top',K.id,i<3,30+i)); E.computeFam();
+    const t2=E.familiarAlt([row(W),row(K),row(Mal)],row(W)).replace(/<[^>]+>/g,'');
+    assert.ok(/익숙한 대안 말파이트/.test(t2),'v21.2: a 3-of-7 champion is skipped as the familiar alternative: '+t2);
+  }
+  const p0=E.counterLine([row(W),row(Mal)],row(W)).replace(/<[^>]+>/g,'');
+  assert.ok(/1순위의 상대 야스오 상성은 자료 없이 추정한 값/.test(p0),'v21.2: counter line flags an estimated matchup: '+p0);
+  assert.ok(/const fa=familiarAlt\(cands,primary\);/.test(html)&&/첫 판 · −\$\{LANE_FIRST_PENALTY\}점/.test(html),'v21.2: summary line and lane-first badge are wired');
+  M.length=0; E.computeFam(); E.invalidateSelfCheck(); st.enemy=[]; st.laneMark=null;
 }
 
 
